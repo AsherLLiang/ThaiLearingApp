@@ -1,50 +1,50 @@
-import i18n from 'i18next';
-import { initReactI18next } from 'react-i18next';
-import * as Localization from 'expo-localization'; //将expo-localization导入到i18n中
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import en from './locales/en';
-import zh from './locales/zh';
+import i18n from 'i18next';  // 核心库
+import { initReactI18next } from 'react-i18next';  // React 绑定
+import * as Localization from 'expo-localization';  // 获取设备语言
+import AsyncStorage from '@react-native-async-storage/async-storage';  // 本地存储
 
-const LANGUAGE_KEY = 'user_language';
+import zh from './locales/zh';  // 中文翻译
+import en from './locales/en';  // 英文翻译
 
-//Get the saved language
+const LANGUAGE_KEY = 'user-language';  // 存储语言的 key
+
+// 【核心函数1】从本地存储读取用户上次选择的语言
 const getStoredLanguage = async (): Promise<string | null> => {
-    try {
-        return await AsyncStorage.getItem(LANGUAGE_KEY);
-    } catch (error) {
-        console.error('Error getting stored language:', error);
-        return null;
-    }
+  try {
+    return await AsyncStorage.getItem(LANGUAGE_KEY);  // 读取本地存储
+  } catch (error) {
+    console.error('Error reading language:', error);
+    return null;
+  }
 };
 
-//Get the device language
+// 【核心函数2】获取设备语言(如果用户没选过)
 const getDeviceLanguage = (): string => {
-    const locale = Localization.getLocales()[0].languageCode;
-    return locale === 'zh' ? 'zh' : 'en';
+  const locale = Localization.locale;  // 例如: "zh-CN" 或 "en-US"
+  const languageCode = locale.split('-')[0];  // 取前缀: "zh" 或 "en"
+  return languageCode === 'zh' ? 'zh' : 'en';  // 默认英文
 };
 
-//init
+// 【核心函数3】初始化 i18n
 const initI18n = async () => {
-    const storedLanguage = await getStoredLanguage();   //获取存储的语言
-    const initialLanguage = storedLanguage || getDeviceLanguage();  //如果存储的语言为空，则使用设备语言
+  const storedLanguage = await getStoredLanguage();  // 先读本地存储
+  const initialLanguage = storedLanguage || getDeviceLanguage();  // 本地没有就用设备语言
 
-    i18n  //i18n 初始化
-        .use(initReactI18next)   //将initReactI18next插件添加到i18n中
-        .init({
-            resources: {
-                en: {
-                    translation: en,
-                },
-                zh: {
-                    translation: zh,
-                },
-            },
-            lng: initialLanguage,  //将初始语言设置为存储的语言或设备语言
-            fallbackLng: 'zh',     //如果初始语言不是zh或en，则使用zh作为回退语言
-            interpolation: {
-                escapeValue: false,  //React 会自动转义插值值，以防止 XSS 攻击
-            },
-        });
-}
-initI18n();  //初始化i18n
-export default i18n;  //导出i18n实例, 其他组件可以使用i18n.t('key')来获取翻译字符串
+  i18n
+    .use(initReactI18next)  // 绑定 React
+    .init({  // 配置
+      resources: {  // 翻译资源
+        zh: { translation: zh },  // 中文
+        en: { translation: en },  // 英文
+      },
+      lng: initialLanguage,  // 初始语言
+      fallbackLng: 'zh',  // 如果翻译缺失,回退到中文
+      interpolation: {
+        escapeValue: false,  // React 已经防 XSS 了
+      },
+    });
+};
+
+initI18n();  // 立即执行初始化
+
+export default i18n;
