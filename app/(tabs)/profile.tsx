@@ -6,18 +6,16 @@ import {
   TouchableOpacity,
   StyleSheet,
   Alert,
+  ImageBackground,
+  SafeAreaView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
-import { useUserStore } from '../../src/stores/userStore';
-import { useLearningStore } from '../../src/stores/learningStore';
-import Card from '../../src/components/common/Card';
+import { useUserStore } from '@/src/stores/userStore';
+import { useLearningStore } from '@/src/stores/learningStore';
+import GlassCard from '@/src/components/common/GlassCard';
 
-/**
- * 个人中心页面
- * 显示用户信息和统计数据
- */
 export default function ProfilePage() {
   const { t } = useTranslation();
   const router = useRouter();
@@ -26,12 +24,12 @@ export default function ProfilePage() {
 
   const handleLogout = () => {
     Alert.alert(
-      t('auth.logout'),
-      '确定要退出登录吗?',
+      t('auth.logout', 'Logout'),
+      t('auth.logoutConfirm', 'Are you sure you want to logout?'),
       [
-        { text: t('common.cancel'), style: 'cancel' },
+        { text: t('common.cancel', 'Cancel'), style: 'cancel' },
         {
-          text: t('common.confirm'),
+          text: t('common.confirm', 'Confirm'),
           style: 'destructive',
           onPress: () => {
             logout();
@@ -42,88 +40,86 @@ export default function ProfilePage() {
     );
   };
 
+  const backgroundImage = { uri: 'https://images.unsplash.com/photo-1486496146582-9ffcd0b2b2b7?q=80&w=1000&auto=format&fit=crop' };
+
   return (
-    <ScrollView style={styles.container}>
-      {/* 用户信息卡片 */}
-      <Card style={styles.userCard}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>
-            {currentUser?.displayName?.charAt(0) || 'U'}
-          </Text>
-        </View>
-        <Text style={styles.userName}>{currentUser?.displayName}</Text>
-        <Text style={styles.userEmail}>{currentUser?.email}</Text>
-      </Card>
-
-      {/* 统计数据 */}
-      <Card style={styles.statsCard}>
-        <Text style={styles.cardTitle}>学习统计</Text>
-        
-        <View style={styles.statRow}>
-          <Text style={styles.statLabel}>
-            {t('profile.completedAlphabets')}
-          </Text>
-          <Text style={styles.statValue}>
-            {progress?.completedAlphabets || 0}
-          </Text>
-        </View>
-
-        <View style={styles.statRow}>
-          <Text style={styles.statLabel}>
-            {t('profile.completedVocabulary')}
-          </Text>
-          <Text style={styles.statValue}>
-            {progress?.completedVocabulary || 0}
-          </Text>
-        </View>
-
-        <View style={styles.statRow}>
-          <Text style={styles.statLabel}>
-            {t('profile.studyHours')}
-          </Text>
-          <Text style={styles.statValue}>
-            {Math.floor((progress?.totalStudyTime || 0) / 3600)}
-          </Text>
-        </View>
-
-        <View style={styles.statRow}>
-          <Text style={styles.statLabel}>
-            {t('profile.streakDays')}
-          </Text>
-          <Text style={styles.statValue}>
-            {progress?.streakDays || 0}
-          </Text>
-        </View>
-      </Card>
-
-      {/* 设置选项 */}
-      <Card style={styles.settingsCard}>
-        <TouchableOpacity
-          style={styles.settingItem}
-          onPress={() => router.push('/settings')}
-        >
-          <View style={styles.settingLeft}>
-            <Ionicons name="settings-outline" size={20} color="#666" />
-            <Text style={styles.settingText}>
-              {t('profile.settings')}
-            </Text>
+    <ImageBackground source={backgroundImage} style={styles.container} resizeMode="cover">
+      <SafeAreaView style={styles.safeArea}>
+        <ScrollView contentContainerStyle={styles.contentContainer} showsVerticalScrollIndicator={false}>
+          
+          {/* Profile Header */}
+          <View style={styles.header}>
+            <View style={styles.avatarContainer}>
+              <Text style={styles.avatarText}>
+                {currentUser?.displayName?.charAt(0) || 'A'}
+              </Text>
+            </View>
+            <Text style={styles.userName}>{currentUser?.displayName || 'Alex Chen'}</Text>
+            <Text style={styles.userEmail}>{currentUser?.email || 'alex@example.com'}</Text>
           </View>
-          <Ionicons name="chevron-forward" size={20} color="#CCC" />
-        </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.settingItem}
-          onPress={handleLogout}
-        >
-          <View style={styles.settingLeft}>
-            <Ionicons name="log-out-outline" size={20} color="#FF3B30" />
-            <Text style={[styles.settingText, styles.logoutText]}>
-              {t('auth.logout')}
-            </Text>
-          </View>
-        </TouchableOpacity>
-      </Card>
-    </ScrollView>
+          {/* Statistics Grid */}
+          <Text style={styles.sectionTitle}>{t('profile.stats', 'Statistics')}</Text>
+          <GlassCard style={styles.statsCard}>
+            <View style={styles.statsGrid}>
+              <View style={styles.statItem}>
+                <Text style={styles.statValue}>{progress?.completedAlphabets || 26}</Text>
+                <Text style={styles.statLabel}>{t('profile.alphabets', 'Alphabets')}</Text>
+              </View>
+              <View style={styles.statItem}>
+                <Text style={styles.statValue}>{progress?.completedVocabulary || 142}</Text>
+                <Text style={styles.statLabel}>{t('profile.vocab', 'Words')}</Text>
+              </View>
+              <View style={styles.statItem}>
+                <Text style={styles.statValue}>12</Text>
+                <Text style={styles.statLabel}>{t('profile.hours', 'Hours')}</Text>
+              </View>
+              <View style={styles.statItem}>
+                <Text style={[styles.statValue, styles.streakValue]}>{progress?.streakDays || 43}</Text>
+                <Text style={styles.statLabel}>{t('profile.streak', 'Day Streak')}</Text>
+              </View>
+            </View>
+          </GlassCard>
+
+          {/* Settings Section */}
+          <Text style={styles.sectionTitle}>{t('profile.settings', 'Settings')}</Text>
+          <GlassCard style={styles.settingsCard}>
+            <TouchableOpacity
+              style={styles.settingItem}
+              onPress={() => router.push('/settings')}
+            >
+              <View style={styles.settingLeft}>
+                <View style={[styles.iconBox, { backgroundColor: '#E3F2FD' }]}>
+                  <Ionicons name="settings-outline" size={20} color="#4A90E2" />
+                </View>
+                <Text style={styles.settingText}>
+                  {t('profile.general', 'General Settings')}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#CBD5E0" />
+            </TouchableOpacity>
+
+            <View style={styles.separator} />
+
+            <TouchableOpacity
+              style={styles.settingItem}
+              onPress={handleLogout}
+            >
+              <View style={styles.settingLeft}>
+                <View style={[styles.iconBox, { backgroundColor: '#FEE2E2' }]}>
+                  <Ionicons name="log-out-outline" size={20} color="#EF4444" />
+                </View>
+                <Text style={[styles.settingText, styles.logoutText]}>
+                  {t('auth.logout', 'Logout')}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          </GlassCard>
+
+          <View style={{ height: 80 }} />
+        </ScrollView>
+      </SafeAreaView>
+    </ImageBackground>
   );
 }
 
@@ -131,82 +127,119 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F5F7FA',
-    padding: 16,
   },
-  userCard: {
+  safeArea: {
+    flex: 1,
+  },
+  contentContainer: {
+    padding: 20,
+  },
+  header: {
     alignItems: 'center',
-    marginBottom: 16,
+    marginTop: 20,
+    marginBottom: 40,
   },
-  avatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#4A90E2',
+  avatarContainer: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    backgroundColor: 'rgba(255,255,255,0.9)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
   },
   avatarText: {
-    fontSize: 32,
+    fontSize: 36,
     fontWeight: 'bold',
-    color: '#FFF',
+    color: '#4A90E2',
   },
   userName: {
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: 'bold',
-    color: '#1A1A1A',
+    color: '#FFF',
     marginBottom: 4,
+    textShadowColor: 'rgba(0,0,0,0.1)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   userEmail: {
     fontSize: 14,
-    color: '#666',
+    color: 'rgba(255,255,255,0.8)',
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#FFF',
+    marginBottom: 12,
+    marginLeft: 4,
+    textShadowColor: 'rgba(0,0,0,0.1)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   statsCard: {
-    marginBottom: 16,
+    padding: 20,
+    marginBottom: 24,
   },
-  cardTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1A1A1A',
-    marginBottom: 16,
-  },
-  statRow: {
+  statsGrid: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
+    flexWrap: 'wrap',
   },
-  statLabel: {
-    fontSize: 14,
-    color: '#666',
+  statItem: {
+    width: '50%',
+    alignItems: 'center',
+    paddingVertical: 12,
   },
   statValue: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#4A90E2',
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#2D3748',
+    marginBottom: 4,
+  },
+  streakValue: {
+    color: '#F5A623',
+  },
+  statLabel: {
+    fontSize: 13,
+    color: '#718096',
   },
   settingsCard: {
-    marginBottom: 32,
+    padding: 0, // Custom padding for list items
+    overflow: 'hidden',
   },
   settingItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
+    padding: 16,
   },
   settingLeft: {
     flexDirection: 'row',
     alignItems: 'center',
   },
+  iconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
   settingText: {
-    fontSize: 14,
-    color: '#1A1A1A',
-    marginLeft: 12,
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#2D3748',
   },
   logoutText: {
-    color: '#FF3B30',
+    color: '#EF4444',
+  },
+  separator: {
+    height: 1,
+    backgroundColor: 'rgba(0,0,0,0.05)',
+    marginLeft: 64,
   },
 });
