@@ -1,4 +1,3 @@
-// app/(auth)/login.tsx
 import React, { useState } from 'react';
 import {
   View,
@@ -15,36 +14,29 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useUserStore } from '@/src/stores/userStore';
 import { useLanguageStore } from '@/src/stores/languageStore';
-import Button from '@/src/components/common/Button';
-import GlassCard from '@/src/components/common/GlassCard';
-
-/**
- * 登录页面组件
- * 设计：冬季背景 + 毛玻璃卡片 + 语言切换
- */
+import { GlassCard } from '@/src/components/common/GlassCard';
+import { ThaiPatternBackground } from '@/src/components/common/ThaiPatternBackground';
+import { Colors } from '@/src/constants/colors';
+import { Typography } from '@/src/constants/typography';
 export default function LoginPage() {
-  // ===== Hooks =====
   const { t } = useTranslation();
   const router = useRouter();
   const { currentLanguage, changeLanguage } = useLanguageStore();
   const { login } = useUserStore();
 
-  // ===== 本地状态 =====
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState({ email: '', password: '' });
 
-  /**
-   * 验证表单
-   */
   const validateForm = (): boolean => {
     const newErrors = { email: '', password: '' };
     let isValid = true;
 
-    // 验证邮箱
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!email) {
       newErrors.email = t('auth.validation.emailRequired', '邮箱不能为空');
@@ -54,7 +46,6 @@ export default function LoginPage() {
       isValid = false;
     }
 
-    // 验证密码
     if (!password) {
       newErrors.password = t('auth.validation.passwordRequired', '密码不能为空');
       isValid = false;
@@ -67,19 +58,12 @@ export default function LoginPage() {
     return isValid;
   };
 
-  /**
-   * 处理登录
-   */
   const handleLogin = async () => {
-    if (!validateForm()) {
-      return;
-    }
+    if (!validateForm()) return;
 
     setIsLoading(true);
-
     try {
       const success = await login(email, password);
-
       if (success) {
         router.replace('/(tabs)');
       } else {
@@ -89,42 +73,31 @@ export default function LoginPage() {
         );
       }
     } catch (error) {
-      console.error('Login error:', error);
-      Alert.alert(
-        t('common.error', '错误'),
-        t('auth.errors.loginFailed', '登录失败')
-      );
+      Alert.alert(t('common.error', '错误'), t('auth.errors.loginFailed', '登录失败'));
     } finally {
       setIsLoading(false);
     }
   };
 
-  /**
-   * 切换语言
-   */
   const toggleLanguage = () => {
-    const newLang = currentLanguage === 'zh' ? 'en' : 'zh';
-    changeLanguage(newLang);
+    changeLanguage(currentLanguage === 'zh' ? 'en' : 'zh');
   };
 
-  // 🔥 背景图片
   const backgroundImage = {
     uri: 'https://images.unsplash.com/photo-1486496146582-9ffcd0b2b2b7?q=80&w=1000&auto=format&fit=crop'
   };
 
   return (
-    <ImageBackground
-      source={backgroundImage}
-      style={styles.container}
-      resizeMode="cover"
-    >
+    <ImageBackground source={backgroundImage} style={styles.container} resizeMode="cover">
       <StatusBar barStyle="light-content" />
+      <ThaiPatternBackground opacity={0.15} />
+      
       <SafeAreaView style={styles.safeArea}>
         <KeyboardAvoidingView
           style={styles.keyboardView}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
-          {/* 🔥 语言切换按钮 */}
+          {/* 语言切换按钮 */}
           <TouchableOpacity style={styles.languageButton} onPress={toggleLanguage}>
             <Text style={styles.languageText}>
               {currentLanguage === 'zh' ? '🇨🇳 中文' : '🇺🇸 English'}
@@ -132,32 +105,37 @@ export default function LoginPage() {
           </TouchableOpacity>
 
           <View style={styles.content}>
-            {/* 🔥 标题卡片 */}
+            {/* 标题卡片 */}
             <GlassCard style={styles.titleCard}>
-              <Text style={styles.title}>{t('auth.login', '登录')}</Text>
-              <Text style={styles.subtitle}>
-                {t('home.subtitle', '继续你的泰语学习之旅')}
-              </Text>
+              <View style={styles.titleContainer}>
+                <Text style={styles.title}>{t('auth.login', '登录')}</Text>
+                <Text style={styles.subtitle}>
+                  {t('home.subtitle', '继续你的泰语学习之旅')}
+                </Text>
+              </View>
             </GlassCard>
 
-            {/* 🔥 表单卡片 */}
-            <GlassCard style={styles.formCard}>
+            {/* 表单卡片 */}
+            <GlassCard>
               {/* 邮箱输入 */}
               <View style={styles.inputContainer}>
                 <Text style={styles.label}>{t('auth.email', '邮箱')}</Text>
-                <TextInput
-                  style={[styles.input, errors.email ? styles.inputError : null]}
-                  placeholder={t('auth.emailPlaceholder', '请输入邮箱')}
-                  value={email}
-                  onChangeText={(text) => {
-                    setEmail(text);
-                    setErrors({ ...errors, email: '' });
-                  }}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  placeholderTextColor="#999"
-                />
+                <View style={[styles.inputWrapper, errors.email ? styles.inputError : null]}>
+                  <Ionicons name="mail-outline" size={20} color={Colors.taupe} style={styles.inputIcon} />
+                  <TextInput
+                    style={styles.input}
+                    placeholder={t('auth.emailPlaceholder', '请输入邮箱')}
+                    value={email}
+                    onChangeText={(text) => {
+                      setEmail(text);
+                      setErrors({ ...errors, email: '' });
+                    }}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    placeholderTextColor={Colors.taupe}
+                  />
+                </View>
                 {errors.email ? (
                   <Text style={styles.errorText}>{errors.email}</Text>
                 ) : null}
@@ -166,18 +144,21 @@ export default function LoginPage() {
               {/* 密码输入 */}
               <View style={styles.inputContainer}>
                 <Text style={styles.label}>{t('auth.password', '密码')}</Text>
-                <TextInput
-                  style={[styles.input, errors.password ? styles.inputError : null]}
-                  placeholder={t('auth.passwordPlaceholder', '请输入密码')}
-                  value={password}
-                  onChangeText={(text) => {
-                    setPassword(text);
-                    setErrors({ ...errors, password: '' });
-                  }}
-                  secureTextEntry
-                  autoCapitalize="none"
-                  placeholderTextColor="#999"
-                />
+                <View style={[styles.inputWrapper, errors.password ? styles.inputError : null]}>
+                  <Ionicons name="lock-closed-outline" size={20} color={Colors.taupe} style={styles.inputIcon} />
+                  <TextInput
+                    style={styles.input}
+                    placeholder={t('auth.passwordPlaceholder', '请输入密码')}
+                    value={password}
+                    onChangeText={(text) => {
+                      setPassword(text);
+                      setErrors({ ...errors, password: '' });
+                    }}
+                    secureTextEntry
+                    autoCapitalize="none"
+                    placeholderTextColor={Colors.taupe}
+                  />
+                </View>
                 {errors.password ? (
                   <Text style={styles.errorText}>{errors.password}</Text>
                 ) : null}
@@ -185,14 +166,21 @@ export default function LoginPage() {
 
               {/* 登录按钮 */}
               <TouchableOpacity
-                style={[styles.loginButton, isLoading && styles.loginButtonDisabled]}
+                style={styles.loginButton}
                 onPress={handleLogin}
                 disabled={isLoading}
                 activeOpacity={0.8}
               >
-                <Text style={styles.loginButtonText}>
-                  {isLoading ? t('auth.loggingIn', '登录中...') : t('auth.loginButton', '登录')}
-                </Text>
+                <LinearGradient
+                  colors={['#4A90E2', '#357ABD']}
+                  style={styles.gradientButton}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                >
+                  <Text style={styles.loginButtonText}>
+                    {isLoading ? t('auth.loggingIn', '登录中...') : t('auth.loginButton', '登录')}
+                  </Text>
+                </LinearGradient>
               </TouchableOpacity>
 
               {/* 注册提示 */}
@@ -214,11 +202,10 @@ export default function LoginPage() {
   );
 }
 
-// ===== 样式 =====
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F7FA',
+    backgroundColor: Colors.paper,
   },
   safeArea: {
     flex: 1,
@@ -228,13 +215,15 @@ const styles = StyleSheet.create({
   },
   languageButton: {
     position: 'absolute',
-    top: 50,
+    top: Platform.OS === 'ios' ? 50 : 30,
     right: 20,
     zIndex: 10,
     paddingHorizontal: 16,
     paddingVertical: 8,
-    backgroundColor: 'rgba(255,255,255,0.9)',
+    backgroundColor: Colors.glassWhite,
     borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Colors.sand,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -242,9 +231,9 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   languageText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#2D3748',
+    fontSize: Typography.caption,
+    fontWeight: Typography.semibold,
+    color: Colors.ink,
   },
   content: {
     flex: 1,
@@ -253,67 +242,74 @@ const styles = StyleSheet.create({
   },
   titleCard: {
     marginBottom: 24,
+  },
+  titleContainer: {
     alignItems: 'center',
   },
   title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#2D3748',
+    fontSize: Typography.h1,
+    fontWeight: Typography.bold,
+    color: Colors.ink,
     marginBottom: 8,
   },
   subtitle: {
-    fontSize: 14,
-    color: '#718096',
-  },
-  formCard: {
-    padding: 24,
+    fontSize: Typography.caption,
+    color: Colors.taupe,
+    textAlign: 'center',
   },
   inputContainer: {
     marginBottom: 20,
   },
   label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#2D3748',
+    fontSize: Typography.caption,
+    fontWeight: Typography.semibold,
+    color: Colors.ink,
     marginBottom: 8,
   },
-  input: {
+  inputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: 'rgba(255,255,255,0.9)',
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.1)',
+    borderColor: Colors.sand,
     borderRadius: 12,
     paddingHorizontal: 16,
+  },
+  inputIcon: {
+    marginRight: 10,
+  },
+  input: {
+    flex: 1,
     paddingVertical: 12,
-    fontSize: 16,
-    color: '#2D3748',
+    fontSize: Typography.body,
+    color: Colors.ink,
   },
   inputError: {
-    borderColor: '#EF4444',
+    borderColor: Colors.error,
   },
   errorText: {
-    color: '#EF4444',
-    fontSize: 12,
+    color: Colors.error,
+    fontSize: Typography.small,
     marginTop: 4,
   },
   loginButton: {
-    backgroundColor: '#4A90E2',
     borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: 'center',
     marginTop: 10,
+    overflow: 'hidden',
     shadowColor: '#4A90E2',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 4,
   },
-  loginButtonDisabled: {
-    opacity: 0.6,
+  gradientButton: {
+    paddingVertical: 16,
+    alignItems: 'center',
   },
   loginButtonText: {
-    color: '#FFF',
-    fontSize: 16,
-    fontWeight: 'bold',
+    color: Colors.white,
+    fontSize: Typography.body,
+    fontWeight: Typography.bold,
   },
   registerContainer: {
     flexDirection: 'row',
@@ -321,13 +317,13 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
   registerText: {
-    color: '#718096',
-    fontSize: 14,
+    color: Colors.taupe,
+    fontSize: Typography.caption,
   },
   registerLink: {
-    color: '#4A90E2',
-    fontSize: 14,
-    fontWeight: '600',
+    color: Colors.accent,
+    fontSize: Typography.caption,
+    fontWeight: Typography.semibold,
     marginLeft: 4,
   },
 });

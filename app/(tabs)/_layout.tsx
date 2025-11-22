@@ -1,69 +1,168 @@
 // app/(tabs)/_layout.tsx
 import { Tabs } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import { useTranslation } from 'react-i18next';
+import { View, Text, Pressable, Platform, StyleSheet } from 'react-native';
+import { Home, BookOpen, User } from 'lucide-react-native';
+import { BlurView } from 'expo-blur';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Colors } from '@/src/constants/colors';
+import { Typography } from '@/src/constants/typography';
 
-/**
- * 标签页布局组件
- * 作用:
- * 1. 底部导航栏
- * 2. 多语言标题
- * 3. 图标配置
- */
+interface TabButtonProps {
+  icon: React.ComponentType<any>;
+  label: string;
+  isActive: boolean;
+  onPress: () => void;
+}
+
+function TabButton({ icon: Icon, label, isActive, onPress }: TabButtonProps) {
+  return (
+    <Pressable onPress={onPress} style={styles.tabButton}>
+      <Icon
+        size={22}
+        strokeWidth={isActive ? 2 : 1.5}
+        color={isActive ? Colors.ink : Colors.taupe}
+      />
+      <Text 
+        style={[
+          styles.tabLabel,
+          { 
+            color: isActive ? Colors.ink : Colors.taupe,
+            fontFamily: Typography.notoSerifRegular,
+          }
+        ]}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+interface CustomTabBarProps {
+  state: any;
+  descriptors: any;
+  navigation: any;
+}
+
+function CustomTabBar({ state, navigation }: CustomTabBarProps) {
+  const insets = useSafeAreaInsets();
+
+  return (
+    <View
+      style={[
+        styles.tabBarContainer,
+        {
+          height: 64 + insets.bottom,
+          paddingBottom: insets.bottom,
+        }
+      ]}
+    >
+      {Platform.OS === 'ios' && (
+        <BlurView
+          intensity={80}
+          tint="light"
+          style={StyleSheet.absoluteFill}
+        />
+      )}
+
+      <View style={styles.tabBarContent}>
+        {/* Left: Learn */}
+        <TabButton
+          icon={BookOpen}
+          label="学习"
+          isActive={state.index === 1}
+          onPress={() => navigation.navigate('courses')}
+        />
+
+        {/* Center: Home (Protruding) */}
+        <View style={[styles.centerButtonContainer, { bottom: 24 }]}>
+          <Pressable
+            onPress={() => navigation.navigate('index')}
+            style={[
+              styles.centerButton,
+              {
+                backgroundColor: state.index === 0 ? Colors.ink : Colors.white,
+              }
+            ]}
+          >
+            <Home
+              size={26}
+              strokeWidth={2}
+              color={state.index === 0 ? Colors.white : Colors.taupe}
+            />
+          </Pressable>
+        </View>
+
+        {/* Right: Profile */}
+        <TabButton
+          icon={User}
+          label="我的"
+          isActive={state.index === 2}
+          onPress={() => navigation.navigate('profile')}
+        />
+      </View>
+    </View>
+  );
+}
+
 export default function TabsLayout() {
-  const { t } = useTranslation();
-
   return (
     <Tabs
       screenOptions={{
-        headerShown: false,  // 隐藏顶部导航栏
-        tabBarActiveTintColor: '#4A90E2',  // 激活时的颜色
-        tabBarInactiveTintColor: '#999',   // 未激活时的颜色
-        tabBarStyle: {
-          backgroundColor: '#FFF',
-          borderTopWidth: 1,
-          borderTopColor: '#E0E0E0',
-          height: 60,
-          paddingBottom: 8,
-        },
-        tabBarLabelStyle: {
-          fontSize: 12,
-          fontWeight: '600',
-        },
+        headerShown: false,
       }}
+      tabBar={(props) => <CustomTabBar {...props} />}
     >
-      {/* 首页 */}
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: t('tabs.home'),  // 🔥 动态标题
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="home" size={size} color={color} />
-          ),
-        }}
-      />
-
-      {/* 课程页 */}
-      <Tabs.Screen
-        name="courses"
-        options={{
-          title: t('tabs.courses'),
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="book" size={size} color={color} />
-          ),
-        }}
-      />
-
-      {/* 个人中心 */}
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: t('tabs.profile'),
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="person" size={size} color={color} />
-          ),
-        }}
-      />
+      <Tabs.Screen name="index" />
+      <Tabs.Screen name="courses" />
+      <Tabs.Screen name="profile" />
     </Tabs>
   );
 }
+
+const styles = StyleSheet.create({
+  tabBarContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    borderTopWidth: 1,
+    borderTopColor: Colors.sand,
+    backgroundColor: Platform.OS === 'ios' ? 'transparent' : Colors.white,
+  },
+  tabBarContent: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 48,
+  },
+  tabButton: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: 4,
+  },
+  tabLabel: {
+    fontSize: 10,
+    fontWeight: '500',
+    letterSpacing: 1.5,
+  },
+  centerButtonContainer: {
+    position: 'absolute',
+    left: '50%',
+    marginLeft: -32,
+  },
+  centerButton: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 4,
+    borderColor: Colors.paper,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+});

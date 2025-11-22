@@ -42,3 +42,12 @@ export interface LearningProgress {
   streakDays: number;
   lastUpdated: Date;
 }
+
+export interface ReviewItem {
+  id: string;
+  char: string;
+  phonetic: string;
+  meaning?: string;
+  type: 'Review' | 'Hard' | 'New';
+  dueIn?: string;
+}

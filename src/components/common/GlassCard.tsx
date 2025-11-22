@@ -1,34 +1,31 @@
+// src/components/common/GlassCard.tsx
 import React from 'react';
-import { View, StyleSheet, ViewStyle, StyleProp } from 'react-native';
+import { View, StyleSheet, ViewStyle } from 'react-native';
 
 interface GlassCardProps {
   children: React.ReactNode;
-  style?: StyleProp<ViewStyle>;
+  style?: ViewStyle | ViewStyle[];
 }
 
-/**
- * A component that simulates a frosted glass effect using semi-transparent background
- * and borders. Designed to work over the winter background image.
- */
-export default function GlassCard({ children, style }: GlassCardProps) {
+export const GlassCard: React.FC<GlassCardProps> = ({ children, style }) => {
   return (
     <View style={[styles.card, style]}>
       {children}
     </View>
   );
-}
+};
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: 'rgba(255, 255, 255, 0.75)', // Milky white translucency
-    borderRadius: 24,
+    backgroundColor: 'rgba(255, 255, 255, 0.85)',
+    borderRadius: 16,
     padding: 20,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.9)', // Subtle highlight border
+    borderColor: 'rgba(229, 226, 219, 0.8)',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
-    shadowRadius: 16,
-    elevation: 4, // Android shadow
+    shadowRadius: 12,
+    elevation: 5,
   },
 });
