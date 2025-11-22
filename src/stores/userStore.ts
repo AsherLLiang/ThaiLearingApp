@@ -29,6 +29,15 @@ export const useUserStore = create<UserState>()(
       isAuthenticated: false,
       authToken: null,
 
+      register: async (email: string, password: string) => {
+        try {
+          // TODO: 实际API调用
+          // const response = await UserService.registerUser(email, password);
+        } catch (error) {
+          console.error('Register failed:', error);
+          return false;
+        }
+      },
       login: async (email: string, password: string) => {
         try {
           // TODO: 实际API调用
