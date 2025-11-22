@@ -1,4 +1,4 @@
-// app/_layout.tsx
+// app/_layout.js
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { useEffect } from 'react';
 import { useFonts } from 'expo-font';

@@ -148,7 +148,7 @@ const styles = StyleSheet.create({
   },
   centerButtonContainer: {
     position: 'absolute',
-    left: '50%',
+    left: '65%',
     marginLeft: -32,
   },
   centerButton: {
