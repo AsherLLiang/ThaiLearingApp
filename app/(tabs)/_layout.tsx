@@ -114,7 +114,7 @@ export default function TabsLayout() {
     >
       <Tabs.Screen name="index" />
       <Tabs.Screen name="courses" />
-      <Tabs.Screen name="profile" />
+      {/* profile 路由由文件系统自动创建，无需手动声明 */}
     </Tabs>
   );
 }

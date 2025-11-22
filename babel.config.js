@@ -3,7 +3,6 @@ module.exports = function (api) {
   return {
     presets: ['babel-preset-expo'],
     plugins: [
-      'react-native-worklets/plugin',
       [
         'module-resolver',
         {
@@ -13,6 +12,7 @@ module.exports = function (api) {
           },
         },
       ],
+      'react-native-reanimated/plugin', // 必须在最后
     ],
   };
 };
