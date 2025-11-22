@@ -1,32 +1,21 @@
 // app/_layout.tsx
-import { Stack } from 'expo-router';
+import { Stack, useRouter, useSegments } from 'expo-router';
 import { useEffect } from 'react';
+import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import {
-  useFonts,
-  PlayfairDisplay_400Regular,
-  PlayfairDisplay_700Bold
-} from '@expo-google-fonts/playfair-display';
-import {
-  NotoSerifSC_400Regular,
-  NotoSerifSC_700Bold
-} from '@expo-google-fonts/noto-serif-sc';
-import {
-  Sarabun_400Regular,
-  Sarabun_700Bold
-} from '@expo-google-fonts/sarabun';
+import { useUserStore } from '@/src/stores/userStore';
+import "../global.css";
 
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
+  const segments = useSegments();
+  const router = useRouter();
+  const { isAuthenticated } = useUserStore();
+
   const [fontsLoaded, fontError] = useFonts({
-    PlayfairDisplay_400Regular,
-    PlayfairDisplay_700Bold,
-    NotoSerifSC_400Regular,
-    NotoSerifSC_700Bold,
-    Sarabun_400Regular,
-    Sarabun_700Bold,
+    // Font loading temporarily disabled - font files not found
   });
 
   useEffect(() => {
@@ -35,18 +24,27 @@ export default function RootLayout() {
     }
   }, [fontsLoaded, fontError]);
 
+  // Auth Guard
+  useEffect(() => {
+    if (!fontsLoaded && !fontError) return;
+
+    const inAuthGroup = segments[0] === '(auth)';
+
+    if (!isAuthenticated && !inAuthGroup) {
+      router.replace('/(auth)/login');
+    } else if (isAuthenticated && inAuthGroup) {
+      router.replace('/(tabs)');
+    }
+  }, [isAuthenticated, segments, fontsLoaded, fontError]);
+
   if (!fontsLoaded && !fontError) {
     return null;
   }
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <Stack
-        screenOptions={{
-          headerShown: false,
-          contentStyle: { backgroundColor: '#FAF9F6' },
-        }}
-      >
+      <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="(auth)" />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen 
           name="review-modal" 

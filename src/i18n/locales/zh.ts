@@ -1,3 +1,4 @@
+// src/i18n/locales/zh.ts
 export default {
   common: {
     confirm: '确认',
@@ -6,74 +7,62 @@ export default {
     delete: '删除',
     edit: '编辑',
     loading: '加载中...',
-    success: '成功',
     error: '错误',
-    retry: '重试',
+    success: '成功',
   },
-
   auth: {
     login: '登录',
     register: '注册',
     logout: '退出登录',
     email: '邮箱',
     password: '密码',
-    loginButton: '登录',
-    loggingIn: '登录中...',
-    noAccount: '还没有账号？',
     emailPlaceholder: '请输入邮箱',
     passwordPlaceholder: '请输入密码',
-    
-    validation: {
-      emailInvalid: '请输入有效的邮箱地址',
-      passwordTooShort: '密码至少需要 8 个字符',
-    },
-    
-    errors: {
-      loginFailed: '登录失败，请重试',
-    },
+    loginButton: '登录',
+    registerButton: '注册',
+    forgotPassword: '忘记密码？',
+    noAccount: '还没有账号？',
+    hasAccount: '已有账号？',
+    loginSuccess: '登录成功',
+    loginFailed: '登录失败',
   },
-
   tabs: {
     home: '首页',
+    learn: '学习',
     courses: '课程',
     profile: '我的',
   },
-
-  home: {
-    greeting: '早上好',
-    subtitle: '继续你的泰语学习之旅',
-    todayTasks: '今日任务',
-    reviewVocabulary: '复习 10 个词汇',
-    learnAlphabet: '完成 1 课字母学习',
-    startLearning: '开始学习',
-    streakDays: '天连续学习',
-  },
-
-  courses: {
-    title: '课程列表',
-    difficulty: '难度',
-    levels: {
-      BEGINNER_A: '初级 A',
-      BEGINNER_B: '初级 B',
-      INTERMEDIATE: '中级',
-      ADVANCED: '高级',
-    },
-  },
-
   profile: {
+    title: '个人中心',
+    editProfile: '编辑资料',
+    achievements: '学习成就',
+    settings: '设置',
     completedAlphabets: '已学字母',
     completedVocabulary: '已学词汇',
-    studyHours: '学习小时',
+    completedSentences: '已学句子',
+    completedArticles: '已读文章',
+    totalScore: '总分',
+    studyTime: '学习时长',
     streakDays: '连续天数',
-    viewDetailedProgress: '查看详细进度',
-    settings: '设置',
-    language: '语言',
-  },
-
-  settings: {
-    title: '设置',
+    hours: '小时',
+    days: '天',
     selectLanguage: '选择语言',
     chinese: '中文',
     english: 'English',
+    dailyReminder: '每日提醒',
+    ttsEngine: '音频反馈引擎',
+    achievementBadges: {
+      streak7: '7天连胜',
+      master: '声调大师',
+      vocab100: '词汇100',
+    },
+  },
+  home: {
+    greeting: 'ສະບາຍດີ',
+    todayProgress: '今日学习目标已完成',
+    currentCourse: '当前课程',
+    recentMastered: '最近掌握',
+    mastered: '已掌握',
+    reviewDue: '待复习内容',
   },
 };

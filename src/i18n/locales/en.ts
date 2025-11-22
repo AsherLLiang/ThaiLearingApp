@@ -1,3 +1,4 @@
+// src/i18n/locales/en.ts
 export default {
   common: {
     confirm: 'Confirm',
@@ -6,74 +7,62 @@ export default {
     delete: 'Delete',
     edit: 'Edit',
     loading: 'Loading...',
-    success: 'Success',
     error: 'Error',
-    retry: 'Retry',
+    success: 'Success',
   },
-
   auth: {
     login: 'Login',
     register: 'Register',
     logout: 'Logout',
     email: 'Email',
     password: 'Password',
-    loginButton: 'Login',
-    loggingIn: 'Logging in...',
-    noAccount: "Don't have an account?",
     emailPlaceholder: 'Enter your email',
     passwordPlaceholder: 'Enter your password',
-    
-    validation: {
-      emailInvalid: 'Please enter a valid email',
-      passwordTooShort: 'Password must be at least 8 characters',
-    },
-    
-    errors: {
-      loginFailed: 'Login failed, please try again',
-    },
+    loginButton: 'Login',
+    registerButton: 'Register',
+    forgotPassword: 'Forgot password?',
+    noAccount: "Don't have an account?",
+    hasAccount: 'Already have an account?',
+    loginSuccess: 'Login successful',
+    loginFailed: 'Login failed',
   },
-
   tabs: {
     home: 'Home',
+    learn: 'Learn',
     courses: 'Courses',
     profile: 'Profile',
   },
-
-  home: {
-    greeting: 'Good Morning',
-    subtitle: 'Continue your Thai learning journey',
-    todayTasks: "Today's Tasks",
-    reviewVocabulary: 'Review 10 vocabulary',
-    learnAlphabet: 'Complete 1 alphabet lesson',
-    startLearning: 'Start Learning',
-    streakDays: 'day learning streak',
-  },
-
-  courses: {
-    title: 'Course List',
-    difficulty: 'Difficulty',
-    levels: {
-      BEGINNER_A: 'Beginner A',
-      BEGINNER_B: 'Beginner B',
-      INTERMEDIATE: 'Intermediate',
-      ADVANCED: 'Advanced',
-    },
-  },
-
   profile: {
-    completedAlphabets: 'Alphabets',
-    completedVocabulary: 'Vocabulary',
-    studyHours: 'Study Hours',
-    streakDays: 'Streak Days',
-    viewDetailedProgress: 'View Progress',
+    title: 'Profile',
+    editProfile: 'Edit Profile',
+    achievements: 'Achievements',
     settings: 'Settings',
-    language: 'Language',
-  },
-
-  settings: {
-    title: 'Settings',
+    completedAlphabets: 'Alphabets Learned',
+    completedVocabulary: 'Vocabulary Learned',
+    completedSentences: 'Sentences Learned',
+    completedArticles: 'Articles Read',
+    totalScore: 'Total Score',
+    studyTime: 'Study Time',
+    streakDays: 'Streak Days',
+    hours: 'hrs',
+    days: 'days',
     selectLanguage: 'Select Language',
     chinese: '中文',
     english: 'English',
+    dailyReminder: 'Daily Reminder',
+    ttsEngine: 'TTS Engine',
+    achievementBadges: {
+      streak7: '7-Day Streak',
+      master: 'Tone Master',
+      vocab100: 'Vocab 100',
+    },
+  },
+  home: {
+    greeting: 'Hello',
+    todayProgress: "Today's learning goal completed",
+    currentCourse: 'Current Course',
+    recentMastered: 'Recently Mastered',
+    mastered: 'Mastered',
+    reviewDue: 'Reviews Due',
   },
 };
