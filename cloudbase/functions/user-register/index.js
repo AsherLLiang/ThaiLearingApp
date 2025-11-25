@@ -14,7 +14,32 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-producti
 const JWT_EXPIRES_IN = '7d'; // 7 days
 
 exports.main = async (event, context) => {
-  const { email, password, displayName, role = 'LEARNER' } = event;
+  // Parse request body if coming from HTTP trigger
+  let requestData = event;
+  if (typeof event.body === 'string') {
+    try {
+      requestData = JSON.parse(event.body);
+    } catch (e) {
+      return {
+        success: false,
+        message: 'Invalid JSON in request body',
+        code: 'INVALID_JSON'
+      };
+    }
+  } else if (event.body && typeof event.body === 'object') {
+    requestData = event.body;
+  }
+
+  const { email, password, displayName, role = 'LEARNER' } = requestData;
+
+  // Validate required fields
+  if (!email || !password || !displayName) {
+    return {
+      success: false,
+      message: 'Missing required fields: email, password, displayName',
+      code: 'MISSING_FIELDS'
+    };
+  }
 
   try {
     // Check if email already exists 

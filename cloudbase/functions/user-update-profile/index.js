@@ -16,8 +16,24 @@ function verifyToken(event) {
 
 exports.main = async (event, context) => {
   try {
+    // Parse request body if coming from HTTP trigger
+    let requestData = event;
+    if (typeof event.body === 'string') {
+      try {
+        requestData = JSON.parse(event.body);
+      } catch (e) {
+        return {
+          success: false,
+          error: 'Invalid JSON in request body',
+          code: 'INVALID_JSON'
+        };
+      }
+    } else if (event.body && typeof event.body === 'object') {
+      requestData = event.body;
+    }
+
     // ===== Verify authentication =====
-    const userId = verifyToken(event);
+    const userId = verifyToken(requestData);
     if (!userId) {
       return {
         success: false,
@@ -26,7 +42,7 @@ exports.main = async (event, context) => {
       };
     }
 
-    const { displayName, avatar, preferences } = event;
+    const { displayName, avatar, preferences } = requestData;
 
     // ===== Build update object =====
     const updateData = {};

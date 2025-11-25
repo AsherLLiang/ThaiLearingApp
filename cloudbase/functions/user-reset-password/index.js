@@ -10,7 +10,23 @@ const db = cloud.database();
 
 exports.main = async (event, context) => {
   try {
-    const { email } = event;
+    // Parse request body if coming from HTTP trigger
+    let requestData = event;
+    if (typeof event.body === 'string') {
+      try {
+        requestData = JSON.parse(event.body);
+      } catch (e) {
+        return {
+          success: false,
+          error: 'Invalid JSON in request body',
+          code: 'INVALID_JSON'
+        };
+      }
+    } else if (event.body && typeof event.body === 'object') {
+      requestData = event.body;
+    }
+
+    const { email } = requestData;
 
     // ===== Validation =====
     if (!email) {
