@@ -14,10 +14,26 @@ const JWT_EXPIRES_IN = '7d';
 
 exports.main = async (event, context) => {
   try {
-    const { email, password } = event;
+    // Parse request body if coming from HTTP trigger
+    let requestData = event;
+    if (typeof event.body === 'string') {
+      try {
+        requestData = JSON.parse(event.body);
+      } catch (e) {
+        return {
+          success: false,
+          error: 'Invalid JSON in request body',
+          code: 'INVALID_JSON'
+        };
+      }
+    } else if (event.body && typeof event.body === 'object') {
+      requestData = event.body;
+    }
+
+    const { email, password } = requestData;
 
     // ===== Validation =====
-    if (!email || !password) {   //可以放前端
+    if (!email || !password) {
       return {
         success: false,
         error: 'Email and password are required',
