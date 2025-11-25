@@ -1,5 +1,5 @@
 // app/(auth)/register.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -19,66 +19,73 @@ import { LanguageSwitcher } from '@/src/components/common/LanguageSwitcher';
 import { useUserStore } from '@/src/stores/userStore';
 import { Colors } from '@/src/constants/colors';
 import { Typography } from '@/src/constants/typography';
+import { validateRegistrationForm } from '@/src/utils/validation';
+
 
 export default function RegisterScreen() {
   const { t } = useTranslation();
   const router = useRouter();
-  const registerUser = useUserStore((s: any) => s.register); // 预留：从 store 中获取 register 方法（后端接入点）
-
+  const { register, isLoading, error, clearError } = useUserStore();
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPwd, setConfirmPwd] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+
+  // 清理错误
+  useEffect(() => {
+    return () => clearError();
+  }, []);
+
+  // 显示错误提示
+  useEffect(() => {
+    if (error) {
+      Alert.alert(t('common.error'), error);
+    }
+  }, [error]);
 
   const handleRegister = async () => {
-    if (!displayName || !email || !password || !confirmPwd) {
-      Alert.alert(t('common.error'), 'Please fill in all fields');
-      return;
+
+    const validation = validateRegistrationForm({
+      email,
+      password,
+      confirmPassword: confirmPwd,
+      displayName
+    });
+    // 验证格式是否正确
+    if (!validation.isValid) {
+      Alert.alert('Error', validation.error);
+      return; // 阻止发送请求
     }
 
-    if (password !== confirmPwd) {
-      Alert.alert(t('common.error'), 'Passwords do not match');
-      return;
+    const success = await register({
+      displayName: displayName.trim(),
+      email: email.toLowerCase().trim(),
+      password,
+    })
+
+     if (success) {
+      Alert.alert(
+        t('auth.registerSuccess'),
+        'Your account has been created successfully!',
+        [
+          {
+            text: 'OK',
+            onPress: () => router.replace('/(auth)/login'),
+          },
+        ]
+      );
     }
 
-    setIsLoading(true);
-    try {
-      // ✅ 这里预留后端接入：
-      // 1. 现在可以先用本地 mock：直接返回 true
-      // 2. 以后你可以在 useUserStore 里实现 registerUser 调用真实后端
-      let success = true;
 
-      if (registerUser) {
-        success = await registerUser({ displayName, email, password });
-      }
-
-      if (success) {
-        Alert.alert(
-          t('auth.register'),
-          'Account created successfully',
-          [
-            {
-              text: 'OK',
-              onPress: () => router.replace('/(auth)/login'),
-            },
-          ]
-        );
-      } else {
-        Alert.alert(t('common.error'), t('auth.registerFailed') || 'Register failed');
-      }
-    } catch (error) {
-      Alert.alert(t('common.error'), t('auth.registerFailed') || 'Register failed');
-    } finally {
-      setIsLoading(false);
-    }
   };
 
   return (
     <SafeAreaView style={styles.container}>
+
+      {/* 背景 */}
       <ThaiPatternBackground opacity={0.08} />
 
-      {/* Language Switcher */}
+      {/* 语言选择器 */}
       <View style={styles.languageSwitcherContainer}>
         <LanguageSwitcher />
       </View>
@@ -94,7 +101,7 @@ export default function RegisterScreen() {
             style={styles.headerSection}
           >
             <Text style={styles.logo}>ชา</Text>
-            <Text style={styles.title}>Thai Learning</Text>
+            <Text style={styles.title}>{t('auth.title')}</Text>
             <Text style={styles.subtitle}>{t('auth.register')}</Text>
           </Animated.View>
 

@@ -2,94 +2,299 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-interface User {
-  userId: string;
-  email: string;
-  displayName: string;
-  role: 'LEARNER' | 'ADMIN';
-  registrationDate: string;
-}
+import { userService, User, RegisterRequest, LoginRequest, ResetPasswordRequest } from '../services/UserService';
+import { apiClient } from '../utils/apiClient';
 
 interface UserState {
+  // State
   currentUser: User | null;
   isAuthenticated: boolean;
   authToken: string | null;
+  isLoading: boolean;
+  error: string | null;
   
+  // Actions
+  register: (data: { email: string; password: string; displayName: string }) => Promise<boolean>;
   login: (email: string, password: string) => Promise<boolean>;
   logout: () => void;
+  requestPasswordReset: (email: string) => Promise<boolean>;
+  updateProfile: (data: { displayName?: string; avatar?: string }) => Promise<boolean>;
   setUser: (user: User, token: string) => void;
   checkAuth: () => boolean;
+  clearError: () => void;
 }
+
+// ==================== Store ====================
 
 export const useUserStore = create<UserState>()(
   persist(
     (set, get) => ({
+      // ===== Initial State =====
       currentUser: null,
       isAuthenticated: false,
       authToken: null,
+      isLoading: false,
+      error: null,
 
-      register: async (email: string, password: string) => {
+      // ===== Register Action =====
+      /**
+       * Register a new user
+       * 
+       * Flow:
+       * 1. Set loading state
+       * 2. Call userService.register()
+       * 3. If success: save user + token, set authenticated
+       * 4. If fail: save error message
+       * 
+       * @param data Registration data (email, password, displayName)
+       * @returns Success status
+       */
+      register: async (data: { email: string; password: string; displayName: string }) => {
+        set({ isLoading: true, error: null });
+
         try {
-          // TODO: 实际API调用
-          // const response = await UserService.registerUser(email, password);
-        } catch (error) {
-          console.error('Register failed:', error);
-          return false;
-        }
-      },
-      login: async (email: string, password: string) => {
-        try {
-          // TODO: 实际API调用
-          // const response = await UserService.authenticateUser(email, password);
-          
-          // 模拟登录
-          const mockUser: User = {
-            userId: '001',
-            email,
-            displayName: 'Liang JianYu',
-            role: 'LEARNER',
-            registrationDate: new Date().toISOString(),
-          };
-          
-          const mockToken = 'mock_jwt_token_' + Date.now();
-          
-          set({
-            currentUser: mockUser,
-            isAuthenticated: true,
-            authToken: mockToken,
+          const response = await userService.register({
+            email: data.email,
+            password: data.password,
+            displayName: data.displayName,
           });
-          
-          return true;
-        } catch (error) {
-          console.error('Login failed:', error);
+
+          if (response.success && response.data) {
+            const { user, token } = response.data;
+
+            // Save token to apiClient for future requests
+            apiClient.setAuthToken(token);
+
+            // Update store state
+            set({
+              currentUser: user,
+              authToken: token,
+              isAuthenticated: true,
+              isLoading: false,
+              error: null,
+            });
+
+            return true;
+          } else {
+            set({
+              error: response.error || 'Registration failed',
+              isLoading: false,
+            });
+            return false;
+          }
+        } catch (error: any) {
+          set({
+            error: error.message || 'Registration failed',
+            isLoading: false,
+          });
           return false;
         }
       },
 
+      // ===== Login Action =====
+      /**
+       * Authenticate user
+       * 
+       * Flow:
+       * 1. Set loading state
+       * 2. Call userService.login()
+       * 3. If success: save user + token, set authenticated
+       * 4. If fail: save error message
+       * 
+       * @param email User email
+       * @param password User password
+       * @returns Success status
+       */
+      login: async (email: string, password: string) => {
+        set({ isLoading: true, error: null });
+
+        try {
+          const response = await userService.login({
+            email,
+            password,
+          });
+
+          if (response.success && response.data) {
+            const { user, token } = response.data;
+
+            // Save token to apiClient for future requests
+            apiClient.setAuthToken(token);
+
+            // Update store state
+            set({
+              currentUser: user,
+              authToken: token,
+              isAuthenticated: true,
+              isLoading: false,
+              error: null,
+            });
+
+            return true;
+          } else {
+            set({
+              error: response.error || 'Login failed',
+              isLoading: false,
+            });
+            return false;
+          }
+        } catch (error: any) {
+          set({
+            error: error.message || 'Login failed',
+            isLoading: false,
+          });
+          return false;
+        }
+      },
+
+      // ===== Logout Action =====
+      /**
+       * Logout current user
+       * 
+       * Flow:
+       * 1. Clear apiClient token
+       * 2. Clear store state
+       * 3. Clear AsyncStorage (via persist middleware)
+       */
       logout: () => {
+        // Clear token from apiClient
+        apiClient.setAuthToken(null);
+
+        // Clear store state
         set({
           currentUser: null,
-          isAuthenticated: false,
           authToken: null,
+          isAuthenticated: false,
+          error: null,
         });
       },
 
+      // ===== Password Reset Action =====
+      /**
+       * Request password reset email
+       * 
+       * @param email User email
+       * @returns Success status
+       */
+      requestPasswordReset: async (email: string) => {
+        set({ isLoading: true, error: null });
+
+        try {
+          const response = await userService.requestPasswordReset({ email });
+
+          if (response.success) {
+            set({ isLoading: false, error: null });
+            return true;
+          } else {
+            set({
+              error: response.error || 'Password reset failed',
+              isLoading: false,
+            });
+            return false;
+          }
+        } catch (error: any) {
+          set({
+            error: error.message || 'Password reset failed',
+            isLoading: false,
+          });
+          return false;
+        }
+      },
+
+      // ===== Update Profile Action =====
+      /**
+       * Update user profile
+       * 
+       * @param data Profile data to update
+       * @returns Success status
+       */
+      updateProfile: async (data: { displayName?: string; avatar?: string }) => {
+        const currentUser = get().currentUser;
+        if (!currentUser) {
+          set({ error: 'No user logged in' });
+          return false;
+        }
+
+        set({ isLoading: true, error: null });
+
+        try {
+          const response = await userService.updateProfile({
+            userId: currentUser.userId,
+            ...data,
+          });
+
+          if (response.success && response.data) {
+            set({
+              currentUser: response.data,
+              isLoading: false,
+              error: null,
+            });
+            return true;
+          } else {
+            set({
+              error: response.error || 'Profile update failed',
+              isLoading: false,
+            });
+            return false;
+          }
+        } catch (error: any) {
+          set({
+            error: error.message || 'Profile update failed',
+            isLoading: false,
+          });
+          return false;
+        }
+      },
+
+      // ===== Set User (Direct) =====
+      /**
+       * Directly set user and token
+       * Used for: OAuth flows, token refresh
+       * 
+       * @param user User object
+       * @param token Auth token
+       */
       setUser: (user: User, token: string) => {
+        apiClient.setAuthToken(token);
+        
         set({
           currentUser: user,
-          isAuthenticated: true,
           authToken: token,
+          isAuthenticated: true,
+          error: null,
         });
       },
 
+      // ===== Check Auth Status =====
+      /**
+       * Check if user is authenticated
+       * 
+       * @returns Authentication status
+       */
       checkAuth: () => {
-        return get().isAuthenticated && get().authToken !== null;
+        const state = get();
+        return state.isAuthenticated && state.authToken !== null;
+      },
+
+      // ===== Clear Error =====
+      /**
+       * Clear error message
+       */
+      clearError: () => {
+        set({ error: null });
       },
     }),
     {
-      name: 'user-storage',
+      name: 'user-storage', // AsyncStorage key
       storage: createJSONStorage(() => AsyncStorage),
+      
+      // Restore auth token to apiClient on rehydration
+      onRehydrateStorage: () => {
+        return (state) => {
+          if (state?.authToken) {
+            apiClient.setAuthToken(state.authToken);
+          }
+        };
+      },
     }
   )
 );

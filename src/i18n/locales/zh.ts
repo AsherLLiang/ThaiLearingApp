@@ -11,6 +11,7 @@ export default {
     success: '成功',
   },
   auth: {
+    title: '泰Easy',
     login: '登录',
     register: '注册',
     logout: '退出登录',
@@ -29,6 +30,7 @@ export default {
     hasAccount: '已有账号？',
     loginSuccess: '登录成功',
     loginFailed: '登录失败',
+    alreadyHaveAccount: '已有账号？',
   },
   tabs: {
     home: '首页',
