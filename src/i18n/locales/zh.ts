@@ -31,6 +31,7 @@ export default {
     loginSuccess: '登录成功',
     loginFailed: '登录失败',
     alreadyHaveAccount: '已有账号？',
+    logining:'登录中'
   },
   tabs: {
     home: '首页',
