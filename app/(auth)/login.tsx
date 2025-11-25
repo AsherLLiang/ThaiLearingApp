@@ -123,7 +123,7 @@ export default function LoginScreen() {
               disabled={isLoading}
             >
               <Text style={styles.loginButtonText}>
-                {isLoading ? t('common.loading') : t('auth.loginButton')}
+                {isLoading ? t('auth.logining') : t('auth.loginButton')}
               </Text>
             </Pressable>
 

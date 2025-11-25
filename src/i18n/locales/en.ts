@@ -31,6 +31,7 @@ export default {
     loginSuccess: 'Login successful',
     loginFailed: 'Login failed',
     alreadyHaveAccount: 'Already have an account?',
+    logining:'logining'
   },
   tabs: {
     home: 'Home',
