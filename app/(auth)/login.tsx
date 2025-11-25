@@ -1,5 +1,5 @@
 // app/(auth)/login.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet, KeyboardAvoidingView, Platform, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -14,43 +14,62 @@ import { Typography } from '@/src/constants/typography';
 export default function LoginScreen() {
   const { t } = useTranslation();
   const router = useRouter();
-  const { login } = useUserStore();
-  
+  const { login, isLoading, error, clearError } = useUserStore();
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+
+  // Clear error when component unmounts
+  useEffect(() => {
+    return () => {
+      clearError();
+    };
+  }, []);
+
+  // Show error alert if error changes
+  useEffect(() => {
+    if (error) {
+      Alert.alert(t('common.error'), error);
+    }
+  }, [error]);
 
   const handleLogin = async () => {
+    // Basic validation
     if (!email || !password) {
       Alert.alert(t('common.error'), 'Please fill in all fields');
       return;
     }
 
-    setIsLoading(true);
-    try {
-      const success = await login(email, password);
-      if (success) {
-        router.replace('/(tabs)');
-      } else {
-        Alert.alert(t('common.error'), t('auth.loginFailed'));
-      }
-    } catch (error) {
-      Alert.alert(t('common.error'), t('auth.loginFailed'));
-    } finally {
-      setIsLoading(false);
+    // Email format validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      Alert.alert(t('common.error'), 'Please enter a valid email address');
+      return;
     }
+
+    // Call login action
+    const success = await login(email, password);
+
+    if (success) {
+      // Navigate to main app
+      router.replace('/(tabs)');
+    }
+    // Error is handled by useEffect above
+  };
+  const handleForgotPassword = () => {
+    router.push('/(auth)/forgot-password');
   };
 
   return (
     <SafeAreaView style={styles.container}>
       <ThaiPatternBackground opacity={0.08} />
-      
+
       {/* Language Switcher */}
       <View style={styles.languageSwitcherContainer}>
         <LanguageSwitcher />
       </View>
 
-      <KeyboardAvoidingView 
+      <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
       >
@@ -91,11 +110,14 @@ export default function LoginScreen() {
               />
             </View>
 
-            <Pressable style={styles.forgotPassword}>
+            <Pressable
+              style={styles.forgotPassword}
+              onPress={handleForgotPassword}
+            >
               <Text style={styles.forgotPasswordText}>{t('auth.forgotPassword')}</Text>
             </Pressable>
 
-            <Pressable 
+            <Pressable
               style={[styles.loginButton, isLoading && styles.loginButtonDisabled]}
               onPress={handleLogin}
               disabled={isLoading}

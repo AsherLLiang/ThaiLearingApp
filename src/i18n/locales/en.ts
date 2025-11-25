@@ -11,6 +11,7 @@ export default {
     success: 'Success',
   },
   auth: {
+    title: 'ThaiEasy',
     login: 'Login',
     register: 'Register',
     logout: 'Logout',
@@ -29,6 +30,7 @@ export default {
     hasAccount: 'Already have an account?',
     loginSuccess: 'Login successful',
     loginFailed: 'Login failed',
+    alreadyHaveAccount: 'Already have an account?',
   },
   tabs: {
     home: 'Home',

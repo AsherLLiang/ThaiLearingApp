@@ -1,0 +1,31 @@
+{
+  "envId": "cloud1-1gjcyrdd7ab927c6",
+  "region": "ap-shanghai",
+  "functionRoot": "./functions",
+  "functions": [
+    {
+      "name": "user-register",
+      "timeout": 15,
+      "runtime": "Nodejs18.15",
+      "handler": "index.main"
+    },
+    {
+      "name": "user-login",
+      "timeout": 15,
+      "runtime": "Nodejs18.15",
+      "handler": "index.main"
+    },
+    {
+      "name": "user-reset-password",
+      "timeout": 15,
+      "runtime": "Nodejs18.15",
+      "handler": "index.main"
+    },
+    {
+      "name": "user-update-profile",
+      "timeout": 15,
+      "runtime": "Nodejs18.15",
+      "handler": "index.main"
+    }
+  ]
+}
