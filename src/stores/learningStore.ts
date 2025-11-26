@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Course, LearningProgress, Level } from '../types/entities';
+import { Course, LearningProgress, Level } from '../entities/types/entities';
 
 interface LearningState {
   currentCourse: Course | null;

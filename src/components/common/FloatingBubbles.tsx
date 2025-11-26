@@ -4,7 +4,7 @@ import { View, Text, Pressable, StyleSheet, Dimensions } from 'react-native';
 import { Sparkles, PlayCircle } from 'lucide-react-native';
 import { Colors } from '@/src/constants/colors';
 import { Typography } from '@/src/constants/typography';
-import { ReviewItem } from '@/src/types/entities';
+import { ReviewItem } from '../../entities/types/entities';
 
 interface FloatingBubblesProps {
   reviews: ReviewItem[];
@@ -120,7 +120,7 @@ const styles = StyleSheet.create({
   },
   titleContainer: {
     position: 'absolute',
-    top: -40,
+    top: 30,
     left: 0,
     right: 0,
     alignItems: 'center',
@@ -251,8 +251,8 @@ const styles = StyleSheet.create({
   },
   badge: {
     position: 'absolute',
-    top: -8,
-    right: 16,
+    top: -1,
+    right: 1,
     width: 24,
     height: 24,
     borderRadius: 12,

@@ -22,10 +22,10 @@ function TabButton({ icon: Icon, label, isActive, onPress }: TabButtonProps) {
         strokeWidth={isActive ? 2 : 1.5}
         color={isActive ? Colors.ink : Colors.taupe}
       />
-      <Text 
+      <Text
         style={[
           styles.tabLabel,
-          { 
+          {
             color: isActive ? Colors.ink : Colors.taupe,
             fontFamily: Typography.notoSerifRegular,
           }
@@ -44,6 +44,7 @@ interface CustomTabBarProps {
 }
 
 function CustomTabBar({ state, navigation }: CustomTabBarProps) {
+
   const insets = useSafeAreaInsets();
 
   return (
@@ -74,7 +75,7 @@ function CustomTabBar({ state, navigation }: CustomTabBarProps) {
         />
 
         {/* Center: Home (Protruding) */}
-        <View style={[styles.centerButtonContainer, { bottom: 24 }]}>
+        <View style={[styles.centerButtonContainer]}>
           <Pressable
             onPress={() => navigation.navigate('index')}
             style={[
@@ -85,9 +86,10 @@ function CustomTabBar({ state, navigation }: CustomTabBarProps) {
             ]}
           >
             <Home
-              size={26}
+              size={40}
               strokeWidth={2}
               color={state.index === 0 ? Colors.white : Colors.taupe}
+
             />
           </Pressable>
         </View>
@@ -148,13 +150,13 @@ const styles = StyleSheet.create({
   },
   centerButtonContainer: {
     position: 'absolute',
-    left: '65%',
-    marginLeft: -32,
+    left: '60%',
+    marginLeft: -42,
   },
   centerButton: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 90,
+    height: 90,
+    borderRadius: 45,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 4,

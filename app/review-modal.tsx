@@ -7,12 +7,12 @@ import { X, Check, ArrowRight } from 'lucide-react-native';
 import { ThaiPatternBackground } from '@/src/components/common/ThaiPatternBackground';
 import { Colors } from '@/src/constants/colors';
 import { Typography } from '@/src/constants/typography';
-import { ReviewItem } from '@/src/types/entities';
+import { ReviewItem } from '@/src/entities/types/entities';
 
 const MOCK_ITEMS: ReviewItem[] = [
-  { id: '1', char: 'ข', phonetic: 'Khor Khai', meaning: '蛋 (Egg)', type: 'Review' },
-  { id: '2', char: 'ค', phonetic: 'Khor Khwai', meaning: '水牛 (Buffalo)', type: 'Hard' },
-  { id: '3', char: 'ง', phonetic: 'Ngor Ngu', meaning: '蛇 (Snake)', type: 'New' },
+  { id: '1', char: 'ข', phonetic: 'Khor Khai', meaning: '蛋 (Egg)', type: 'Review', dueIn: 'Today' },
+  { id: '2', char: 'ค', phonetic: 'Khor Khwai', meaning: '水牛 (Buffalo)', type: 'Hard', dueIn: 'Today' },
+  { id: '3', char: 'ง', phonetic: 'Ngor Ngu', meaning: '蛇 (Snake)', type: 'New', dueIn: 'Today' },
 ];
 
 export default function ReviewModal() {
@@ -35,7 +35,7 @@ export default function ReviewModal() {
   if (completed) {
     return (
       <SafeAreaView edges={['top', 'bottom']} style={styles.completedContainer}>
-        <ThaiPatternBackground opacity={0.05} />
+        <ThaiPatternBackground opacity={0.5} />
 
         <View style={styles.completedCard}>
           <View style={styles.completedIconContainer}>
