@@ -251,7 +251,7 @@ const styles = StyleSheet.create({
   },
   badge: {
     position: 'absolute',
-    top: -1,
+    top: -2,
     right: 1,
     width: 24,
     height: 24,
