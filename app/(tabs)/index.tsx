@@ -9,7 +9,7 @@ import { ThaiPatternBackground } from '@/src/components/common/ThaiPatternBackgr
 import { FloatingBubbles } from '@/src/components/common/FloatingBubbles';
 import { Colors } from '@/src/constants/colors';
 import { Typography } from '@/src/constants/typography';
-import { ReviewItem } from '@/src/types/entities';
+import { ReviewItem } from '@/src/entities/types/entities';
 
 const MOCK_REVIEWS: ReviewItem[] = [
   { id: '1', char: 'ข', phonetic: 'Khor Khai', type: 'Review', dueIn: 'Today' },
@@ -54,6 +54,7 @@ export default function HomeScreen() {
             </View>
 
             <View style={styles.awardBadge}>
+              {/* 右上角荣誉图标 */}
               <Award size={18} color={Colors.ink} />
             </View>
           </View>

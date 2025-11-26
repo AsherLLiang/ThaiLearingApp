@@ -1,9 +1,32 @@
-// src/stores/userStore.ts
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { userService, User, RegisterRequest, LoginRequest, ResetPasswordRequest } from '../services/UserService';
 import { apiClient } from '../utils/apiClient';
+
+// Type definitions
+interface User {
+  userId: string;
+  email: string;
+  displayName: string;
+  role: 'LEARNER' | 'ADMIN';
+  registrationDate: string;
+  avatar?: string;
+}
+
+interface LoginRequest {
+  email: string;
+  password: string;
+}
+
+interface RegisterRequest {
+  email: string;
+  password: string;
+  displayName: string;
+}
+
+interface ResetPasswordRequest {
+  email: string;
+}
 
 interface UserState {
   // State
@@ -12,7 +35,7 @@ interface UserState {
   authToken: string | null;
   isLoading: boolean;
   error: string | null;
-  
+
   // Actions
   register: (data: { email: string; password: string; displayName: string }) => Promise<boolean>;
   login: (email: string, password: string) => Promise<boolean>;
@@ -42,7 +65,7 @@ export const useUserStore = create<UserState>()(
        * 
        * Flow:
        * 1. Set loading state
-       * 2. Call userService.register()
+       * 2. Call API
        * 3. If success: save user + token, set authenticated
        * 4. If fail: save error message
        * 
@@ -53,8 +76,8 @@ export const useUserStore = create<UserState>()(
         set({ isLoading: true, error: null });
 
         try {
-          const response = await userService.register({
-            email: data.email,
+          const response = await apiClient.post<any>('/user-register', {
+            email: data.email.toLowerCase().trim(),
             password: data.password,
             displayName: data.displayName,
           });
@@ -97,7 +120,7 @@ export const useUserStore = create<UserState>()(
        * 
        * Flow:
        * 1. Set loading state
-       * 2. Call userService.login()
+       * 2. Call API
        * 3. If success: save user + token, set authenticated
        * 4. If fail: save error message
        * 
@@ -109,8 +132,8 @@ export const useUserStore = create<UserState>()(
         set({ isLoading: true, error: null });
 
         try {
-          const response = await userService.login({
-            email,
+          const response = await apiClient.post<any>('/user-login', {
+            email: email.toLowerCase().trim(),
             password,
           });
 
@@ -179,7 +202,7 @@ export const useUserStore = create<UserState>()(
         set({ isLoading: true, error: null });
 
         try {
-          const response = await userService.requestPasswordReset({ email });
+          const response = await apiClient.post<any>('/user-reset-password', { email });
 
           if (response.success) {
             set({ isLoading: false, error: null });
@@ -217,7 +240,7 @@ export const useUserStore = create<UserState>()(
         set({ isLoading: true, error: null });
 
         try {
-          const response = await userService.updateProfile({
+          const response = await apiClient.put<any>('/user-update-profile', {
             userId: currentUser.userId,
             ...data,
           });
@@ -255,7 +278,7 @@ export const useUserStore = create<UserState>()(
        */
       setUser: (user: User, token: string) => {
         apiClient.setAuthToken(token);
-        
+
         set({
           currentUser: user,
           authToken: token,
@@ -286,7 +309,7 @@ export const useUserStore = create<UserState>()(
     {
       name: 'user-storage', // AsyncStorage key
       storage: createJSONStorage(() => AsyncStorage),
-      
+
       // Restore auth token to apiClient on rehydration
       onRehydrateStorage: () => {
         return (state) => {
