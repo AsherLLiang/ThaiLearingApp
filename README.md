@@ -10,7 +10,7 @@ This folder contains detailed guides covering every aspect of the project. Each 
 
 ## 🗂️ Document Index
 
-### **[PROJECT-SNAPSHOT](./PROJECT-SNAPSHOT.md)** ⭐ FOR AI CODE GENERATION
+### **[PROJECT-SNAPSHOT-V3](./project-snapshot-V3.md)** ⭐ FOR AI CODE GENERATION
 **Compressed project knowledge for Claude/AI assistants**
 - Complete file structure with content summaries
 - All types, stores, and component APIs
