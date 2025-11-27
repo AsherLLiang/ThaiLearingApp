@@ -2,31 +2,19 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiClient } from '../utils/apiClient';
+import { API_ENDPOINTS } from '../config/api.endpoints';
+import type {
+  LoginRequest,
+  RegisterRequest,
+  ResetPasswordRequest,
+  LoginResponse,
+  RegisterResponse,
+  ResetPasswordResponse
+} from '../entities/types/api.types';
+import type { User } from '../entities/types/entities';
 
 // Type definitions
-interface User {
-  userId: string;
-  email: string;
-  displayName: string;
-  role: 'LEARNER' | 'ADMIN';
-  registrationDate: string;
-  avatar?: string;
-}
 
-interface LoginRequest {
-  email: string;
-  password: string;
-}
-
-interface RegisterRequest {
-  email: string;
-  password: string;
-  displayName: string;
-}
-
-interface ResetPasswordRequest {
-  email: string;
-}
 
 interface UserState {
   // State
@@ -37,29 +25,42 @@ interface UserState {
   error: string | null;
 
   // Actions
-  register: (data: { email: string; password: string; displayName: string }) => Promise<boolean>;
-  login: (email: string, password: string) => Promise<boolean>;
+  register: (data: RegisterRequest) => Promise<boolean>;
+  login: (data: LoginRequest) => Promise<boolean>;
   logout: () => void;
-  requestPasswordReset: (email: string) => Promise<boolean>;
+  requestPasswordReset: (data: ResetPasswordRequest) => Promise<boolean>;
   updateProfile: (data: { displayName?: string; avatar?: string }) => Promise<boolean>;
   setUser: (user: User, token: string) => void;
   checkAuth: () => boolean;
   clearError: () => void;
 }
 
+const validateEmail = (email: string): boolean => {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+};
+
+const validatePassword = (password: string): { valid: boolean; error?: string } => {
+  if (password.length < 6) {
+    return { valid: false, error: 'Password must be at least 6 characters' };
+  }
+  // 可以添加更多规则
+  return { valid: true };
+};
+
 // ==================== Store ====================
 
 export const useUserStore = create<UserState>()(
   persist(
     (set, get) => ({
-      // ===== Initial State =====
+      // ==================== 初始状态 ====================
       currentUser: null,
       isAuthenticated: false,
       authToken: null,
       isLoading: false,
       error: null,
 
-      // ===== Register Action =====
+      // ==================== 注册 ====================
       /**
        * Register a new user
        * 
@@ -72,15 +73,34 @@ export const useUserStore = create<UserState>()(
        * @param data Registration data (email, password, displayName)
        * @returns Success status
        */
-      register: async (data: { email: string; password: string; displayName: string }) => {
+      register: async (data: RegisterRequest) => {
+
+        if (!validateEmail(data.email)) {
+          set({ error: 'Invalid email format' });
+          return false;
+        }
+
+        const passwordValidation = validatePassword(data.password);
+        if (!passwordValidation.valid) {
+          set({ error: passwordValidation.error });
+          return false;
+        }
+
+        if (!data.displayName.trim()) {
+          set({ error: 'Display name is required' });
+          return false;
+        }
+
         set({ isLoading: true, error: null });
 
         try {
-          const response = await apiClient.post<any>('/user-register', {
-            email: data.email.toLowerCase().trim(),
-            password: data.password,
-            displayName: data.displayName,
-          });
+          const response = await apiClient.post<RegisterResponse>(
+            API_ENDPOINTS.AUTH.REGISTER,
+            {
+              email: data.email.toLowerCase().trim(),
+              password: data.password,
+              displayName: data.displayName,
+            });
 
           if (response.success && response.data) {
             const { user, token } = response.data;
@@ -90,7 +110,7 @@ export const useUserStore = create<UserState>()(
 
             // Update store state
             set({
-              currentUser: user,
+              currentUser: user as User,
               authToken: token,
               isAuthenticated: true,
               isLoading: false,
@@ -98,23 +118,24 @@ export const useUserStore = create<UserState>()(
             });
 
             return true;
+
           } else {
             set({
-              error: response.error || 'Registration failed',
+              error: response.error || '注册失败',
               isLoading: false,
             });
             return false;
           }
         } catch (error: any) {
           set({
-            error: error.message || 'Registration failed',
+            error: error.message || '注册失败',
             isLoading: false,
           });
           return false;
         }
       },
 
-      // ===== Login Action =====
+      // ==================== 登录 ====================
       /**
        * Authenticate user
        * 
@@ -128,13 +149,25 @@ export const useUserStore = create<UserState>()(
        * @param password User password
        * @returns Success status
        */
-      login: async (email: string, password: string) => {
+      login: async (data: LoginRequest) => {
+
+        if (!validateEmail(data.email)) {
+          set({ error: 'Invalid email format' });
+          return false;
+        }
+
+        const passwordValidation = validatePassword(data.password);
+        if (!passwordValidation.valid) {
+          set({ error: passwordValidation.error });
+          return false;
+        }
+
         set({ isLoading: true, error: null });
 
         try {
-          const response = await apiClient.post<any>('/user-login', {
-            email: email.toLowerCase().trim(),
-            password,
+          const response = await apiClient.post<LoginResponse>(API_ENDPOINTS.AUTH.LOGIN, {
+            email: data.email.toLowerCase().trim(),
+            password: data.password,
           });
 
           if (response.success && response.data) {
@@ -145,7 +178,7 @@ export const useUserStore = create<UserState>()(
 
             // Update store state
             set({
-              currentUser: user,
+              currentUser: user as User,
               authToken: token,
               isAuthenticated: true,
               isLoading: false,
@@ -169,7 +202,7 @@ export const useUserStore = create<UserState>()(
         }
       },
 
-      // ===== Logout Action =====
+      // ==================== 登出 ====================
       /**
        * Logout current user
        * 
@@ -191,18 +224,26 @@ export const useUserStore = create<UserState>()(
         });
       },
 
-      // ===== Password Reset Action =====
+      // ==================== 重置密码 ====================
       /**
        * Request password reset email
        * 
        * @param email User email
        * @returns Success status
        */
-      requestPasswordReset: async (email: string) => {
+      requestPasswordReset: async (data: ResetPasswordRequest) => {
+        if (!validateEmail(data.email)) {
+          set({ error: 'Invalid email format', isLoading: false });
+          return false;
+        }
+
         set({ isLoading: true, error: null });
 
         try {
-          const response = await apiClient.post<any>('/user-reset-password', { email });
+          const response = await apiClient.post<ResetPasswordResponse>(
+            API_ENDPOINTS.AUTH.RESET_PASSWORD,
+            { email: data.email.toLowerCase().trim() }
+          );
 
           if (response.success) {
             set({ isLoading: false, error: null });
@@ -223,7 +264,7 @@ export const useUserStore = create<UserState>()(
         }
       },
 
-      // ===== Update Profile Action =====
+      // ==================== 更新个人资料 ====================
       /**
        * Update user profile
        * 
@@ -240,14 +281,20 @@ export const useUserStore = create<UserState>()(
         set({ isLoading: true, error: null });
 
         try {
-          const response = await apiClient.put<any>('/user-update-profile', {
-            userId: currentUser.userId,
-            ...data,
-          });
+          const response = await apiClient.put<{ user: User }>(
+            API_ENDPOINTS.AUTH.UPDATE_PROFILE,
+            {
+              userId: currentUser.userId,
+              ...data,
+            });
 
           if (response.success && response.data) {
             set({
-              currentUser: response.data,
+              currentUser: {
+                ...currentUser,
+                ...(data.displayName && { displayName: data.displayName }),
+                ...(data.avatar && { avatar: data.avatar }),
+              },
               isLoading: false,
               error: null,
             });
