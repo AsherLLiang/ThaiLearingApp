@@ -10,7 +10,7 @@ This folder contains detailed guides covering every aspect of the project. Each 
 
 ## 🗂️ Document Index
 
-### **[PROJECT-SNAPSHOT-V3](./project-snapshot-V3.md)** ⭐ FOR AI CODE GENERATION
+### **[PROJECT-SNAPSHOT-V3](./docs/project-snapshot-V3.md)** ⭐ FOR AI CODE GENERATION
 **Compressed project knowledge for Claude/AI assistants**
 - Complete file structure with content summaries
 - All types, stores, and component APIs
@@ -26,7 +26,7 @@ This folder contains detailed guides covering every aspect of the project. Each 
 
 ---
 
-### **[00 - Project Knowledge Base](./00-Project-Knowledge-Base.md)** ⭐ FOR HUMAN DEVELOPERS
+### **[00 - Project Knowledge Base](./docs/00-Project-Knowledge-Base.md)** ⭐ FOR HUMAN DEVELOPERS
 **Your central reference for the entire project**
 - Complete project overview and status
 - Architecture diagrams
@@ -38,7 +38,7 @@ This folder contains detailed guides covering every aspect of the project. Each 
 
 ---
 
-### **[01 - Expo Router Explained](./01-Expo-Router-Explained.md)**
+### **[01 - Expo Router Explained](./docs/01-Expo-Router-Explained.md)**
 **Complete guide to Expo Router (file-based routing)**
 - What is Expo Router and why use it
 - File-based routing patterns
@@ -56,7 +56,7 @@ This folder contains detailed guides covering every aspect of the project. Each 
 
 ---
 
-### **[02 - Project Routing & Navigation](./02-Project-Routing-Navigation.md)**
+### **[02 - Project Routing & Navigation](./docs/02-Project-Routing-Navigation.md)**
 **How routing works in THIS specific project**
 - Complete route map with visual diagrams
 - Authentication flow (login → app redirect)
@@ -74,7 +74,7 @@ This folder contains detailed guides covering every aspect of the project. Each 
 
 ---
 
-### **[03 - File Import & Dependencies](./03-File-Import-Dependencies.md)**
+### **[03 - File Import & Dependencies](./docs/03-File-Import-Dependencies.md)**
 **Import relationships and dependency graph**
 - Complete import relationship diagram
 - Dependency layers (constants → stores → components → screens)
@@ -91,7 +91,7 @@ This folder contains detailed guides covering every aspect of the project. Each 
 
 ---
 
-### **[04 - Parameter Passing Guide](./04-Parameter-Passing-Guide.md)**
+### **[04 - Parameter Passing Guide](./docs/04-Parameter-Passing-Guide.md)**
 **How data flows through the application**
 - 3 ways to pass data: Props, Zustand State, URL Params
 - Component props with examples
@@ -108,7 +108,7 @@ This folder contains detailed guides covering every aspect of the project. Each 
 
 ---
 
-### **[05 - Zustand State Management](./05-Zustand-State-Management.md)**
+### **[05 - Zustand State Management](./docs/05-Zustand-State-Management.md)**
 **Complete guide to Zustand in the project**
 - What is Zustand and why not Redux
 - Core concepts (create, set, get)
@@ -130,7 +130,7 @@ This folder contains detailed guides covering every aspect of the project. Each 
 
 ---
 
-### **[06 - Frontend Design Philosophy](./06-Frontend-Design-Philosophy.md)**
+### **[06 - Frontend Design Philosophy](./docs/06-Frontend-Design-Philosophy.md)**
 **Design principles and UI/UX patterns**
 - Design principles (cultural authenticity, paper & ink aesthetic)
 - Color palette and usage
@@ -148,6 +148,21 @@ This folder contains detailed guides covering every aspect of the project. Each 
 - Why protruding tab button?
 - Component library structure
 - Dark mode strategy (future)
+
+---
+
+### **[07 - Configuration & API Guide](./docs/07-Configuration-and-API-Guide.md)**
+**Centralized configuration and API management**
+- Why we use a config center
+- `constants.ts` for app-wide constants
+- `api.endpoints.ts` for API URLs
+- `backend.config.ts` for cloud services
+- Best practices for configuration
+
+**Key sections:**
+- Database collections
+- API timeout settings
+- Adding new endpoints
 
 ---
 
@@ -209,7 +224,8 @@ Each document follows this pattern:
 | Find what imports what | [03 - File Imports](./03-File-Import-Dependencies.md) |
 | Pass data between screens | [04 - Parameter Passing](./04-Parameter-Passing-Guide.md) |
 | Add global state | [05 - Zustand](./05-Zustand-State-Management.md) |
-| Match the design style | [06 - Design Philosophy](./06-Frontend-Design-Philosophy.md) |
+| Match the design style | [06 - Design Philosophy](./docs/06-Frontend-Design-Philosophy.md) |
+| Manage API & Config | [07 - Config & API](./docs/07-Configuration-and-API-Guide.md) |
 
 ---
 
@@ -259,7 +275,12 @@ Each document follows this pattern:
 - Component patterns
 - Accessibility
 
-**Total:** ~4,000 lines of documentation!
+**07 - Config & API** (100+ lines)
+- Configuration management
+- API endpoints structure
+- Backend config
+
+**Total:** ~4,100 lines of documentation!
 
 ---
 
