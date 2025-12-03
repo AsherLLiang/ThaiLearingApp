@@ -1,421 +1,369 @@
-# Thai Learning App Documentation
+# 🇹🇭 ThaiLearningApp - 泰语学习应用
 
-Welcome to the comprehensive documentation for the Thai Learning App project.
+<div align="center">
 
-## 📚 Documentation Overview
+![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)
+![React Native](https://img.shields.io/badge/React%20Native-0.76.9-61dafb.svg)
+![Expo](https://img.shields.io/badge/Expo-~52.0.38-000020.svg)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.1.3-3178c6.svg)
+![License](https://img.shields.io/badge/license-MIT-green.svg)
 
-This folder contains detailed guides covering every aspect of the project. Each document is written at B2 English level for accessibility.
+一款优雅的泰语学习应用，采用间隔重复算法，提供沉浸式的学习体验。
 
----
+[功能特性](#-功能特性) • [技术栈](#-技术栈) • [快速开始](#-快速开始) • [项目结构](#-项目结构) • [开发指南](#-开发指南)
 
-## 🗂️ Document Index
-
-### **[PROJECT-SNAPSHOT-V3](./docs/project-snapshot-V3.md)** ⭐ FOR AI CODE GENERATION
-**Compressed project knowledge for Claude/AI assistants**
-- Complete file structure with content summaries
-- All types, stores, and component APIs
-- Code patterns and conventions
-- Design system tokens
-- Implementation status and known issues
-- **Use this to give Claude full project context without uploading all files!**
-
-**中文版 Chinese Version：[PROJECT-SNAPSHOT-CN.md](./PROJECT-SNAPSHOT-CN.md)** 🇨🇳
-
-**Usage Guide:** [How to Use Snapshot](./HOW-TO-USE-SNAPSHOT.md)
-**中文使用指南：[HOW-TO-USE-SNAPSHOT-CN.md](./HOW-TO-USE-SNAPSHOT-CN.md)** 🇨🇳
+</div>
 
 ---
 
-### **[00 - Project Knowledge Base](./docs/00-Project-Knowledge-Base.md)** ⭐ FOR HUMAN DEVELOPERS
-**Your central reference for the entire project**
-- Complete project overview and status
-- Architecture diagrams
-- Quick reference guide
-- Development workflow
-- Known issues and roadmap
+## 📸 应用截图
 
-**Read this first to understand the big picture!**
+<div align="center">
+  <img src="./docs/screenshots/home.png" width="250" alt="首页" />
+  <img src="./docs/screenshots/learning.png" width="250" alt="学习页面" />
+  <img src="./docs/screenshots/review.png" width="250" alt="复习页面" />
+</div>
+
+## ✨ 功能特性
+
+### 🎯 核心功能
+- **统一学习会话**: 复习旧词 + 学习新词的完整学习流程
+- **间隔重复算法**: 基于记忆曲线的智能复习系统（每个单词重复3次）
+- **三级评估系统**: 认识/模糊/忘记了 - 精准记录学习状态
+- **跳过复习**: 灵活的学习节奏控制
+
+### 🌍 国际化支持
+- **多语言界面**: 完整支持中文/English
+- **自动语言检测**: 根据设备语言自动切换
+- **持久化偏好**: 记住用户的语言选择
+
+### 🎨 UI/UX 设计
+- **泰国风格主题**: 金色 (#D4AF37) + 墨色 (#1A1A1A) 优雅配色
+- **模糊遮罩效果**: 渐进式信息展示，增强学习体验
+- **流畅动画**: 使用 `expo-blur` 和 `react-native-reanimated`
+- **响应式布局**: 适配各种屏幕尺寸
+
+### 📚 学习功能
+- **新词学习**: 
+  - 三个标签页：基础释义、例句示例、用法详解
+  - 音频发音按钮（准备接入）
+  - 渐进式内容展示
+- **单词复习**:
+  - 上下文例句展示
+  - 三按钮快速评估
+  - 即时反馈
+
+### 📊 进度追踪
+- 学习天数统计
+- 学习时长记录
+- 掌握单词数量
+- 连续打卡天数
+
+## 🛠 技术栈
+
+### 前端框架
+- **React Native** 0.76.9 - 跨平台移动应用框架
+- **Expo** ~52.0.38 - 开发工具链
+- **Expo Router** ~4.0.20 - 文件系统路由
+- **TypeScript** 5.1.3 - 类型安全
+
+### UI 组件
+- **expo-blur** - 模糊效果
+- **lucide-react-native** - 图标库
+- **react-native-svg** - SVG 支持
+- **expo-linear-gradient** - 渐变效果
+
+### 状态管理 & 数据
+- **Zustand** 5.0.8 - 轻量级状态管理
+- **i18next** 25.6.3 - 国际化
+- **react-i18next** 16.3.4 - React 国际化绑定
+- **AsyncStorage** - 本地存储
+
+### 字体
+- **Playfair Display** - 英文标题
+- **Noto Serif SC** - 中文正文
+- **Sarabun** - 泰文专用
+
+### 后端准备
+- **Tencent CloudBase** - 云开发平台（准备接入）
+- **Axios** - HTTP 客户端
+
+## 🚀 快速开始
+
+### 环境要求
+- Node.js >= 18.x
+- npm 或 yarn
+- iOS Simulator (macOS) 或 Android Emulator
+
+### 安装步骤
+
+1. **克隆仓库**
+```bash
+git clone https://github.com/yourusername/ThaiLearningApp.git
+cd ThaiLearningApp
+```
+
+2. **安装依赖**
+```bash
+npm install
+```
+
+3. **启动开发服务器**
+```bash
+npm start
+```
+
+4. **运行应用**
+```bash
+# iOS
+npm run ios
+
+# Android
+npm run android
+
+# Web
+npm run web
+```
+
+### 环境变量配置
+
+创建 `.env` 文件：
+```env
+EXPO_PUBLIC_CLOUDBASE_ENV_ID=your_cloudbase_env_id
+EXPO_PUBLIC_API_BASE_URL=your_api_base_url
+```
+
+## 📁 项目结构
+
+```
+ThaiLearningApp/
+├── app/                          # Expo Router 页面
+│   ├── (auth)/                   # 认证模块
+│   │   ├── login.tsx
+│   │   ├── register.tsx
+│   │   └── forgot-password.tsx
+│   ├── (tabs)/                   # 主导航
+│   │   ├── index.tsx             # 首页
+│   │   ├── courses.tsx           # 课程列表
+│   │   └── profile.tsx           # 个人中心
+│   ├── learning/                 # 学习模块
+│   │   └── index.tsx             # 统一学习会话
+│   └── _layout.tsx               # 根布局
+├── src/
+│   ├── components/               # 组件库
+│   │   ├── common/               # 通用组件
+│   │   ├── learning/             # 学习组件
+│   │   │   ├── NewWordView.tsx   # 新词学习
+│   │   │   └── ReviewWordView.tsx # 复习视图
+│   │   ├── progress/             # 进度组件
+│   │   └── pronunciation/        # 发音组件
+│   ├── constants/                # 常量定义
+│   │   ├── colors.ts             # 颜色系统
+│   │   └── typography.ts         # 字体系统
+│   ├── i18n/                     # 国际化
+│   │   ├── index.ts
+│   │   └── locales/
+│   │       ├── zh.ts             # 中文
+│   │       └── en.ts             # 英文
+│   ├── stores/                   # Zustand 状态
+│   │   ├── authStore.ts
+│   │   ├── languageStore.ts
+│   │   └── learningStore.ts
+│   ├── entities/                 # 类型定义
+│   └── utils/                    # 工具函数
+├── cloudbase/                    # 云开发
+│   └── functions/                # 云函数
+├── docs/                         # 文档
+│   ├── project-snapshot-v5.md    # 项目快照
+│   └── screenshots/              # 截图
+└── assets/                       # 静态资源
+```
+
+## 🎨 设计系统
+
+### 颜色规范
+```typescript
+Colors = {
+  paper: '#FAF9F6',      // 背景色
+  ink: '#1A1A1A',        // 主文本
+  sand: '#E5E2DB',       // 边框
+  taupe: '#8E8B82',      // 次要文本
+  thaiGold: '#D4AF37',   // 强调色
+  accent: '#B8956A',     // 辅助色
+}
+```
+
+### 字体规范
+- **标题**: Playfair Display (英文) / Noto Serif SC (中文)
+- **正文**: Noto Serif SC
+- **泰文**: Sarabun
+
+### 组件规范
+详见 [项目快照 v5](./docs/project-snapshot-v5.md)
+
+## 💻 开发指南
+
+### 添加新页面
+使用 Expo Router 文件系统路由：
+```bash
+# 创建新页面
+touch app/new-page.tsx
+```
+
+### 添加新组件
+```bash
+# 创建组件
+touch src/components/MyComponent.tsx
+```
+
+### 国际化
+1. 在 `src/i18n/locales/zh.ts` 和 `en.ts` 添加翻译键
+2. 在组件中使用：
+```tsx
+import { useTranslation } from 'react-i18next';
+
+const MyComponent = () => {
+  const { t } = useTranslation();
+  return <Text>{t('myKey')}</Text>;
+};
+```
+
+### 状态管理
+使用 Zustand：
+```tsx
+import { create } from 'zustand';
+
+const useMyStore = create((set) => ({
+  count: 0,
+  increment: () => set((state) => ({ count: state.count + 1 })),
+}));
+```
+
+## � 后端接入
+
+### 数据结构
+
+#### 单词 (Word)
+```typescript
+interface WordData {
+  id: string;
+  thai: string;           // 泰文
+  phonetic: string;       // 罗马音
+  type: string;           // 词性
+  meaning: string;        // 释义
+  definitions: {
+    basic: string;
+    examples: { thai: string; meaning: string }[];
+    usage: { /* ... */ };
+  };
+}
+```
+
+### API 接口
+
+#### 获取学习队列
+```typescript
+GET /api/learning/queue
+Response: {
+  reviewWords: WordData[];
+  newWords: WordData[];
+}
+```
+
+#### 提交学习结果
+```typescript
+POST /api/learning/submit
+Body: {
+  wordId: string;
+  quality: 'know' | 'unsure' | 'forgot';
+  timestamp: number;
+}
+```
+
+详细后端接入指南请参考 [项目快照 v5](./docs/project-snapshot-v5.md#后端接入指南)
+
+## 📝 开发规范
+
+### 代码风格
+- 使用 TypeScript 严格模式
+- 组件使用函数式组件 + Hooks
+- 样式使用 StyleSheet.create()
+- 所有用户可见文本必须国际化
+
+### 命名规范
+- 组件文件: `PascalCase.tsx`
+- 工具文件: `camelCase.ts`
+- 常量文件: `camelCase.ts`
+- 样式名: `camelCase`
+
+### Git 提交规范
+```
+feat: 新功能
+fix: 修复bug
+docs: 文档更新
+style: 代码格式调整
+refactor: 重构
+test: 测试相关
+chore: 构建/工具链相关
+```
+
+## 🗺 路线图
+
+### v1.1 (计划中)
+- [ ] 接入真实后端 API
+- [ ] 实现音频播放功能
+- [ ] 添加学习统计图表
+- [ ] 实现离线缓存
+
+### v1.2 (计划中)
+- [ ] 实现 SM-2 间隔重复算法
+- [ ] 添加单词收藏功能
+- [ ] 实现学习提醒通知
+- [ ] 添加社交分享功能
+
+### v2.0 (规划中)
+- [ ] AI 语音评测
+- [ ] 个性化学习路径
+- [ ] 社区互动功能
+- [ ] 游戏化学习
+
+## 🤝 贡献指南
+
+欢迎贡献代码！请遵循以下步骤：
+
+1. Fork 本仓库
+2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
+3. 提交更改 (`git commit -m 'feat: Add some AmazingFeature'`)
+4. 推送到分支 (`git push origin feature/AmazingFeature`)
+5. 开启 Pull Request
+
+## 📄 许可证
+
+本项目采用 MIT 许可证 - 详见 [LICENSE](LICENSE) 文件
+
+## 👥 团队
+
+- **开发者**: Liang Jianyu
+- **设计**: ThaiLearningApp Team
+
+## 📧 联系方式
+
+- 项目主页: [GitHub](https://github.com/yourusername/ThaiLearningApp)
+- 问题反馈: [Issues](https://github.com/yourusername/ThaiLearningApp/issues)
+
+## 🙏 致谢
+
+- [Expo](https://expo.dev/) - 优秀的开发工具链
+- [React Native](https://reactnative.dev/) - 强大的跨平台框架
+- [Lucide Icons](https://lucide.dev/) - 精美的图标库
+- 所有贡献者和支持者
 
 ---
 
-### **[01 - Expo Router Explained](./docs/01-Expo-Router-Explained.md)**
-**Complete guide to Expo Router (file-based routing)**
-- What is Expo Router and why use it
-- File-based routing patterns
-- Layout system (\_layout.tsx)
-- Route groups with (parentheses)
-- Dynamic routes and parameters
-- Navigation methods
-- Comparison with React Navigation
+<div align="center">
 
-**Topics covered:**
-- Simple routes, nested routes, dynamic routes
-- Stack, Tabs, Drawer navigators
-- Modal presentation
-- Deep linking
+**[⬆ 回到顶部](#-thailearningapp---泰语学习应用)**
 
----
+Made with ❤️ by ThaiLearningApp Team
 
-### **[02 - Project Routing & Navigation](./docs/02-Project-Routing-Navigation.md)**
-**How routing works in THIS specific project**
-- Complete route map with visual diagrams
-- Authentication flow (login → app redirect)
-- Navigation patterns used
-- File-by-file route analysis
-- User journey examples
-- Debugging navigation issues
-
-**Key sections:**
-- Root layout auth guard
-- Auth group (login/register)
-- Tabs group (home/courses/profile)
-- Modal routes (review modal)
-- Route protection mechanisms
-
----
-
-### **[03 - File Import & Dependencies](./docs/03-File-Import-Dependencies.md)**
-**Import relationships and dependency graph**
-- Complete import relationship diagram
-- Dependency layers (constants → stores → components → screens)
-- File-by-file import analysis
-- Path alias (@/) explanation
-- External package dependencies
-- Circular dependency prevention
-- Most connected files
-
-**Visualizes:**
-- Which files import which
-- Dependency hierarchy
-- Import anti-patterns to avoid
-
----
-
-### **[04 - Parameter Passing Guide](./docs/04-Parameter-Passing-Guide.md)**
-**How data flows through the application**
-- 3 ways to pass data: Props, Zustand State, URL Params
-- Component props with examples
-- Zustand state management patterns
-- URL parameters (search params, dynamic routes)
-- Complete data flow examples (login, review, language change)
-- Type safety with TypeScript
-- Callback props and render props
-
-**Data flow patterns:**
-- Login flow (props → state → navigation)
-- Review session flow
-- Language change flow
-
----
-
-### **[05 - Zustand State Management](./docs/05-Zustand-State-Management.md)**
-**Complete guide to Zustand in the project**
-- What is Zustand and why not Redux
-- Core concepts (create, set, get)
-- All 3 stores detailed:
-  - userStore (authentication)
-  - learningStore (progress tracking)
-  - languageStore (UI language)
-- Persistence with AsyncStorage
-- Advanced patterns (selectors, derived state, middleware)
-- Zustand vs Redux vs Context API
-- Testing stores
-- Best practices
-
-**Each store includes:**
-- State structure
-- Actions explained
-- Usage examples
-- Real code from the project
-
----
-
-### **[06 - Frontend Design Philosophy](./docs/06-Frontend-Design-Philosophy.md)**
-**Design principles and UI/UX patterns**
-- Design principles (cultural authenticity, paper & ink aesthetic)
-- Color palette and usage
-- Typography system (3 font families)
-- Layout patterns (safe areas, spacing, cards)
-- Component design patterns
-- Glass-morphism and blur effects
-- Animation philosophy
-- Accessibility considerations
-- Responsive design strategy
-
-**Design decisions explained:**
-- Why serif fonts?
-- Why off-white background?
-- Why protruding tab button?
-- Component library structure
-- Dark mode strategy (future)
-
----
-
-### **[07 - Configuration & API Guide](./docs/07-Configuration-and-API-Guide.md)**
-**Centralized configuration and API management**
-- Why we use a config center
-- `constants.ts` for app-wide constants
-- `api.endpoints.ts` for API URLs
-- `backend.config.ts` for cloud services
-- Best practices for configuration
-
-**Key sections:**
-- Database collections
-- API timeout settings
-- Adding new endpoints
-
----
-
-## 🎯 How to Use This Documentation
-
-### **For New Developers:**
-1. Start with **[00 - Project Knowledge Base](./00-Project-Knowledge-Base.md)** for overview
-2. Read **[01 - Expo Router Explained](./01-Expo-Router-Explained.md)** to understand routing
-3. Study **[05 - Zustand State Management](./05-Zustand-State-Management.md)** for state
-4. Reference others as needed
-
-### **For Feature Development:**
-1. Check **[02 - Project Routing](./02-Project-Routing-Navigation.md)** for navigation
-2. Check **[04 - Parameter Passing](./04-Parameter-Passing-Guide.md)** for data flow
-3. Check **[06 - Frontend Design](./06-Frontend-Design-Philosophy.md)** for UI patterns
-
-### **For Debugging:**
-1. **[03 - File Import & Dependencies](./03-File-Import-Dependencies.md)** - Find import issues
-2. **[02 - Project Routing](./02-Project-Routing-Navigation.md)** - Navigation problems
-3. **[05 - Zustand State Management](./05-Zustand-State-Management.md)** - State issues
-
-### **For Design Work:**
-1. **[06 - Frontend Design Philosophy](./06-Frontend-Design-Philosophy.md)** - All design decisions
-2. Check `src/constants/colors.ts` and `typography.ts` for tokens
-3. Reference existing components in `src/components/common/`
-
----
-
-## 📖 Document Features
-
-### ✅ What Each Document Includes
-
-- **Explanations at B2 English level** - Clear, not overly technical
-- **Code examples** - Real code from the project
-- **Visual diagrams** - Directory trees, flow charts
-- **Comparison tables** - Quick reference
-- **Best practices** - Do's and don'ts
-- **Troubleshooting tips** - Common issues and solutions
-
-### 🎨 Document Structure
-
-Each document follows this pattern:
-1. **Introduction** - What this document covers
-2. **Core Concepts** - Fundamentals explained simply
-3. **Detailed Examples** - Real code from the project
-4. **Patterns & Best Practices** - How to use effectively
-5. **Common Issues** - Debugging and troubleshooting
-6. **Summary** - Key takeaways
-
----
-
-## 🔍 Quick Topic Finder
-
-| I want to... | Read this document |
-|--------------|-------------------|
-| Understand the project | [00 - Knowledge Base](./00-Project-Knowledge-Base.md) |
-| Add a new screen | [01 - Expo Router](./01-Expo-Router-Explained.md) |
-| Understand navigation | [02 - Project Routing](./02-Project-Routing-Navigation.md) |
-| Find what imports what | [03 - File Imports](./03-File-Import-Dependencies.md) |
-| Pass data between screens | [04 - Parameter Passing](./04-Parameter-Passing-Guide.md) |
-| Add global state | [05 - Zustand](./05-Zustand-State-Management.md) |
-| Match the design style | [06 - Design Philosophy](./docs/06-Frontend-Design-Philosophy.md) |
-| Manage API & Config | [07 - Config & API](./docs/07-Configuration-and-API-Guide.md) |
-
----
-
-## 📝 Document Summaries
-
-### Quick Overview of Each Document
-
-**00 - Knowledge Base** (300+ lines)
-- Everything in one place
-- Architecture overview
-- Current status and roadmap
-- Quick reference guide
-
-**01 - Expo Router** (400+ lines)
-- Routing fundamentals
-- File-based routing explained
-- Navigation patterns
-- Comparison with traditional routing
-
-**02 - Project Routing** (600+ lines)
-- Your app's specific routes
-- Authentication flow
-- Navigation code explained
-- User journey examples
-
-**03 - File Imports** (650+ lines)
-- Import relationship graph
-- Dependency layers
-- Path aliases
-- Import best practices
-
-**04 - Parameter Passing** (700+ lines)
-- Props, state, URL params
-- Data flow examples
-- Type safety
-- Complete flows (login, review, language)
-
-**05 - Zustand** (750+ lines)
-- State management explained
-- All 3 stores detailed
-- Persistence patterns
-- Advanced techniques
-
-**06 - Design Philosophy** (650+ lines)
-- Design principles
-- Color and typography
-- Component patterns
-- Accessibility
-
-**07 - Config & API** (100+ lines)
-- Configuration management
-- API endpoints structure
-- Backend config
-
-**Total:** ~4,100 lines of documentation!
-
----
-
-## 🎓 Learning Path
-
-### Beginner Path (New to React Native/Expo)
-
-**Week 1:** Foundation
-- Day 1-2: Read [00 - Knowledge Base](./00-Project-Knowledge-Base.md)
-- Day 3-4: Read [01 - Expo Router](./01-Expo-Router-Explained.md)
-- Day 5: Explore project structure (`app/` folder)
-
-**Week 2:** State & Data
-- Day 1-2: Read [05 - Zustand](./05-Zustand-State-Management.md)
-- Day 3-4: Read [04 - Parameter Passing](./04-Parameter-Passing-Guide.md)
-- Day 5: Practice: Modify existing screen
-
-**Week 3:** Navigation & Design
-- Day 1-2: Read [02 - Project Routing](./02-Project-Routing-Navigation.md)
-- Day 3-4: Read [06 - Design Philosophy](./06-Frontend-Design-Philosophy.md)
-- Day 5: Practice: Add new screen
-
-### Advanced Path (Experienced Developer)
-
-**Day 1:** Read [00 - Knowledge Base](./00-Project-Knowledge-Base.md) + skim others
-**Day 2:** Study stores (`src/stores/`) and reference [05 - Zustand](./05-Zustand-State-Management.md)
-**Day 3:** Study routes (`app/`) and reference [02 - Project Routing](./02-Project-Routing-Navigation.md)
-**Day 4:** Study components and reference [06 - Design Philosophy](./06-Frontend-Design-Philosophy.md)
-**Day 5:** Start contributing!
-
----
-
-## 💡 Tips for Reading
-
-### Effective Reading Strategies
-
-**1. Don't Read Linearly**
-- Start with [00 - Knowledge Base](./00-Project-Knowledge-Base.md)
-- Jump to specific sections as needed
-- Use Ctrl+F to search within documents
-
-**2. Code + Docs Together**
-- Open relevant file while reading docs
-- Compare documentation with actual code
-- Try modifying code as you learn
-
-**3. Use Documentation Index**
-- Each document has table of contents
-- Click section links to jump directly
-- Return to index when needed
-
-**4. Focus on Examples**
-- Code examples show real patterns
-- Compare with your use case
-- Adapt examples to your needs
-
----
-
-## 🔄 Keeping Documentation Updated
-
-### When to Update Docs
-
-**Update immediately when:**
-- Adding new routes
-- Creating new Zustand store
-- Changing architecture
-- Adding major features
-
-**Update weekly:**
-- Project status in Knowledge Base
-- Known issues list
-- Roadmap progress
-
-**Update monthly:**
-- Dependencies and versions
-- Code metrics
-- Performance benchmarks
-
----
-
-## 🌟 Documentation Highlights
-
-### Best Sections by Use Case
-
-**"I'm stuck with routing"**
-→ [02 - Project Routing](./02-Project-Routing-Navigation.md) - Section "User Journey Examples"
-
-**"How do I share state?"**
-→ [05 - Zustand](./05-Zustand-State-Management.md) - Section "How Zustand Works"
-
-**"What colors/fonts to use?"**
-→ [06 - Design Philosophy](./06-Frontend-Design-Philosophy.md) - Section "Color Palette" & "Typography"
-
-**"Where does this file get used?"**
-→ [03 - File Imports](./03-File-Import-Dependencies.md) - Section "Import Relationship Diagram"
-
-**"How to pass data to a screen?"**
-→ [04 - Parameter Passing](./04-Parameter-Passing-Guide.md) - Section "Pattern 3: URL Parameters"
-
----
-
-## 📞 Feedback & Contributions
-
-### Improving Documentation
-
-Found an error or unclear section?
-1. Note the document name and section
-2. Describe the issue
-3. Suggest improvement (if possible)
-
-Want to add content?
-1. Choose relevant document
-2. Match existing style (B2 English, examples, diagrams)
-3. Add to appropriate section
-4. Update this README if adding new document
-
----
-
-## 🎉 Final Note
-
-This documentation was created to help you:
-- ✅ Understand the project quickly
-- ✅ Find answers without asking
-- ✅ Make consistent decisions
-- ✅ Write quality code
-- ✅ Onboard new team members
-
-**All 7 documents work together to give you complete project knowledge.**
-
-**Start with the Knowledge Base, then explore as needed. Happy coding! 🚀**
-
----
-
-**Created:** 2025-11-23
-**Language Level:** English B2 (Upper Intermediate)
-**Total Pages:** 7 comprehensive guides
-**Total Lines:** ~4,000 lines of documentation
-
+</div>

@@ -1,5 +1,6 @@
 // app/(tabs)/index.tsx
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ScrollView, View, Text, Pressable, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -19,6 +20,7 @@ const MOCK_REVIEWS: ReviewItem[] = [
 ];
 
 export default function HomeScreen() {
+  const { t } = useTranslation();
   const [reviews, setReviews] = useState<ReviewItem[]>([]);
   const router = useRouter();
 
@@ -34,7 +36,7 @@ export default function HomeScreen() {
   return (
     <SafeAreaView edges={['top']} style={styles.safeArea}>
       <ThaiPatternBackground opacity={0.15} />
-      
+
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
@@ -43,14 +45,14 @@ export default function HomeScreen() {
         {/* Header */}
         <View style={styles.header}>
           <BlurView intensity={80} tint="light" style={StyleSheet.absoluteFill} />
-          
+
           <View style={styles.headerContent}>
             <View>
               <View style={styles.greetingContainer}>
                 <Text style={styles.greetingText}>ສະບາຍດີ, Liang.</Text>
                 <Text style={styles.greetingDot}>.</Text>
               </View>
-              <Text style={styles.subtitleText}>今日学习目标已完成 85%</Text>
+              <Text style={styles.subtitleText}>{t('home.todayProgress')} 85%</Text>
             </View>
 
             <View style={styles.awardBadge}>
@@ -66,11 +68,11 @@ export default function HomeScreen() {
 
           {/* Hero Progress Card */}
           <View>
-            <Pressable style={styles.heroCard}>
+            <Pressable style={styles.heroCard} onPress={() => router.push('/learning')}>
               <View style={styles.heroContent}>
                 <View style={styles.heroTopRow}>
                   <View>
-                    <Text style={styles.courseLabel}>当前课程</Text>
+                    <Text style={styles.courseLabel}>{t('home.currentCourse')}</Text>
                     <Text style={styles.courseName}>点餐用语</Text>
                   </View>
                   <View style={styles.levelBadge}>
@@ -83,7 +85,7 @@ export default function HomeScreen() {
                     <Text style={styles.thaiText}>ชานมไข่มุก</Text>
                     <Text style={styles.translationText}>"我想要一杯珍珠奶茶"</Text>
                   </View>
-                  
+
                   <View style={styles.playButtonLarge}>
                     <Play size={20} fill={Colors.ink} color={Colors.ink} />
                   </View>
@@ -102,10 +104,10 @@ export default function HomeScreen() {
                 <View style={styles.statIconContainer}>
                   <TrendingUp size={20} color={Colors.ink} />
                 </View>
-                <Text style={styles.statLabel}>坚持天数</Text>
+                <Text style={styles.statLabel}>{t('profile.streakDays')}</Text>
               </View>
               <Text style={styles.statValue}>12</Text>
-              <Text style={styles.statUnit}>连续打卡</Text>
+              <Text style={styles.statUnit}>{t('home.streak')}</Text>
             </View>
 
             <View style={styles.statCard}>
@@ -113,10 +115,10 @@ export default function HomeScreen() {
                 <View style={styles.statIconContainer}>
                   <Clock size={20} color={Colors.ink} />
                 </View>
-                <Text style={styles.statLabel}>学习时长</Text>
+                <Text style={styles.statLabel}>{t('profile.studyTime')}</Text>
               </View>
               <Text style={styles.statValue}>4.5</Text>
-              <Text style={styles.statUnit}>本周小时数</Text>
+              <Text style={styles.statUnit}>{t('home.hoursThisWeek')}</Text>
             </View>
           </View>
 
@@ -124,7 +126,7 @@ export default function HomeScreen() {
           <View style={styles.achievementsSection}>
             <View style={styles.achievementsHeader}>
               <Star size={16} color={Colors.thaiGold} fill={Colors.thaiGold} />
-              <Text style={styles.achievementsTitle}>最近掌握</Text>
+              <Text style={styles.achievementsTitle}>{t('home.recentMastered')}</Text>
             </View>
 
             <View style={styles.achievementsList}>
