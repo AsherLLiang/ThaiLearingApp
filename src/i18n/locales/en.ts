@@ -103,4 +103,33 @@ export default {
     endSessionMessage: 'Are you sure you want to quit?',
     quit: 'Quit',
   },
+  modules: {
+    alphabet: 'Alphabet',
+    word: 'Vocabulary',
+    sentence: 'Sentences',
+    article: 'Articles',
+  },
+  moduleAccess: {
+    locked: 'Module Locked',
+    lockedMessage: '{{module}} module is not yet unlocked',
+    requirement: 'Unlock Requirement',
+    prerequisite: {
+      word: 'Complete alphabet learning and reach 95% progress',
+      sentence: 'Complete vocabulary learning and reach 80% progress',
+      article: 'Complete sentence learning and reach 80% progress',
+    },
+    currentProgress: 'Current Progress',
+    remainingProgress: '{{remaining}}% remaining',
+    progressComplete: 'Progress complete!',
+    goBack: 'Go Back',
+    noProgress: 'Please start learning first',
+    unknownModule: 'Unknown module',
+  },
+  alphabet: {
+    title: 'Thai Alphabet Learning',
+    level: 'Basic',
+    description: 'Learn 44 consonants and 32 vowels,掌握 standard pronunciation',
+    continue: 'Continue Learning',
+    start: 'Start Learning',
+  }
 };

@@ -103,4 +103,33 @@ export default {
     endSessionMessage: '确定要退出吗？',
     quit: '退出',
   },
+  modules: {
+    alphabet: '字母学习',
+    word: '单词学习',
+    sentence: '句子学习',
+    article: '文章阅读',
+  },
+  moduleAccess: {
+    locked: '模块已锁定',
+    lockedMessage: '{{module}}模块暂未解锁',
+    requirement: '解锁要求',
+    prerequisite: {
+      word: '完成字母学习并达到 95% 进度',
+      sentence: '完成单词学习并达到 80% 进度',
+      article: '完成句子学习并达到 80% 进度',
+    },
+    currentProgress: '当前进度',
+    remainingProgress: '还需完成 {{remaining}}%',
+    progressComplete: '进度已达标！',
+    goBack: '返回',
+    noProgress: '请先开始学习',
+    unknownModule: '未知模块',
+  },
+  alphabet: {
+    title: '泰语字母学习',
+    level: '基础',
+    description: '学习44个辅音和32个元音，掌握标准发音',
+    continue: '继续学习',
+    start: '开始学习',
+  }
 };
