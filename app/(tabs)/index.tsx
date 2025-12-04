@@ -11,6 +11,8 @@ import { FloatingBubbles } from '@/src/components/common/FloatingBubbles';
 import { Colors } from '@/src/constants/colors';
 import { Typography } from '@/src/constants/typography';
 import { ReviewItem } from '@/src/entities/types/entities';
+import { useUserStore } from '@/src/stores/userStore';
+import { useModuleAccessStore } from '@/src/stores/moduleAccessStore';
 
 const MOCK_REVIEWS: ReviewItem[] = [
   { id: '1', char: 'ข', phonetic: 'Khor Khai', type: 'Review', dueIn: 'Today' },
@@ -24,6 +26,10 @@ export default function HomeScreen() {
   const [reviews, setReviews] = useState<ReviewItem[]>([]);
   const router = useRouter();
 
+  // Stores
+  const { currentUser } = useUserStore();
+  const { userProgress } = useModuleAccessStore();
+
   useEffect(() => {
     setTimeout(() => setReviews(MOCK_REVIEWS), 800);
   }, []);
@@ -32,6 +38,71 @@ export default function HomeScreen() {
     router.push('/review-modal');
     setTimeout(() => setReviews([]), 500);
   };
+
+  // Helper to determine current course based on progress
+  const getCurrentCourse = () => {
+    if (!userProgress) {
+      return {
+        name: t('modules.alphabet'),
+        level: t('alphabet.level'),
+        progress: 0,
+        route: '/learning/alphabet' as const,
+        thaiText: 'กขฃค',
+        translation: t('alphabet.description'),
+      };
+    }
+
+    const { letterProgress, wordProgress, sentenceProgress } = userProgress;
+
+    // 1. Alphabet Phase
+    if (letterProgress < 95) {
+      return {
+        name: t('modules.alphabet'),
+        level: t('alphabet.level'),
+        progress: letterProgress,
+        route: '/learning/alphabet' as const,
+        thaiText: 'ก ข ฃ ค',
+        translation: t('alphabet.description'),
+      };
+    }
+
+    // 2. Vocabulary Phase
+    if (wordProgress < 80) {
+      return {
+        name: t('modules.word'),
+        level: 'Intermediate 1', // TODO: Add to i18n
+        progress: wordProgress,
+        route: '/learning' as const, // Points to app/learning/index.tsx
+        thaiText: 'คำศัพท์',
+        translation: 'Expand your vocabulary',
+      };
+    }
+
+    // 3. Sentence Phase
+    if (sentenceProgress < 80) {
+      return {
+        name: t('modules.sentence'),
+        level: 'Intermediate 2',
+        progress: sentenceProgress,
+        route: '/learning' as const, // Placeholder
+        thaiText: 'ประโยค',
+        translation: 'Master sentence structures',
+      };
+    }
+
+    // 4. Article Phase
+    return {
+      name: t('modules.article'),
+      level: 'Advanced',
+      progress: userProgress.articleProgress || 0,
+      route: '/learning' as const, // Placeholder
+      thaiText: 'บทความ',
+      translation: 'Read authentic articles',
+    };
+  };
+
+  const currentCourse = getCurrentCourse();
+  const displayName = currentUser?.displayName || 'Student';
 
   return (
     <SafeAreaView edges={['top']} style={styles.safeArea}>
@@ -49,10 +120,12 @@ export default function HomeScreen() {
           <View style={styles.headerContent}>
             <View>
               <View style={styles.greetingContainer}>
-                <Text style={styles.greetingText}>ສະບາຍດີ, Liang.</Text>
+                <Text style={styles.greetingText}>ສະບາຍດີ, {displayName}</Text>
                 <Text style={styles.greetingDot}>.</Text>
               </View>
-              <Text style={styles.subtitleText}>{t('home.todayProgress')} 85%</Text>
+              <Text style={styles.subtitleText}>
+                {t('home.todayProgress')} {currentCourse.progress}%
+              </Text>
             </View>
 
             <View style={styles.awardBadge}>
@@ -68,22 +141,25 @@ export default function HomeScreen() {
 
           {/* Hero Progress Card */}
           <View>
-            <Pressable style={styles.heroCard} onPress={() => router.push('/learning')}>
+            <Pressable
+              style={styles.heroCard}
+              onPress={() => router.push(currentCourse.route)}
+            >
               <View style={styles.heroContent}>
                 <View style={styles.heroTopRow}>
                   <View>
                     <Text style={styles.courseLabel}>{t('home.currentCourse')}</Text>
-                    <Text style={styles.courseName}>点餐用语</Text>
+                    <Text style={styles.courseName}>{currentCourse.name}</Text>
                   </View>
                   <View style={styles.levelBadge}>
-                    <Text style={styles.levelText}>中级 1</Text>
+                    <Text style={styles.levelText}>{currentCourse.level}</Text>
                   </View>
                 </View>
 
                 <View style={styles.heroBottomRow}>
                   <View style={styles.heroTextContainer}>
-                    <Text style={styles.thaiText}>ชานมไข่มุก</Text>
-                    <Text style={styles.translationText}>"我想要一杯珍珠奶茶"</Text>
+                    <Text style={styles.thaiText}>{currentCourse.thaiText}</Text>
+                    <Text style={styles.translationText}>{currentCourse.translation}</Text>
                   </View>
 
                   <View style={styles.playButtonLarge}>

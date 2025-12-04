@@ -1,5 +1,6 @@
 // app/(tabs)/courses.tsx
 import React, { useState } from 'react';
+import { useRouter } from 'expo-router';
 import { View, Text, StyleSheet, ScrollView, TextInput, Pressable, Image, } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Search, BookOpen, Video, Mic, Type, Grid } from 'lucide-react-native';
@@ -7,65 +8,99 @@ import { ThaiPatternBackground } from '@/src/components/common/ThaiPatternBackgr
 import { Colors } from '@/src/constants/colors';
 import { Typography } from '@/src/constants/typography';
 import { useTranslation } from 'react-i18next';
+import { AlphabetCourseCard } from '@/src/components/courses/AlphabetCourseCard';
+import { useVocabularyStore } from '@/src/stores/vocabularyStore';
+import { CourseSelectionModal } from '@/src/components/courses/CourseSelectionModal';
 
-// Mock Data
+// Course Data
 const CATEGORIES = [
   { id: 'all', label: '全部', icon: Grid },
   { id: 'letter', label: '字母', icon: Type },
   { id: 'word', label: '单词', icon: BookOpen },
   // { id: 'sentence', label: '句子', icon: Mic },
-  { id: 'video', label: '视频', icon: Video },
+  // { id: 'video', label: '视频', icon: Video },
 ];
 
 const COURSES = [
   {
-    id: '1',
+    id: 'thai_1',
+    source: 'Thai_1',
     title: '基础泰语1',
-    description: '从零开始学习泰语44个辅音和32个元音，掌握标准发音。',
-    level: '初级',
-    image: require('@/assets/images/courses/ThaiBase_1.png'),
-    category: 'letter',
-    lessons: 18,
+    description: '从零开始学习泰语，掌握一点点词汇。',
+    level: '入门',
+    image: require('@/assets/images/courses/ThaiBase_1.png'), // Assuming image exists, or reuse placeholder
+    category: 'word',
+    lessons: 20,
   },
   {
-    id: '2',
+    id: 'thai_2',
+    source: 'Thai_2',
     title: '基础泰语2',
-    description: '涵盖问候、点餐、购物等高频场景，快速开口说泰语。',
+    description: '掌握更多词汇，开始对话。',
     level: '初级',
     image: require('@/assets/images/courses/ThaiBase_2.png'),
-    category: 'sentence',
-    lessons: 55,
+    category: 'word',
+    lessons: 25,
   },
   {
-    id: '3',
+    id: 'thai_3',
+    source: 'Thai_3',
     title: '基础泰语3',
-    description: '精选热门泰剧台词，学习地道表达和流行语。',
+    description: '掌握更多词汇，比较熟料的对话。',
     level: '中级',
     image: require('@/assets/images/courses/ThaiBase_3.png'),
     category: 'word',
-    lessons: 55,
+    lessons: 30,
   },
   {
-    id: '4',
+    id: 'thai_4',
+    source: 'Thai_4',
     title: '基础泰语4',
-    description: '通过视频了解泰国风俗习惯、礼仪和节日文化。',
+    description: '熟料掌握大部分泰语词汇。',
     level: '高级',
     image: require('@/assets/images/courses/ThaiBase_4.png'),
-    category: 'video',
-    lessons: 53,
+    category: 'word',
+    lessons: 35,
   },
 ];
 
 export default function CoursesScreen() {
+  const router = useRouter();
   const { t } = useTranslation();
   const [activeCategory, setActiveCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Store & Modal State
+  const { currentCourseSource, startCourse } = useVocabularyStore();
+  const [modalVisible, setModalVisible] = useState(false);
+  const [pendingCourse, setPendingCourse] = useState<typeof COURSES[0] | null>(null);
 
   const filteredCourses = COURSES.filter(course => {
     const matchesCategory = activeCategory === 'all' || course.category === activeCategory;
     const matchesSearch = course.title.includes(searchQuery) || course.description.includes(searchQuery);
     return matchesCategory && matchesSearch;
   });
+
+  const handleStartLearning = (course: typeof COURSES[0]) => {
+    // If it's the same course, just navigate
+    if (currentCourseSource === course.source) {
+      router.push('/learning/vocab'); // Navigate to vocabulary learning page
+      return;
+    }
+
+    // If switching courses, show confirmation
+    setPendingCourse(course);
+    setModalVisible(true);
+  };
+
+  const confirmSwitchCourse = async () => {
+    if (pendingCourse) {
+      await startCourse(pendingCourse.source);
+      setModalVisible(false);
+      setPendingCourse(null);
+      router.push('/learning/vocab');
+    }
+  };
 
   return (
     <SafeAreaView edges={['top']} style={styles.safeArea}>
@@ -119,30 +154,56 @@ export default function CoursesScreen() {
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
       >
-        {filteredCourses.map((course) => (
-          <Pressable key={course.id} style={styles.courseCard}>
-            <Image source={course.image} style={styles.courseImage} />
-            <View style={styles.courseInfo}>
-              <View style={styles.courseHeader}>
-                <Text style={styles.courseTitle} numberOfLines={1}>{course.title}</Text>
-                <View style={styles.levelBadge}>
-                  <Text style={styles.levelText}>{course.level}</Text>
+        {/* Alphabet Learning - Always available */}
+        <AlphabetCourseCard />
+
+        {/* Course List */}
+        {filteredCourses.map((course) => {
+          // Check if this is the active course
+          const isCurrent = currentCourseSource === course.source;
+
+          return (
+            <Pressable
+              key={course.id}
+              style={[styles.courseCard, isCurrent && styles.activeCourseCard]}
+              onPress={() => handleStartLearning(course)}
+            >
+              <Image source={course.image} style={styles.courseImage} />
+              <View style={styles.courseInfo}>
+                <View style={styles.courseHeader}>
+                  <Text style={styles.courseTitle} numberOfLines={1}>{course.title}</Text>
+                  <View style={styles.levelBadge}>
+                    <Text style={styles.levelText}>{course.level}</Text>
+                  </View>
+                </View>
+                <Text style={styles.courseDescription} numberOfLines={2}>
+                  {course.description}
+                </Text>
+                <View style={styles.courseFooter}>
+                  <Text style={styles.lessonCount}>{course.lessons} 课时</Text>
+                  <View style={[styles.startBtn, isCurrent && styles.activeStartBtn]}>
+                    <Text style={[styles.startBtnText, isCurrent && styles.activeStartBtnText]}>
+                      {isCurrent ? t('courses.continue', '继续学习') : t('courses.startBtnText', '开始学习')}
+                    </Text>
+                  </View>
                 </View>
               </View>
-              <Text style={styles.courseDescription} numberOfLines={2}>
-                {course.description}
-              </Text>
-              <View style={styles.courseFooter}>
-                <Text style={styles.lessonCount}>{course.lessons} 课时</Text>
-                <View style={styles.startBtn}>
-                  <Text style={styles.startBtnText}>{t('courses.startBtnText')}</Text>
-                </View>
-              </View>
-            </View>
-          </Pressable>
-        ))}
+            </Pressable>
+          );
+        })}
         <View style={{ height: 100 }} />
       </ScrollView>
+
+      {/* Confirmation Modal */}
+      <CourseSelectionModal
+        visible={modalVisible}
+        courseTitle={pendingCourse?.title || ''}
+        onConfirm={confirmSwitchCourse}
+        onCancel={() => {
+          setModalVisible(false);
+          setPendingCourse(null);
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -158,7 +219,7 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
   },
   headerTitle: {
-    fontFamily: Typography.playfairBold, // Using Playfair for that "Storybook" feel
+    fontFamily: Typography.playfairBold,
     fontSize: 28,
     color: Colors.ink,
     marginBottom: 4,
@@ -247,6 +308,11 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 3,
   },
+  activeCourseCard: {
+    borderColor: Colors.thaiGold,
+    borderWidth: 2,
+    backgroundColor: '#FFFCF5', // Very light gold tint
+  },
   courseImage: {
     width: 100,
     height: '100%',
@@ -306,9 +372,16 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.ink,
     borderRadius: 12,
   },
+  activeStartBtn: {
+    backgroundColor: Colors.thaiGold,
+  },
   startBtnText: {
     fontSize: 11,
     color: Colors.white,
     fontFamily: Typography.notoSerifRegular,
+  },
+  activeStartBtnText: {
+    color: Colors.white,
+    fontWeight: 'bold',
   },
 });

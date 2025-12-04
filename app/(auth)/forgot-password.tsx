@@ -58,7 +58,7 @@ export default function ForgotPasswordScreen() {
     }
 
     // Call password reset action
-    const success = await requestPasswordReset(email.toLowerCase().trim());
+    const success = await requestPasswordReset({ email: email.toLowerCase().trim() });
 
     if (success) {
       setIsEmailSent(true);

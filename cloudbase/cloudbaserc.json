@@ -26,6 +26,13 @@
       "timeout": 15,
       "runtime": "Nodejs18.15",
       "handler": "index.main"
+    },
+    {
+      "name": "learn-vocab",
+      "timeout": 15,
+      "runtime": "Nodejs18.15",
+      "handler": "index.main",
+      "installDependency": true
     }
   ]
 }

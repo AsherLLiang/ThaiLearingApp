@@ -81,6 +81,27 @@ exports.main = async (event, context) => {
       data: userDoc
     });
 
+    // 初始化用户学习进度
+    await db.collection('user_progress').add({
+      data: {
+        userId,
+        letterCompleted: false,
+        wordUnlocked: false,
+        debugSkipLetter: false,
+        letterProgress: 0.0,
+        wordProgress: 0.0,
+        sentenceUnlocked: false,
+        sentenceProgress: 0.0,
+        articleUnlocked: false,
+        currentStage: 'letter',
+        totalStudyDays: 0,
+        streakDays: 0,
+        lastStudyDate: null,
+        createdAt: registrationDate,
+        updatedAt: registrationDate
+      }
+    });
+
     // ===== Generate JWT token =====
     const token = jwt.sign(
       {
@@ -102,7 +123,7 @@ exports.main = async (event, context) => {
         expiresIn: 604800 // 7 days in seconds
       }
     };
-    
+
   } catch (error) {
     console.error('注册失败:', error);
     return {

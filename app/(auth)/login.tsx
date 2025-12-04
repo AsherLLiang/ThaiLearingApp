@@ -48,7 +48,7 @@ export default function LoginScreen() {
     }
 
     // Call login action
-    const success = await login(email, password);
+    const success = await login({ email, password });
 
     if (success) {
       // Navigate to main app
