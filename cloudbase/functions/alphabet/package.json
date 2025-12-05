@@ -1,0 +1,9 @@
+{
+    "name": "alphabet",
+    "version": "1.0.0",
+    "description": "Alphabet learning function",
+    "main": "index.js",
+    "dependencies": {
+        "wx-server-sdk": "latest"
+    }
+}

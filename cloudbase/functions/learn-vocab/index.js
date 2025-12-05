@@ -20,10 +20,7 @@ const getVocabularyList = require('./handlers/getVocabularyList');
 const getSkippedWords = require('./handlers/getSkippedWords');
 
 // ===== 新增handlers (统一记忆引擎) =====
-const getTodayMemories = require('./handlers/getTodayMemories');
-const submitMemoryResult = require('./handlers/submitMemoryResult');
-const checkModuleAccessHandler = require('./handlers/checkModuleAccess');
-const getUserProgress = require('./handlers/getUserProgress');
+// (已迁移至 memory-engine 云函数)
 
 // ===== 工具函数 =====
 const { createResponse } = require('./utils/response');
@@ -38,7 +35,7 @@ const { createResponse } = require('./utils/response');
 exports.main = async (event, context) => {
   // ===== 解析 HTTP 请求 =====
   let requestData = event;
-  
+
   // HTTP 触发器：body 可能是字符串或对象
   if (event.body) {
     if (typeof event.body === 'string') {
@@ -97,51 +94,14 @@ exports.main = async (event, context) => {
       return await getSkippedWords(db, data);
     }
 
-    // ===== 新增API路由 (4个) - 统一记忆引擎 =====
-    
-    /**
-     * 获取今日学习内容 (统一接口)
-     * 支持: 字母/单词/句子
-     * 参数:
-     *   - userId: string
-     *   - entityType: 'letter' | 'word' | 'sentence'
-     *   - limit?: number (默认20)
-     *   - includeNew?: boolean (默认true)
-     */
-    if (action === 'getTodayMemories') {
-      return await getTodayMemories(db, data);
-    }
-
-    /**
-     * 提交学习结果 (统一接口)
-     * 支持: 字母/单词/句子
-     * 参数:
-     *   - userId: string
-     *   - entityType: 'letter' | 'word' | 'sentence'
-     *   - entityId: string
-     *   - quality: '陌生' | '模糊' | '记得'
-     */
-    if (action === 'submitMemoryResult') {
-      return await submitMemoryResult(db, data);
-    }
-
-    /**
-     * 检查模块访问权限
-     * 参数:
-     *   - userId: string
-     *   - moduleType: 'letter' | 'word' | 'sentence' | 'article'
-     */
-    if (action === 'checkModuleAccess') {
-      return await checkModuleAccessHandler(db, data);
-    }
-
-    /**
-     * 获取用户学习进度
-     * 参数:
-     *   - userId: string
-     */
-    if (action === 'getUserProgress') {
-      return await getUserProgress(db, data);
+    // ===== 已迁移至 memory-engine 的路由 =====
+    if (['getTodayMemories', 'submitMemoryResult', 'checkModuleAccess', 'getUserProgress'].includes(action)) {
+      return createResponse(
+        false,
+        null,
+        `Action '${action}' has been moved to 'memory-engine' cloud function. Please update your client.`,
+        'MOVED_PERMANENTLY'
+      );
     }
 
     // ===== 未知Action =====
@@ -152,11 +112,7 @@ exports.main = async (event, context) => {
       'getVocabularyDetail',
       'getReviewStatistics',
       'getVocabularyList',
-      'getSkippedWords',
-      'getTodayMemories',
-      'submitMemoryResult',
-      'checkModuleAccess',
-      'getUserProgress'
+      'getSkippedWords'
     ];
 
     return createResponse(
@@ -169,7 +125,7 @@ exports.main = async (event, context) => {
   } catch (error) {
     console.error(`[learn-vocab] 云函数错误:`, error);
     console.error('错误堆栈:', error.stack);
-    
+
     return createResponse(
       false,
       null,
