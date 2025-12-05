@@ -3,7 +3,7 @@
  * Action: submitMemoryResult
  */
 
-const { updateMemoryAfterReview, checkAndUnlockNextStage } = require('../utils/memoryEngine');
+const { updateMemoryAfterReview } = require('../utils/memoryEngine');
 const { validateParams } = require('../utils/validators');
 const { createResponse } = require('../utils/response');
 
@@ -29,9 +29,9 @@ async function submitMemoryResult(db, params) {
   const validQualities = ['陌生', '模糊', '记得'];
   if (!validQualities.includes(quality)) {
     return createResponse(
-      false, 
-      null, 
-      `无效的答题质量: ${quality}, 请使用: 陌生/模糊/记得`, 
+      false,
+      null,
+      `无效的答题质量: ${quality}, 请使用: 陌生/模糊/记得`,
       'INVALID_QUALITY'
     );
   }
@@ -40,9 +40,9 @@ async function submitMemoryResult(db, params) {
   const validEntityTypes = ['letter', 'word', 'sentence'];
   if (!validEntityTypes.includes(entityType)) {
     return createResponse(
-      false, 
-      null, 
-      `无效的实体类型: ${entityType}`, 
+      false,
+      null,
+      `无效的实体类型: ${entityType}`,
       'INVALID_ENTITY_TYPE'
     );
   }
@@ -50,20 +50,20 @@ async function submitMemoryResult(db, params) {
   try {
     // 4. 更新记忆状态
     const updatedMemory = await updateMemoryAfterReview(
-      db, 
-      userId, 
-      entityType, 
-      entityId, 
+      db,
+      userId,
+      entityType,
+      entityId,
       quality
     );
 
     // 5. 检查是否需要解锁下一阶段
-    const unlockResult = await checkAndUnlockNextStage(db, userId);
+    // const unlockResult = await checkAndUnlockNextStage(db, userId);
 
     // 6. 返回结果
     return createResponse(true, {
       ...updatedMemory,
-      unlockInfo: unlockResult
+      // unlockInfo: unlockResult
     }, '学习结果已记录');
 
   } catch (error) {
