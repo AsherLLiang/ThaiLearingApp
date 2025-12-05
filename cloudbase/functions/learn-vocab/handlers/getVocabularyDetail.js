@@ -23,29 +23,24 @@ async function getVocabularyDetail(db, params) {
   try {
     // 1. 检查权限 (如果有 userId)
     if (userId) {
-      const progressResult = await db.collection("user_progress")
-        .where({ userId })
-        .get();
+      const { checkModuleAccess } = require('../utils/memoryEngine');
+      const accessResult = await checkModuleAccess(db, userId, 'word');
 
-      // 如果找不到用户，可以选择报错或者忽略（视业务逻辑而定，这里偏向于安全检查）
-      if (progressResult.data && progressResult.data.length > 0) {
-        const p = progressResult.data[0];
-        if (!p.wordUnlocked) {
-          return createResponse(false, null, "请先完成字母学习", "MODULE_LOCKED");
-        }
+      if (!accessResult.allowed) {
+        return createResponse(false, null, accessResult.message, accessResult.errorCode);
       }
     }
 
     // 2. 获取词汇详情
     // 注意：根据你的数据库结构，如果主键是 _id，请使用 doc(id)；如果是 vocabularyId 字段，使用 where
     // 假设 vocabularyId 字段存储的是业务ID
-    const vocabResult = await db.collection('vocabularies')
+    const vocabResult = await db.collection('vocabulary')
       .where({ vocabularyId: vocabularyId }) // 或者 .doc(vocabularyId) 如果它是 _id
       .get();
 
     if (!vocabResult.data || vocabResult.data.length === 0) {
       // 尝试用 _id 再查一次，兼容不同传参
-      const vocabByIdResult = await db.collection('vocabularies').doc(vocabularyId).get().catch(() => ({ data: [] }));
+      const vocabByIdResult = await db.collection('vocabulary').doc(vocabularyId).get().catch(() => ({ data: [] }));
       if (!vocabByIdResult.data) {
         return createResponse(false, null, '未找到该词汇', 'VOCABULARY_NOT_FOUND');
       }
@@ -66,26 +61,26 @@ async function getVocabularyDetail(db, params) {
       level: vocabulary.level,
       lessonNumber: vocabulary.lessonNumber,
       startingLetter: vocabulary.startingLetter,
-      
+
       // 扩展学习内容
       cognates: vocabulary.cognates || [],
       dialogue: vocabulary.dialogue || null,
       exampleSentences: vocabulary.exampleSentences || {},
       usage: vocabulary.usage || {},
       mistakes: vocabulary.mistakes || {},
-      
+
       // 元数据
       source: vocabulary.source,
       createdAt: vocabulary.createdAt,
     };
-    
+
     // 4. 如果提供了 userId，附加学习状态
     if (userId) {
       const progressResult = await db.collection('user_vocabulary_progress')
         .where({ userId, vocabularyId: detail.vocabularyId }) // 确保ID匹配
         .limit(1)
         .get();
-      
+
       if (progressResult.data.length > 0) {
         const p = progressResult.data[0];
         detail.learningStatus = {
@@ -110,7 +105,7 @@ async function getVocabularyDetail(db, params) {
         };
       }
     }
-    
+
     return createResponse(true, detail, '获取词汇详情成功');
 
   } catch (error) {

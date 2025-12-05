@@ -56,21 +56,16 @@ async function getTodayWords(db, params) {
     }
 
     // ===== Step 2: 检查用户是否完成字母学习（权限检查）=====
-    const progressResult = await db.collection('user_progress')
-      .where({ userId })
-      .get();
+    const { checkModuleAccess } = require('../utils/memoryEngine');
+    const accessResult = await checkModuleAccess(db, userId, 'word');
 
-    if (progressResult.data && progressResult.data.length > 0) {
-      const userProgress = progressResult.data[0];
-      
-      if (!userProgress.wordUnlocked) {
-        return createResponse(
-          false, 
-          null, 
-          `请先完成字母学习 (当前进度: ${Math.round(userProgress.letterProgress * 100)}%)`,
-          'MODULE_LOCKED'
-        );
-      }
+    if (!accessResult.allowed) {
+      return createResponse(
+        false,
+        null,
+        accessResult.message,
+        accessResult.errorCode
+      );
     }
 
     // ===== Step 3: 获取用户所有未划掉的进度记录 =====
@@ -99,9 +94,9 @@ async function getTodayWords(db, params) {
 
     // ===== Step 5: 获取新词 (用户从未学过的词汇) =====
     const maxNewWords = DAILY_LEARNING_CONFIG?.MAX_NEW_WORDS || 10;
-    
-    let newWordsQuery = db.collection('vocabularies');
-    
+
+    let newWordsQuery = db.collection('vocabulary');
+
     if (learnedVocabIds.size > 0) {
       newWordsQuery = newWordsQuery.where({
         _id: db.command.nin([...learnedVocabIds])
@@ -136,7 +131,7 @@ async function getTodayWords(db, params) {
     // 添加需要复习的词
     if (dueForReview.length > 0) {
       const reviewVocabIds = dueForReview.map(p => p.vocabularyId);
-      const reviewVocabsResult = await db.collection('vocabularies')
+      const reviewVocabsResult = await db.collection('vocabulary')
         .where({ _id: db.command.in(reviewVocabIds) })
         .get();
 
@@ -183,7 +178,7 @@ async function getTodayWords(db, params) {
     const totalCount = todayList.length;
     const validOffset = Math.max(0, offset);
     const validLimit = Math.max(1, Math.min(limit, 100));
-    
+
     const paginatedList = todayList.slice(validOffset, validOffset + validLimit);
 
     return createResponse(true, {

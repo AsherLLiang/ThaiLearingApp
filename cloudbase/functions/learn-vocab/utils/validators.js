@@ -116,6 +116,31 @@ function validateBoolean(value, name) {
   }
   return { valid: true };
 }
+/**
+ * 通用参数验证函数
+ * 
+ * @param {Object} params - 需要验证的参数对象
+ * @param {Array<string>} requiredFields - 必需字段列表
+ * @returns {Object} { isValid: boolean, message?: string }
+ */
+function validateParams(params, requiredFields) {
+  const missing = [];
+  
+  for (const field of requiredFields) {
+    if (params[field] === undefined || params[field] === null || params[field] === '') {
+      missing.push(field);
+    }
+  }
+  
+  if (missing.length > 0) {
+    return {
+      isValid: false,
+      message: `缺少必填参数: ${missing.join(', ')}`
+    };
+  }
+  
+  return { isValid: true };
+}
 
 module.exports = {
   validateUser,
@@ -124,4 +149,5 @@ module.exports = {
   validatePagination,
   validateRequiredString,
   validateBoolean,
+  validateParams,
 };

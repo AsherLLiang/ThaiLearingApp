@@ -48,14 +48,14 @@ function masteryToQuality(mastery) {
  * 2. "模糊"时缩短间隔而非维持不变
  * 3. "陌生"时完全重置复习进度
  * 
- * @param {string} mastery - 掌握程度: 陌生/模糊/记得
+ * @param {string} mastery - 掌握程度: 忘记/模糊/认识
  * @param {number} currentInterval - 当前复习间隔（天）
  * @param {number} easinessFactor - 简易度因子（1.3-2.5+）
  * @param {number} reviewCount - 已复习次数
  * @returns {Object} 算法计算结果
  * 
  * @example
- * const result = calculateSM2Optimized('记得', 2, 2.5, 1);
+ * const result = calculateSM2Optimized('认识', 2, 2.5, 1);
  * // {
  * //   nextInterval: 4,
  * //   nextEasinessFactor: 2.6,
@@ -72,24 +72,24 @@ function calculateSM2Optimized(
   let nextInterval = currentInterval;
   let nextEF = easinessFactor;
   let shouldResetCount = false;
-  
+
   const quality = masteryToQuality(mastery);
-  
+
   // ==================== 核心算法逻辑 ====================
-  
+
   if (quality < 3) {
-    // ========== 陌生: 完全重置 ==========
+    // ========== 忘记: 完全重置 ==========
     // 用户完全不记得，需要从头开始学习
     nextInterval = 1;
     nextEF = Math.max(SM2_PARAMS.MIN_EASINESS_FACTOR, nextEF - 0.2);
     shouldResetCount = true;
-    
+
   } else if (quality === 3) {
     // ========== 模糊: 缩短间隔，加强复习 ==========
     // 改进: 不是维持不变，而是缩短20%
     nextInterval = Math.max(1, Math.round(currentInterval * SM2_PARAMS.FUZZY_MULTIPLIER));
     nextEF = Math.max(SM2_PARAMS.MIN_EASINESS_FACTOR, nextEF - 0.1);
-    
+
   } else {
     // ========== 记得: 使用优化的间隔序列 ==========
     if (reviewCount < EARLY_INTERVALS.length) {
@@ -100,20 +100,29 @@ function calculateSM2Optimized(
       // 后期阶段: 使用 EF 计算指数增长
       nextInterval = Math.round(currentInterval * nextEF);
     }
-    
+
     // 提高简易度 (标准 SM-2 公式)
     nextEF = nextEF + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02));
     nextEF = Math.max(SM2_PARAMS.MIN_EASINESS_FACTOR, nextEF);
   }
-  
+
   // 限制最大间隔
   nextInterval = Math.min(nextInterval, SM2_PARAMS.MAX_INTERVAL_DAYS);
-  
+
   // 计算下次复习日期
   const nextReviewDate = new Date();
   nextReviewDate.setDate(nextReviewDate.getDate() + nextInterval);
-  
+
+  // 计算新的复习次数
+  const newRepetitions = shouldResetCount ? 0 : reviewCount + 1;
+
   return {
+    // === 兼容 memoryEngine.js 的旧接口 ===
+    interval: nextInterval,
+    easinessFactor: parseFloat(nextEF.toFixed(2)),
+    repetitions: newRepetitions,
+
+    // === 新接口（保留供未来使用）===
     nextInterval,
     nextEasinessFactor: parseFloat(nextEF.toFixed(2)),
     nextReviewDate: nextReviewDate.toISOString(),
@@ -143,7 +152,7 @@ function generateReviewTimeline(currentReviewCount, maxItems = 5) {
   const timeline = [];
   let interval = 1;
   let ef = SM2_PARAMS.INITIAL_EASINESS_FACTOR;
-  
+
   for (let i = currentReviewCount; i < currentReviewCount + maxItems; i++) {
     if (i < EARLY_INTERVALS.length) {
       interval = EARLY_INTERVALS[i];
@@ -151,13 +160,13 @@ function generateReviewTimeline(currentReviewCount, maxItems = 5) {
       interval = Math.round(interval * ef);
     }
     interval = Math.min(interval, SM2_PARAMS.MAX_INTERVAL_DAYS);
-    
+
     timeline.push({
       reviewNumber: i + 1,
       intervalDays: interval,
     });
   }
-  
+
   return timeline;
 }
 
@@ -180,7 +189,7 @@ function getTodayRange() {
     now.getUTCDate() + 1,
     0, 0, 0, 0
   ));
-  
+
   return {
     startOfDay: startOfDay.toISOString(),
     endOfDay: endOfDay.toISOString(),
