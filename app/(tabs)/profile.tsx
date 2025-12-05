@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { Settings, Award, LogOut, ChevronRight } from 'lucide-react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { LanguageSwitcher } from '@/src/components/common/LanguageSwitcher';
+import { useModuleAccessStore } from '@/src/stores/moduleAccessStore';
 import { useUserStore } from '@/src/stores/userStore';
 import { useLearningStore } from '@/src/stores/learningStore';
 import { Colors } from '@/src/constants/colors';
@@ -17,8 +18,24 @@ export default function ProfileScreen() {
   const router = useRouter();
   const { currentUser, logout } = useUserStore();
   const { progress } = useLearningStore();
-  
+  const { userProgress } = useModuleAccessStore();
+
   const [dailyReminder, setDailyReminder] = React.useState(true);
+
+  const updateDailyLimit = (limit: number) => {
+    // Update local store
+    useModuleAccessStore.setState(state => ({
+      userProgress: state.userProgress ? { ...state.userProgress, dailyLimit: limit } : null
+    }));
+    // In a real app, I should also call an API to save this setting specifically, 
+    // but the requirement says "unless user clicks...". 
+    // The backend getTodayMemories updates it if passed.
+    // So if I update it here locally, the next time they learn, it will use this new limit?
+    // No, getTodayMemories uses the stored limit if param is not passed.
+    // If I want to persist this change *without* starting a session, I need an API.
+    // However, for now, I will just update the local store so that when they go to Learning, 
+    // the Learning screen picks up this new limit and sends it to initSession, which updates the backend.
+  };
 
   const handleLogout = () => {
     Alert.alert(
@@ -39,21 +56,21 @@ export default function ProfileScreen() {
   };
 
   const achievements = [
-    { 
-      id: 'streak7', 
-      icon: '🔥', 
+    {
+      id: 'streak7',
+      icon: '🔥',
       label: t('profile.achievementBadges.streak7'),
       unlocked: (progress?.streakDays || 0) >= 7,
     },
-    { 
-      id: 'master', 
-      icon: '🗣️', 
+    {
+      id: 'master',
+      icon: '🗣️',
       label: t('profile.achievementBadges.master'),
       unlocked: false,
     },
-    { 
-      id: 'vocab100', 
-      icon: '📚', 
+    {
+      id: 'vocab100',
+      icon: '📚',
       label: t('profile.achievementBadges.vocab100'),
       unlocked: false,
     },
@@ -61,7 +78,7 @@ export default function ProfileScreen() {
 
   return (
     <SafeAreaView edges={['top']} style={styles.safeArea}>
-      <ScrollView 
+      <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
@@ -91,11 +108,11 @@ export default function ProfileScreen() {
             <Award size={20} color={Colors.ink} />
             <Text style={styles.sectionTitle}>{t('profile.achievements')}</Text>
           </View>
-          
+
           <View style={styles.achievementsContainer}>
             <View style={styles.achievementsGrid}>
               {achievements.map((achievement, index) => (
-                <View 
+                <View
                   key={achievement.id}
                   style={[
                     styles.achievementBadge,
@@ -115,7 +132,7 @@ export default function ProfileScreen() {
         {/* Settings Section */}
         <Animated.View entering={FadeInDown.delay(300).duration(500)} style={styles.section}>
           <Text style={styles.sectionTitle}>{t('profile.settings')}</Text>
-          
+
           <View style={styles.settingsCard}>
             {/* Daily Reminder */}
             <View style={styles.settingItem}>
@@ -127,6 +144,31 @@ export default function ProfileScreen() {
                 thumbColor={Colors.white}
               />
             </View>
+
+            {/* Daily Learning Limit */}
+            <View style={styles.divider} />
+            <Pressable
+              style={styles.settingItem}
+              onPress={() => {
+                // Simple selection for now
+                Alert.alert(
+                  t('profile.dailyLimit', '每日学习数量'),
+                  t('profile.selectLimit', '请选择每日学习数量'),
+                  [
+                    { text: '10', onPress: () => updateDailyLimit(10) },
+                    { text: '20', onPress: () => updateDailyLimit(20) },
+                    { text: '50', onPress: () => updateDailyLimit(50) },
+                    { text: t('common.cancel'), style: 'cancel' }
+                  ]
+                );
+              }}
+            >
+              <Text style={styles.settingLabel}>{t('profile.dailyLimit', '每日学习数量')}</Text>
+              <View style={styles.settingRight}>
+                <Text style={styles.settingValue}>{userProgress?.dailyLimit || 20}</Text>
+                <ChevronRight size={20} color={Colors.taupe} />
+              </View>
+            </Pressable>
 
             {/* TTS Engine */}
             <View style={styles.divider} />

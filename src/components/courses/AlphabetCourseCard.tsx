@@ -5,15 +5,16 @@ import { Colors } from '@/src/constants/colors';
 import { Typography } from '@/src/constants/typography';
 import { useAlphabetStore } from '@/src/stores/alphabetStore';
 import { useModuleAccessStore } from '@/src/stores/moduleAccessStore';
+import { useVocabularyStore } from '@/src/stores/vocabularyStore';
 import { useTranslation } from 'react-i18next';
 
 export function AlphabetCourseCard() {
     const router = useRouter();
-    const { getMasteredCount, getTotalCount, getProgressPercentage } = useAlphabetStore();
+    const { completedCount, totalCount } = useAlphabetStore();
+    // Actually, useAlphabetStore is a hook. The helper hooks are exported separately.
+    // Let's just calculate percentage here or import the hook properly.
 
-    const masteredCount = getMasteredCount();
-    const totalCount = getTotalCount();
-    const progressPercentage = getProgressPercentage();
+    const progressPercentage = totalCount > 0 ? (completedCount / totalCount) * 100 : 0;
 
     // Re-reading previous file content of AlphabetCourseCard.tsx:
     // import { useAlphabetStore } from '@/src/stores/alphabetStore';
@@ -29,10 +30,16 @@ export function AlphabetCourseCard() {
 
     const isLetterCompleted = globalProgress?.letterCompleted || false;
 
-    const handlePress = () => {
-        if (isLetterCompleted) {
-            router.push('/learning/vocab');
+    const { currentCourseSource, startCourse } = useVocabularyStore();
+
+    const handlePress = async () => {
+        if (currentCourseSource !== 'alphabet') {
+            await startCourse('alphabet');
+            // First time: Jump to Learning/index (which will redirect or handle setup)
+            // As per requirement: "User first time clicks... jump to Learning/index"
+            router.push('/learning');
         } else {
+            // Subsequent times: Jump directly to alphabet learning
             router.push('/learning/alphabet');
         }
     };
@@ -69,7 +76,7 @@ export function AlphabetCourseCard() {
                             />
                         </View>
                         <Text style={styles.progressText}>
-                            {masteredCount}/{totalCount}
+                            {completedCount}/{totalCount}
                         </Text>
                     </View>
 

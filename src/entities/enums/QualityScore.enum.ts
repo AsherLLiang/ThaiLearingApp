@@ -1,9 +1,9 @@
-// src/entities/enum/QualityScore.enum.ts
+// src/entities/enums/QualityScore.enum.ts
 
 export enum QualityButton {
-  KNOW = '认识',
+  KNOW = '记得',
   FUZZY = '模糊',
-  FORGET = '忘记',
+  FORGET = '陌生',
 }
 
 export const QUALITY_SCORE_MAP: Record<QualityButton, number> = {
