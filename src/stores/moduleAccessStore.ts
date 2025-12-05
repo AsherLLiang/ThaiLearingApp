@@ -49,6 +49,9 @@ export interface UserProgress {
     wordUnlocked: boolean;            // 单词模块是否解锁
     sentenceUnlocked: boolean;        // 句子模块是否解锁
     articleUnlocked: boolean;         // 文章模块是否解锁
+
+    // 设置
+    dailyLimit?: number;              // 每日学习数量设置
 }
 
 /**

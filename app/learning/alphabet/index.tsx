@@ -1,154 +1,237 @@
-import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
+import { View, Text, StyleSheet, Pressable, Alert, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { ChevronLeft, Trophy, PlayCircle, Star, Lock } from 'lucide-react-native';
+import { X, Settings } from 'lucide-react-native';
+import Slider from '@react-native-community/slider';
 import { ThaiPatternBackground } from '@/src/components/common/ThaiPatternBackground';
 import { Colors } from '@/src/constants/colors';
 import { Typography } from '@/src/constants/typography';
 import { useAlphabetStore } from '@/src/stores/alphabetStore';
-import { useTranslation } from 'react-i18next';
+import { AlphabetLearningView } from '@/src/components/learning/AlphabetLearningView';
+import { AlphabetReviewView } from '@/src/components/learning/AlphabetReviewView';
+import { LearningPhase } from '@/src/entities/enums/LearningPhase.enum';
 
-export default function AlphabetHomeScreen() {
-    const router = useRouter();
+import { useUserStore } from '@/src/stores/userStore';
+
+import { useModuleAccessStore } from '@/src/stores/moduleAccessStore';
+
+export default function AlphabetLearningScreen() {
     const { t } = useTranslation();
-    const { getMasteredCount, getTotalCount, getProgressPercentage, masteredIds } = useAlphabetStore();
+    const router = useRouter();
+    const { currentUser } = useUserStore();
+    const { userProgress } = useModuleAccessStore(); // Get user progress
+    const {
+        currentAlphabet,
+        reviewQueue,
+        phase,
+        isLoading,
+        initSession,
+        submitResult,
+        resetSession,
+        completedCount,
+        totalCount
+    } = useAlphabetStore();
 
-    const masteredCount = getMasteredCount();
-    const totalCount = getTotalCount();
-    const accuracy = useAlphabetStore((state) => state.accuracy);
+    // Local state for setup
+    // Use stored dailyLimit if available, otherwise default to 20
+    const [dailyLimit, setDailyLimit] = useState(userProgress?.dailyLimit || 20);
+    const [isSetupMode, setIsSetupMode] = useState(true);
 
-    const categories = [
-        { id: 'mid', label: '中辅音', subLabel: 'Mid Class Consonants', count: 9, color: '#4CAF50' },
-        { id: 'high', label: '高辅音', subLabel: 'High Class Consonants', count: 11, color: '#FF9800' },
-        { id: 'low', label: '低辅音', subLabel: 'Low Class Consonants', count: 24, color: '#2196F3' },
-        { id: 'vowel', label: '元音', subLabel: 'Vowels', count: 32, color: '#E91E63' },
-    ];
+    // Local state for learning flow
+    const [hasViewedIntro, setHasViewedIntro] = useState(false);
 
-    const isAllMastered = masteredCount >= totalCount;
+    // Reset intro state when alphabet changes
+    useEffect(() => {
+        setHasViewedIntro(false);
+    }, [currentAlphabet?.alphabetId]);
+
+    // Check if we need to show setup
+    useEffect(() => {
+        const checkAndStart = async () => {
+            // If we have a stored limit and no queue, auto-start
+            if (reviewQueue.length === 0 && !isLoading && phase !== LearningPhase.COMPLETED) {
+                if (userProgress?.dailyLimit) {
+                    setIsSetupMode(false);
+                    const userId = currentUser?.userId || 'user_123';
+                    // Auto-start with stored limit
+                    await initSession(userId, userProgress.dailyLimit);
+                } else {
+                    setIsSetupMode(true);
+                }
+            } else if (reviewQueue.length > 0) {
+                setIsSetupMode(false);
+            }
+        };
+
+        checkAndStart();
+    }, [reviewQueue.length, phase, isLoading, userProgress?.dailyLimit]);
+
+    const handleStart = async () => {
+        const userId = currentUser?.userId || 'user_123';
+        await initSession(userId, dailyLimit);
+        setIsSetupMode(false);
+    };
+
+    const handleClose = () => {
+        Alert.alert(
+            t('learning.endSessionTitle', '结束学习?'),
+            t('learning.endSessionMessage', '当前进度将不会保存'),
+            [
+                { text: t('common.cancel', '取消'), style: "cancel" },
+                {
+                    text: t('learning.quit', '退出'),
+                    style: "destructive",
+                    onPress: () => {
+                        resetSession();
+                        router.back();
+                    }
+                }
+            ]
+        );
+    };
+
+    const handleLimitChange = (value: number) => {
+        setDailyLimit(Math.round(value));
+    };
+
+    // Render Loading
+    if (isLoading) {
+        return (
+            <SafeAreaView style={styles.container}>
+                <View style={styles.centerContent}>
+                    <Text>{t('common.loading', '加载中...')}</Text>
+                </View>
+            </SafeAreaView>
+        );
+    }
+
+    // Render Setup Mode
+    if (isSetupMode) {
+        return (
+            <SafeAreaView style={styles.container}>
+                <ThaiPatternBackground opacity={0.1} />
+                <View style={styles.header}>
+                    <Pressable onPress={() => router.back()} style={styles.closeButton}>
+                        <X size={24} color={Colors.taupe} />
+                    </Pressable>
+                </View>
+
+                <View style={styles.setupContainer}>
+                    <Text style={styles.setupTitle}>{t('learning.setupTitle', '今日学习计划')}</Text>
+                    <Text style={styles.setupSubtitle}>{t('learning.setupSubtitle', '选择今天要学习/复习的字母数量')}</Text>
+
+                    <View style={styles.limitControl}>
+                        <Text style={styles.limitValue}>{dailyLimit}</Text>
+                        <Slider
+                            style={styles.slider}
+                            minimumValue={5}
+                            maximumValue={500}
+                            step={5}
+                            value={dailyLimit}
+                            onValueChange={handleLimitChange}
+                            minimumTrackTintColor={Colors.thaiGold}
+                            maximumTrackTintColor={Colors.sand}
+                            thumbTintColor={Colors.ink}
+                        />
+                        <View style={styles.limitLabels}>
+                            <Text style={styles.limitLabel}>5</Text>
+                            <Text style={styles.limitLabel}>500</Text>
+                        </View>
+                    </View>
+
+                    <Pressable style={styles.startButton} onPress={handleStart}>
+                        <Text style={styles.startButtonText}>{t('learning.start', '开始学习')}</Text>
+                    </Pressable>
+                </View>
+            </SafeAreaView>
+        );
+    }
+
+    // Render Completion
+    if (phase === LearningPhase.COMPLETED) {
+        return (
+            <SafeAreaView style={styles.container}>
+                <View style={styles.centerContent}>
+                    <Text style={styles.completeTitle}>{t('learning.sessionComplete', '今日学习完成!')}</Text>
+                    <Pressable style={styles.startButton} onPress={() => router.back()}>
+                        <Text style={styles.startButtonText}>{t('learning.backToHome', '返回首页')}</Text>
+                    </Pressable>
+                </View>
+            </SafeAreaView>
+        );
+    }
+
+    if (!currentAlphabet) return null;
+
+    // Determine which view to show
+    // Show Intro if: It's a new letter (or treated as new) AND hasn't been viewed yet AND it's the first attempt
+    // Note: We might want to show intro for "Review" items too if they are "New" in terms of "First time seeing today"? 
+    // But usually Review items are just reviewed.
+    // The prompt says: "If there are letters to review, review first... New letters... enter review component"
+    // So Review items -> Review View directly.
+    // New items -> Learning View -> Review View.
+
+    const isNew = !currentAlphabet.memoryState || currentAlphabet.memoryState.isNew;
+    const showIntro = isNew && !hasViewedIntro && currentAlphabet.currentAttempts === 0;
+
+    // Progress Calculation
+    const progress = totalCount > 0 ? (completedCount / totalCount) * 100 : 0;
 
     return (
-        <SafeAreaView edges={['top']} style={styles.container}>
-            <ThaiPatternBackground opacity={0.08} />
+        <SafeAreaView edges={['top', 'bottom']} style={styles.container}>
+            <ThaiPatternBackground opacity={0.05} />
 
             {/* Header */}
             <View style={styles.header}>
-                <Pressable onPress={() => router.back()} style={styles.backButton}>
-                    <ChevronLeft size={28} color={Colors.ink} />
+                <Pressable onPress={handleClose} style={styles.closeButton}>
+                    <X size={24} color={Colors.taupe} />
                 </Pressable>
-                <Text style={styles.headerTitle}>泰语字母学习</Text>
-                <View style={{ width: 28 }} />
+
+                <View style={styles.progressBarContainer}>
+                    <View style={[styles.progressBarFill, { width: `${progress}%` }]} />
+                </View>
+
+                <View style={{ width: 40 }} />
             </View>
 
-            <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-                {/* Progress Section */}
-                <View style={styles.progressCard}>
-                    <View style={styles.progressHeader}>
-                        <Text style={styles.progressTitle}>学习进度</Text>
-                        <Trophy size={20} color={Colors.thaiGold} />
-                    </View>
-
-                    <View style={styles.statsRow}>
-                        <View style={styles.statItem}>
-                            <Text style={styles.statValue}>
-                                {masteredCount} <Text style={styles.statTotal}>/ {totalCount}</Text>
-                            </Text>
-                            <Text style={styles.statLabel}>已掌握</Text>
-                        </View>
-                        <View style={styles.divider} />
-                        <View style={styles.statItem}>
-                            <Text style={styles.statValue}>{accuracy}%</Text>
-                            <Text style={styles.statLabel}>正确率</Text>
-                        </View>
-                    </View>
-
-                    <View style={styles.progressBarBg}>
-                        <View
-                            style={[
-                                styles.progressBarFill,
-                                { width: `${getProgressPercentage()}%` }
-                            ]}
-                        />
-                    </View>
-                </View>
-
-                {/* Categories Grid */}
-                <Text style={styles.sectionTitle}>字母分类</Text>
-                <View style={styles.gridContainer}>
-                    {categories.map((cat) => (
-                        <Pressable
-                            key={cat.id}
-                            style={styles.categoryCard}
-                            onPress={() => router.push({
-                                pathname: '/learning/alphabet/list',
-                                params: { category: cat.id, title: cat.label }
-                            })}
-                        >
-                            <View style={[styles.iconPlaceholder, { backgroundColor: `${cat.color}20` }]}>
-                                <Text style={[styles.iconText, { color: cat.color }]}>{cat.label.charAt(0)}</Text>
-                            </View>
-                            <View style={styles.categoryInfo}>
-                                <Text style={styles.categoryName}>{cat.label}</Text>
-                                <Text style={styles.categorySub}>{cat.subLabel}</Text>
-                            </View>
-                            <View style={styles.countBadge}>
-                                <Text style={styles.countText}>{cat.count}</Text>
-                            </View>
-                        </Pressable>
-                    ))}
-                </View>
-
-                {/* Daily Training */}
-                <Text style={styles.sectionTitle}>每日训练</Text>
-                <View style={styles.actionButtons}>
-                    <Pressable
-                        style={styles.actionButton}
-                        onPress={() => router.push('/learning/alphabet/training')}
-                    >
-                        <View style={[styles.actionIcon, { backgroundColor: '#E3F2FD' }]}>
-                            <PlayCircle size={24} color="#2196F3" />
-                        </View>
-                        <View>
-                            <Text style={styles.actionTitle}>今日拼读训练</Text>
-                            <Text style={styles.actionDesc}>强化发音记忆</Text>
-                        </View>
-                    </Pressable>
-
-                    <Pressable
-                        style={styles.actionButton}
-                        onPress={() => router.push('/learning/alphabet/review')}
-                    >
-                        <View style={[styles.actionIcon, { backgroundColor: '#FFF3E0' }]}>
-                            <Star size={24} color="#FF9800" />
-                        </View>
-                        <View>
-                            <Text style={styles.actionTitle}>今日字母复习</Text>
-                            <Text style={styles.actionDesc}>巩固已学内容</Text>
-                        </View>
-                    </Pressable>
-                </View>
-
-            </ScrollView>
-
-            {/* Bottom Button */}
-            <View style={styles.footer}>
-                <Pressable
-                    style={[styles.unlockButton, !isAllMastered && styles.unlockButtonDisabled]}
-                    disabled={!isAllMastered}
-                    onPress={() => {
-                        if (isAllMastered) {
-                            // Navigate to word learning or show success
-                            router.push('/learning/alphabet/success');
-                        }
-                    }}
-                >
-                    {!isAllMastered && <Lock size={20} color={Colors.taupe} style={{ marginRight: 8 }} />}
-                    <Text style={[styles.unlockButtonText, !isAllMastered && styles.unlockButtonTextDisabled]}>
-                        {isAllMastered ? '进入单词学习' : '通关后解锁单词学习'}
-                    </Text>
-                </Pressable>
+            {/* Content */}
+            <View style={styles.content}>
+                {showIntro ? (
+                    <AlphabetLearningView
+                        alphabet={currentAlphabet}
+                        onNext={() => setHasViewedIntro(true)}
+                    />
+                ) : (
+                    <AlphabetReviewViewWrapper
+                        key={currentAlphabet.alphabetId}
+                        alphabet={currentAlphabet}
+                        onSubmit={(quality) => {
+                            const userId = currentUser?.userId || 'user_123';
+                            submitResult(userId, quality);
+                        }}
+                    />
+                )}
             </View>
-        </SafeAreaView >
+        </SafeAreaView>
+    );
+}
+
+// Wrapper to handle the logic of ReviewView calling onAnswer then onNext
+// Actually, I need to modify how I use AlphabetReviewView because the store combines "Submit" and "Next".
+// I will wrap it here.
+function AlphabetReviewViewWrapper({ alphabet, onSubmit }: { alphabet: any, onSubmit: (q: any) => void }) {
+    const [quality, setQuality] = useState<any>(null);
+
+    return (
+        <AlphabetReviewView
+            alphabet={alphabet}
+            onAnswer={(q) => setQuality(q)}
+            onNext={() => {
+                if (quality) onSubmit(quality);
+            }}
+        />
     );
 }
 
@@ -157,222 +240,98 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: Colors.paper,
     },
+    centerContent: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
     header: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        paddingHorizontal: 20,
-        paddingVertical: 16,
+        paddingHorizontal: 16,
+        paddingVertical: 12,
     },
-    backButton: {
-        padding: 4,
+    closeButton: {
+        padding: 8,
     },
-    headerTitle: {
-        fontFamily: Typography.notoSerifBold,
-        fontSize: 20,
-        color: Colors.ink,
-    },
-    scrollContent: {
-        paddingHorizontal: 20,
-        paddingBottom: 100,
-    },
-    progressCard: {
-        backgroundColor: Colors.white,
-        borderRadius: 20,
-        padding: 20,
-        marginBottom: 24,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.05,
-        shadowRadius: 12,
-        elevation: 3,
-        borderWidth: 1,
-        borderColor: Colors.sand,
-    },
-    progressHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 16,
-    },
-    progressTitle: {
-        fontFamily: Typography.notoSerifBold,
-        fontSize: 16,
-        color: Colors.ink,
-    },
-    statsRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-around',
-        alignItems: 'center',
-        marginBottom: 16,
-    },
-    statItem: {
-        alignItems: 'center',
-    },
-    statValue: {
-        fontFamily: Typography.playfairBold,
-        fontSize: 24,
-        color: Colors.ink,
-        marginBottom: 4,
-    },
-    statTotal: {
-        fontSize: 14,
-        color: Colors.taupe,
-        fontFamily: Typography.notoSerifRegular,
-    },
-    statLabel: {
-        fontFamily: Typography.notoSerifRegular,
-        fontSize: 12,
-        color: Colors.taupe,
-    },
-    divider: {
-        width: 1,
-        height: 30,
-        backgroundColor: Colors.sand,
-    },
-    progressBarBg: {
-        height: 8,
-        backgroundColor: '#F0F0F0',
-        borderRadius: 4,
+    progressBarContainer: {
+        flex: 1,
+        height: 6,
+        backgroundColor: 'rgba(229, 226, 219, 0.5)',
+        borderRadius: 3,
+        marginHorizontal: 16,
         overflow: 'hidden',
     },
     progressBarFill: {
         height: '100%',
         backgroundColor: Colors.thaiGold,
-        borderRadius: 4,
+        borderRadius: 3,
     },
-    sectionTitle: {
-        fontFamily: Typography.notoSerifBold,
-        fontSize: 18,
-        color: Colors.ink,
-        marginBottom: 16,
-        marginTop: 8,
-    },
-    gridContainer: {
-        gap: 12,
-        marginBottom: 24,
-    },
-    categoryCard: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: Colors.white,
-        padding: 16,
-        borderRadius: 16,
-        borderWidth: 1,
-        borderColor: Colors.sand,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.03,
-        shadowRadius: 8,
-        elevation: 2,
-    },
-    iconPlaceholder: {
-        width: 48,
-        height: 48,
-        borderRadius: 12,
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginRight: 16,
-    },
-    iconText: {
-        fontFamily: Typography.notoSerifBold,
-        fontSize: 20,
-    },
-    categoryInfo: {
+    content: {
         flex: 1,
     },
-    categoryName: {
-        fontFamily: Typography.notoSerifBold,
-        fontSize: 16,
-        color: Colors.ink,
-        marginBottom: 4,
-    },
-    categorySub: {
-        fontFamily: Typography.notoSerifRegular,
-        fontSize: 12,
-        color: Colors.taupe,
-    },
-    countBadge: {
-        backgroundColor: '#F5F5F5',
-        paddingHorizontal: 10,
-        paddingVertical: 4,
-        borderRadius: 12,
-    },
-    countText: {
-        fontFamily: Typography.notoSerifBold,
-        fontSize: 12,
-        color: Colors.taupe,
-    },
-    actionButtons: {
-        flexDirection: 'row',
-        gap: 12,
-    },
-    actionButton: {
+    setupContainer: {
         flex: 1,
-        backgroundColor: Colors.white,
-        padding: 16,
-        borderRadius: 16,
-        borderWidth: 1,
-        borderColor: Colors.sand,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.03,
-        shadowRadius: 8,
-        elevation: 2,
-    },
-    actionIcon: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
+        padding: 24,
         alignItems: 'center',
         justifyContent: 'center',
+    },
+    setupTitle: {
+        fontFamily: Typography.playfairBold,
+        fontSize: 28,
+        color: Colors.ink,
         marginBottom: 12,
     },
-    actionTitle: {
-        fontFamily: Typography.notoSerifBold,
-        fontSize: 14,
-        color: Colors.ink,
-        marginBottom: 4,
-    },
-    actionDesc: {
+    setupSubtitle: {
         fontFamily: Typography.notoSerifRegular,
-        fontSize: 11,
+        fontSize: 16,
+        color: Colors.taupe,
+        marginBottom: 48,
+        textAlign: 'center',
+    },
+    limitControl: {
+        width: '100%',
+        marginBottom: 48,
+        alignItems: 'center',
+    },
+    limitValue: {
+        fontFamily: Typography.sarabunBold,
+        fontSize: 48,
+        color: Colors.thaiGold,
+        marginBottom: 24,
+    },
+    slider: {
+        width: '100%',
+        height: 40,
+    },
+    limitLabels: {
+        width: '100%',
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginTop: 8,
+    },
+    limitLabel: {
+        fontFamily: Typography.notoSerifRegular,
         color: Colors.taupe,
     },
-    footer: {
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        padding: 20,
-        backgroundColor: Colors.paper,
-        borderTopWidth: 1,
-        borderTopColor: Colors.sand,
-    },
-    unlockButton: {
-        flexDirection: 'row',
+    startButton: {
         backgroundColor: Colors.ink,
-        height: 56,
-        borderRadius: 28,
+        paddingHorizontal: 48,
+        paddingVertical: 16,
+        borderRadius: 12,
+        width: '100%',
         alignItems: 'center',
-        justifyContent: 'center',
-        shadowColor: Colors.ink,
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.2,
-        shadowRadius: 8,
-        elevation: 4,
     },
-    unlockButtonDisabled: {
-        backgroundColor: '#E0E0E0',
-        shadowOpacity: 0,
-        elevation: 0,
-    },
-    unlockButtonText: {
+    startButtonText: {
         fontFamily: Typography.notoSerifBold,
-        fontSize: 16,
+        fontSize: 18,
         color: Colors.white,
     },
-    unlockButtonTextDisabled: {
-        color: Colors.taupe,
+    completeTitle: {
+        fontFamily: Typography.playfairBold,
+        fontSize: 24,
+        color: Colors.ink,
+        marginBottom: 24,
     },
 });

@@ -265,11 +265,11 @@ export const VOCABULARY_ENDPOINTS = {
 // ==================== 统一记忆引擎 API ====================
 export const MEMORY_ENDPOINTS = {
   GET_TODAY_MEMORIES: {
-    cloudbase: '/learn-vocab',  // 云函数名
+    cloudbase: '/memory-engine',  // 云函数名
     java: '/api/memory/today'
   } as EndpointMap,
   SUBMIT_MEMORY_RESULT: {
-    cloudbase: '/learn-vocab',
+    cloudbase: '/memory-engine',
     java: '/api/memory/result'
   } as EndpointMap,
 };

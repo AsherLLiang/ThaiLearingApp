@@ -1,397 +1,540 @@
 // src/stores/alphabetStore.ts
 
 /**
- * 统一字母学习 Store
+ * 字母学习Store
  * 
- * 设计理念：
- * 1. 合并本地进度追踪和学习会话管理
- * 2. 字母数据存储在本地 JSON，无需云端获取
- * 3. 学习结果提交到统一记忆引擎（后端）
- * 4. 强制完成字母学习才能解锁单词模块
+ * 架构说明:
+ * - 独立的Store,不与单词/句子Store共用
+ * - 但可以与单词/句子Store共用UI组件
+ * - 通过entityType区分不同的学习内容
+ * 
+ * 后端集成:
+ * - Cloud Function: /learn-vocab (通过cloudFunctionAdapter调用)
+ * - Action: getTodayMemories (entityType: 'letter')
+ * - Action: submitMemoryResult (entityType: 'letter')
+ * 
+ * 数据流:
+ * initSession() -> callCloudFunction('getTodayMemories') -> 
+ * letters集合 + memory_status -> AlphabetLearningState[]
  */
 
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { apiClient } from '@/src/utils/apiClient';
 import { API_ENDPOINTS } from '@/src/config/api.endpoints';
-import { useUserStore } from './userStore';
-import { getAllLetters, getLetterById } from '@/src/utils/letterData';
+
+// ==================== 类型导入 ====================
 import type { Letter } from '@/src/entities/types/letter.types';
-import type { MemoryStatus } from '@/src/entities/types/memory.types';
-import type {
-    AlphabetLearningState,
-    UnlockInfo
-} from '@/src/entities/types/alphabet.types';
 import { LearningPhase } from '@/src/entities/enums/LearningPhase.enum';
 import {
     QualityButton,
-    QUALITY_SCORE_MAP,
-    ATTEMPTS_INCREMENT_MAP,
+    QUALITY_SCORE_MAP
 } from '@/src/entities/enums/QualityScore.enum';
+
+// ==================== 工具函数导入 ====================
 import { callCloudFunction } from '@/src/utils/cloudFunctionAdapter';
+import {
+    getLetterById,
+    getLetterDisplayInfo
+} from '@/src/utils/letterData';
 
-interface AlphabetStore {
-    // ===== 本地进度数据 =====
-    masteredIds: string[];              // 已掌握的字母 ID
-    accuracy: number;                   // 正确率
+// ==================== 常量定义 ====================
 
-    // ===== 学习会话数据 =====
-    phase: LearningPhase;               // 当前学习阶段
-    reviewQueue: AlphabetLearningState[]; // 学习队列
-    currentAlphabet: AlphabetLearningState | null; // 当前字母
+/**
+ * 质量按钮映射到后端质量文本
+ * 后端期望: '陌生' | '模糊' | '记得'
+ */
+const QUALITY_TEXT_MAP: Record<QualityButton, string> = {
+    [QualityButton.FORGET]: '陌生',  // 1分
+    [QualityButton.FUZZY]: '模糊',   // 3分
+    [QualityButton.KNOW]: '记得'     // 5分
+};
 
-    // ===== 解锁状态 =====
-    letterProgress: number;             // 字母学习进度 (0-100)
-    wordUnlocked: boolean;              // 是否解锁单词学习
+// ==================== 接口定义 ====================
 
-    // ===== 测试相关 =====
-    testData: any | null;
-    testAnswers: string[];
-    testResult: any | null;
+/**
+ * 字母学习状态
+ * 对应单个字母在会话中的学习状态
+ */
+export interface AlphabetLearningState {
+    // 基础信息
+    alphabetId: string;             // 字母ID (对应Letter._id)
+    thaiChar: string;               // 泰文字符
+    category: string;               // 类别 (如: "mid_consonant")
+    pronunciation: string;          // 发音
+    example: string;                // 例词 (包含中文)
+    audioPath: string;              // 音频URL
 
-    // ===== 计算属性（Getters）=====
-    getMasteredCount: () => number;
-    getTotalCount: () => number;
-    getProgressPercentage: () => number;
-    isLetterMastered: (letterId: string) => boolean;
+    // 学习进度
+    currentAttempts: number;        // 当前尝试次数
+    requiredAttempts: number;       // 需要达到的次数 (默认3)
+    qualityHistory: number[];       // 质量评分历史
+    isCompleted: boolean;           // 是否完成
+    timestamp: string;              // 最后更新时间
 
-    // ===== 本地进度操作 =====
-    markAsMastered: (letterId: string) => void;
-    updateAccuracy: (accuracy: number) => void;
-    resetProgress: () => void;
+    // 后端记忆状态 (可选)
+    memoryState?: MemoryStatus;
 
-    // ===== 学习会话操作 =====
-    initSession: (userId: string) => Promise<void>;
-    submitAnswer: (quality: QualityButton) => Promise<void>;
-    moveToNext: () => void;
-    requestSkip: () => void;
-
-    // ===== 测试操作 =====
-    startTest: () => Promise<void>;
-    submitTest: (answers: string[]) => Promise<void>;
-    finishSession: () => void;
+    // 完整Letter对象 (用于访问所有字段)
+    letterData?: Letter;
 }
 
-export const useAlphabetStore = create<AlphabetStore>()(
+/**
+ * 后端记忆状态
+ */
+export interface MemoryStatus {
+    masteryLevel: number;           // 掌握级别
+    reviewStage: number;            // 复习阶段
+    correctCount: number;           // 正确次数
+    wrongCount: number;             // 错误次数
+    streakCorrect: number;          // 连续正确次数
+    nextReviewAt: string;           // 下次复习时间
+    isNew: boolean;                 // 是否新内容
+}
+
+/**
+ * 解锁信息
+ */
+export interface UnlockInfo {
+    letterProgress: number;         // 字母学习进度 (0-100)
+    wordUnlocked: boolean;          // 是否解锁单词学习
+    unlocked?: boolean;             // 是否刚刚解锁
+}
+
+/**
+ * 今日字母响应 (后端返回格式)
+ */
+interface TodayLettersResponse {
+    items: Array<{
+        _id: string;
+        // Letter的所有字段
+        thaiChar: string;
+        nameThai: string;
+        type: string;
+        // ...
+        memoryState?: MemoryStatus;
+    }>;
+    summary: {
+        total: number;
+        reviewCount: number;
+        newCount: number;
+        entityType: string;
+    };
+}
+
+// ==================== 辅助函数 ====================
+
+/**
+ * 将Letter转换为AlphabetLearningState
+ * ⭐ 正确使用新字段
+ */
+function letterToLearningState(letter: Letter): AlphabetLearningState {
+    const displayInfo = getLetterDisplayInfo(letter);
+
+    return {
+        alphabetId: letter._id,
+        thaiChar: letter.thaiChar,
+
+        // ✅ 使用category而不是简单的type判断
+        category: letter.category,
+
+        // ✅ 优先使用letterNamePronunciation
+        pronunciation: displayInfo.pronunciation,
+
+        // ✅ 包含中文含义
+        example: displayInfo.example,
+
+        // ✅ 优先使用fullSoundUrl
+        audioPath: displayInfo.audioUrl,
+
+        // 学习进度
+        currentAttempts: 0,
+        requiredAttempts: 3,
+        qualityHistory: [],
+        isCompleted: false,
+        timestamp: new Date().toISOString(),
+
+        // ⭐ 保留完整Letter对象
+        letterData: letter
+    };
+}
+
+// ==================== Store接口定义 ====================
+
+interface AlphabetStoreState {
+    // ===== 会话状态 =====
+    phase: LearningPhase;
+    reviewQueue: AlphabetLearningState[];
+    currentAlphabet: AlphabetLearningState | null;
+    currentIndex: number;
+
+    // ===== 统计信息 =====
+    completedCount: number;
+    totalCount: number;
+    unlockInfo: UnlockInfo | null;
+
+    // ===== 加载状态 =====
+    isLoading: boolean;
+    error: string | null;
+
+    // ===== Actions =====
+
+    /**
+     * 初始化学习会话
+     * 调用后端getTodayMemories获取今日学习内容
+     */
+    initSession: (userId: string, limit?: number) => Promise<void>;
+
+    /**
+     * 提交当前字母的学习结果
+     * 调用后端submitMemoryResult更新记忆状态
+     */
+    submitResult: (userId: string, quality: QualityButton) => Promise<void>;
+
+    /**
+     * 移动到下一个字母
+     */
+    nextAlphabet: () => void;
+
+    /**
+     * 移动到上一个字母
+     */
+    previousAlphabet: () => void;
+
+    /**
+     * 跳转到指定索引
+     */
+    goToIndex: (index: number) => void;
+
+    /**
+     * 重置会话
+     */
+    resetSession: () => void;
+
+    /**
+     * 清除错误
+     */
+    clearError: () => void;
+}
+
+// ==================== Store实现 ====================
+
+export const useAlphabetStore = create<AlphabetStoreState>()(
     persist(
         (set, get) => ({
             // ===== 初始状态 =====
-            masteredIds: [],
-            accuracy: 0,
             phase: LearningPhase.REVIEW,
             reviewQueue: [],
             currentAlphabet: null,
-            letterProgress: 0,
-            wordUnlocked: false,
-            testData: null,
-            testAnswers: [],
-            testResult: null,
+            currentIndex: 0,
+            completedCount: 0,
+            totalCount: 0,
+            unlockInfo: null,
+            isLoading: false,
+            error: null,
 
-            // ===== 计算属性 =====
-            getMasteredCount: () => get().masteredIds.length,
+            // ===== Actions实现 =====
 
-            getTotalCount: () => getAllLetters().length,
-
-            getProgressPercentage: () => {
-                const total = get().getTotalCount();
-                const mastered = get().getMasteredCount();
-                return total > 0 ? Math.round((mastered / total) * 100) : 0;
-            },
-
-            isLetterMastered: (letterId: string) => {
-                return get().masteredIds.includes(letterId);
-            },
-
-            // ===== 本地进度操作 =====
-            markAsMastered: (letterId: string) => {
-                const { masteredIds } = get();
-                if (!masteredIds.includes(letterId)) {
-                    set({
-                        masteredIds: [...masteredIds, letterId],
-                        letterProgress: get().getProgressPercentage()
-                    });
-                }
-            },
-
-            updateAccuracy: (accuracy: number) => {
-                set({ accuracy });
-            },
-
-            resetProgress: () => {
+            /**
+             * 初始化学习会话
+             */
+            initSession: async (userId: string, limit: number = 20) => {
                 set({
-                    masteredIds: [],
-                    accuracy: 0,
-                    letterProgress: 0,
-                    wordUnlocked: false,
+                    isLoading: true,
+                    error: null
                 });
-            },
 
-            // ===== 初始化学习会话 =====
-            initSession: async (userId: string) => {
                 try {
-                    // 方案 1: 从后端获取今日任务（使用统一记忆引擎）
-                    // 后端会根据记忆曲线返回今天需要复习的字母
-                    const result = await callCloudFunction<{
-                        items: Array<{
-                            _id: string;
-                            thaiChar: string;
-                            pronunciation: string;
-                            audioPath?: string;
-                            memoryState: MemoryStatus;
-                        }>;
-                        unlockInfo: { wordUnlocked: boolean };
-                    }>(
-                        'getTodayMemories',
+                    // ⭐ 使用cloudFunctionAdapter调用云函数
+                    const response = await callCloudFunction<TodayLettersResponse>(
+                        'getTodayMemories',  // action
                         {
                             userId,
-                            entityType: 'letter',
-                            limit: 10,
+                            entityType: 'letter',  // ⭐ 指定为字母
+                            limit,
+                            includeNew: true
+                        },
+                        {
+                            endpoint: API_ENDPOINTS.MEMORY.GET_TODAY_MEMORIES.cloudbase
                         }
                     );
 
-                    if (result.success && result.data?.items?.length) {
-                        // 从后端返回的数据构建学习队列
-                        const reviewQueue: AlphabetLearningState[] = result.data.items.map(
-                            (item: any) => {
-                                const letter = getLetterById(item.entityId);
-                                return {
-                                    alphabetId: item.entityId,
-                                    thaiChar: letter?.thaiChar || '',
-                                    category: letter?.type === 'vowel' ? 'vowel' : 'consonant',
-                                    pronunciation: letter?.initialSound || '',
-                                    example: letter?.exampleWord || '',
-                                    audioPath: letter?.audioPath || '',
-                                    currentAttempts: 0,
-                                    requiredAttempts: 3,
-                                    qualityHistory: [],
-                                    isCompleted: false,
-                                    timestamp: new Date().toISOString(),
-                                    memoryState: item.memoryState,
-                                };
-                            }
-                        );
-
-                        set({
-                            phase: LearningPhase.REVIEW,
-                            reviewQueue,
-                            currentAlphabet: reviewQueue[0] || null,
-                            wordUnlocked: (result.data as any).unlockInfo?.wordUnlocked || false,
-                        });
-                    } else {
-                        // 方案 2: 如果后端没有数据，使用本地逻辑
-                        // 选择未掌握的字母作为今日任务
-                        const allLetters = getAllLetters();
-                        const { masteredIds } = get();
-                        const unmasteredLetters = allLetters.filter(
-                            (letter) => !masteredIds.includes(letter._id)
-                        );
-
-                        // 随机选择 10 个未掌握的字母
-                        const selectedLetters = unmasteredLetters
-                            .sort(() => Math.random() - 0.5)
-                            .slice(0, 10);
-
-                        const reviewQueue: AlphabetLearningState[] = selectedLetters.map(
-                            (letter) => ({
-                                alphabetId: letter._id,
-                                thaiChar: letter.thaiChar,
-                                category: letter.type === 'vowel' ? 'vowel' : 'consonant',
-                                pronunciation: letter.initialSound,
-                                example: letter.exampleWord,
-                                audioPath: letter.audioPath,
-                                currentAttempts: 0,
-                                requiredAttempts: 3,
-                                qualityHistory: [],
-                                isCompleted: false,
-                                timestamp: new Date().toISOString(),
-                            })
-                        );
-
-                        set({
-                            phase: LearningPhase.REVIEW,
-                            reviewQueue,
-                            currentAlphabet: reviewQueue[0] || null,
-                        });
+                    // 检查响应
+                    console.log('🔍 initSession response:', JSON.stringify(response, null, 2));
+                    if (!response.success) {
+                        throw new Error(response.error || '获取学习内容失败');
                     }
-                } catch (error) {
-                    console.error('initSession error:', error);
-                    // 降级到本地模式
-                    const allLetters = getAllLetters();
-                    const { masteredIds } = get();
-                    const unmasteredLetters = allLetters.filter(
-                        (letter) => !masteredIds.includes(letter._id)
-                    );
 
-                    const selectedLetters = unmasteredLetters.slice(0, 10);
-                    const reviewQueue: AlphabetLearningState[] = selectedLetters.map(
-                        (letter) => ({
-                            alphabetId: letter._id,
-                            thaiChar: letter.thaiChar,
-                            category: letter.type === 'vowel' ? 'vowel' : 'consonant',
-                            pronunciation: letter.initialSound,
-                            example: letter.exampleWord,
-                            audioPath: letter.audioPath,
-                            currentAttempts: 0,
-                            requiredAttempts: 3,
-                            qualityHistory: [],
-                            isCompleted: false,
-                            timestamp: new Date().toISOString(),
+                    // Robust data extraction
+                    const rawData = response.data || response;
+                    // Check for items in various possible locations
+                    // 1. response.data.items (Standard)
+                    // 2. response.items (Unwrapped)
+                    // 3. response.data.data.items (Double wrapped)
+                    const items = (rawData as any).items ||
+                        ((rawData as any).data && (rawData as any).data.items) ||
+                        ((response as any).items);
+
+                    if (!items) {
+                        console.error('❌ Invalid data structure. Response:', JSON.stringify(response, null, 2));
+                        throw new Error(`响应数据格式错误: Unable to find items in response`);
+                    }
+
+                    // 如果没有学习内容
+                    if (items.length === 0) {
+                        set({
+                            phase: LearningPhase.COMPLETED,
+                            reviewQueue: [],
+                            currentAlphabet: null,
+                            totalCount: 0,
+                            isLoading: false
+                        });
+                        return;
+                    }
+
+                    // 将后端返回的数据转换为学习状态
+                    const reviewQueue: AlphabetLearningState[] = (items as any[])
+                        .map((item: any) => {
+                            // 从letters集合获取完整的Letter数据
+                            const letter = getLetterById(item._id);
+                            if (!letter) {
+                                console.warn(`Letter not found: ${item._id}`);
+                                return null;
+                            }
+
+                            // 转换为学习状态
+                            const state = letterToLearningState(letter);
+
+                            // 保存后端返回的记忆状态
+                            if (item.memoryState) {
+                                state.memoryState = item.memoryState;
+                            }
+
+                            return state;
                         })
-                    );
+                        .filter((item: any): item is AlphabetLearningState => item !== null);
 
+                    // 更新store状态
                     set({
                         phase: LearningPhase.REVIEW,
                         reviewQueue,
                         currentAlphabet: reviewQueue[0] || null,
+                        currentIndex: 0,
+                        totalCount: reviewQueue.length,
+                        completedCount: 0,
+                        isLoading: false
+                    });
+
+                } catch (error) {
+                    console.error('❌ initSession error:', error);
+                    set({
+                        error: error instanceof Error ? error.message : '加载失败',
+                        isLoading: false
                     });
                 }
             },
 
-            // ===== 提交答案 =====
-            submitAnswer: async (quality: QualityButton) => {
-                const { currentAlphabet, reviewQueue } = get();
-                if (!currentAlphabet) return;
+            /**
+             * 提交学习结果
+             */
+            submitResult: async (userId: string, quality: QualityButton) => {
+                const { currentAlphabet, currentIndex, reviewQueue } = get();
 
-                const qualityScore = QUALITY_SCORE_MAP[quality];
-                const attemptsIncrement = ATTEMPTS_INCREMENT_MAP[quality];
+                if (!currentAlphabet) {
+                    console.warn('No current alphabet to submit');
+                    return;
+                }
 
-                // 更新当前字母状态
-                const updatedAlphabet: AlphabetLearningState = {
-                    ...currentAlphabet,
-                    currentAttempts: currentAlphabet.currentAttempts + attemptsIncrement,
-                    qualityHistory: [...currentAlphabet.qualityHistory, qualityScore],
-                    timestamp: new Date().toISOString(),
-                };
+                set({ isLoading: true, error: null });
 
-                // 判断是否完成
-                if (updatedAlphabet.currentAttempts >= 3) {
-                    updatedAlphabet.isCompleted = true;
-                    updatedAlphabet.currentAttempts = 3;
+                try {
+                    // 准备提交数据
+                    const qualityText = QUALITY_TEXT_MAP[quality];  // '陌生'/'模糊'/'记得'
 
-                    // 标记为已掌握（本地）
-                    get().markAsMastered(currentAlphabet.alphabetId);
-
-                    // 提交到后端记忆引擎
-                    const avgQuality = Math.round(
-                        updatedAlphabet.qualityHistory.reduce((a, b) => a + b, 0) /
-                        updatedAlphabet.qualityHistory.length
+                    // ⭐ 使用cloudFunctionAdapter调用云函数
+                    const response = await callCloudFunction(
+                        'submitMemoryResult',  // action
+                        {
+                            userId,
+                            entityType: 'letter',  // ⭐ 指定为字母
+                            entityId: currentAlphabet.alphabetId,
+                            quality: qualityText  // 后端期望文本,不是数字
+                        },
+                        {
+                            endpoint: API_ENDPOINTS.MEMORY.SUBMIT_MEMORY_RESULT.cloudbase
+                        }
                     );
 
-                    const endpoint = API_ENDPOINTS.MEMORY.SUBMIT_MEMORY_RESULT;
-                    apiClient
-                        .post(endpoint, {
-                            userId: useUserStore.getState().currentUser?.userId,
-                            entityType: 'alphabet',
-                            entityId: currentAlphabet.alphabetId,
-                            quality: avgQuality,
-                        })
-                        .then((result: any) => {
-                            if (result.data?.unlockInfo?.unlocked) {
-                                set({ wordUnlocked: true });
-                                alert('🎉 恭喜！字母学习完成，单词模块已解锁！');
-                            }
-                        })
-                        .catch((err: any) => console.error('提交失败:', err));
-                }
-
-                // 更新队列
-                const currentIndex = reviewQueue.findIndex(
-                    (a) => a.alphabetId === currentAlphabet.alphabetId
-                );
-                const newQueue = [...reviewQueue];
-                newQueue[currentIndex] = updatedAlphabet;
-
-                set({ reviewQueue: newQueue });
-
-                // 自动跳转
-                get().moveToNext();
-            },
-
-            // ===== 移动到下一个字母 =====
-            moveToNext: () => {
-                const { reviewQueue, letterProgress, wordUnlocked } = get();
-                const nextAlphabet = reviewQueue.find((a) => !a.isCompleted);
-
-                if (nextAlphabet) {
-                    set({ currentAlphabet: nextAlphabet });
-                } else {
-                    if (letterProgress >= 95 || wordUnlocked) {
-                        set({ phase: LearningPhase.COMPLETED });
-                    } else {
-                        set({ phase: LearningPhase.TEST_PROMPT });
+                    if (!response.success) {
+                        throw new Error(response.error || '提交失败');
                     }
-                }
-            },
 
-            // ===== 请求跳过 =====
-            requestSkip: () => {
-                set({ phase: LearningPhase.TEST_PROMPT });
-            },
+                    // 更新当前字母的学习状态
+                    const updatedQueue = [...reviewQueue];
+                    const currentItem = updatedQueue[currentIndex];
 
-            // ===== 开始测试 =====
-            startTest: async () => {
-                try {
-                    const userId = useUserStore.getState().currentUser?.userId;
-                    const endpoint = API_ENDPOINTS.ALPHABET.GET_TEST;
-                    const result = await apiClient.post(endpoint, { userId });
+                    if (currentItem) {
+                        // 获取质量分数 (用于本地统计)
+                        const qualityScore = QUALITY_SCORE_MAP[quality];
 
-                    if (!result.success) {
-                        throw new Error(result.error || '获取测试题失败');
+                        // 更新尝试次数 (根据质量不同增量)
+                        const incrementMap: Record<QualityButton, number> = {
+                            [QualityButton.KNOW]: 3,    // 记得: +3 (直接完成)
+                            [QualityButton.FUZZY]: 1,   // 模糊: +1
+                            [QualityButton.FORGET]: 2   // 陌生: +2
+                        };
+                        currentItem.currentAttempts += incrementMap[quality];
+
+                        // 更新质量历史
+                        currentItem.qualityHistory.push(qualityScore);
+
+                        // 检查是否完成
+                        if (currentItem.currentAttempts >= currentItem.requiredAttempts) {
+                            currentItem.isCompleted = true;
+                        }
+
+                        // 更新时间戳
+                        currentItem.timestamp = new Date().toISOString();
                     }
+
+                    // 计算已完成数量
+                    const completedCount = updatedQueue.filter(item => item.isCompleted).length;
+
+                    // 自动移动到下一个
+                    const nextIndex = currentIndex + 1;
+                    const hasNext = nextIndex < updatedQueue.length;
 
                     set({
-                        phase: LearningPhase.TESTING,
-                        testData: result.data,
-                        testAnswers: new Array((result.data as any).questions?.length || 0).fill(''),
+                        reviewQueue: updatedQueue,
+                        completedCount,
+                        currentIndex: hasNext ? nextIndex : currentIndex,
+                        currentAlphabet: hasNext ? updatedQueue[nextIndex] : currentAlphabet,
+                        phase: !hasNext && completedCount === updatedQueue.length
+                            ? LearningPhase.COMPLETED
+                            : LearningPhase.REVIEW,
+                        isLoading: false
                     });
+
                 } catch (error) {
-                    console.error('startTest error:', error);
-                }
-            },
-
-            // ===== 提交测试 =====
-            submitTest: async (answers: string[]) => {
-                try {
-                    const userId = useUserStore.getState().currentUser?.userId;
-                    const { testData } = get();
-
-                    const endpoint = API_ENDPOINTS.ALPHABET.SUBMIT_TEST;
-                    const result = await apiClient.post(endpoint, {
-                        userId,
-                        testId: testData.testId,
-                        answers,
-                    });
-
-                    if (!result.success) {
-                        throw new Error(result.error || '提交测试失败');
-                    }
-
+                    console.error('❌ submitResult error:', error);
                     set({
-                        phase: LearningPhase.TEST_RESULT,
-                        testResult: result.data,
-                        wordUnlocked: (result.data as any).unlocked || false,
+                        error: error instanceof Error ? error.message : '提交失败',
+                        isLoading: false
                     });
-                } catch (error) {
-                    console.error('submitTest error:', error);
                 }
             },
 
-            // ===== 完成会话 =====
-            finishSession: () => {
-                set({ phase: LearningPhase.COMPLETED });
+            /**
+             * 下一个字母
+             */
+            nextAlphabet: () => {
+                const { currentIndex, reviewQueue } = get();
+                const nextIndex = Math.min(currentIndex + 1, reviewQueue.length - 1);
+
+                set({
+                    currentIndex: nextIndex,
+                    currentAlphabet: reviewQueue[nextIndex] || null
+                });
             },
+
+            /**
+             * 上一个字母
+             */
+            previousAlphabet: () => {
+                const { currentIndex, reviewQueue } = get();
+                const prevIndex = Math.max(currentIndex - 1, 0);
+
+                set({
+                    currentIndex: prevIndex,
+                    currentAlphabet: reviewQueue[prevIndex] || null
+                });
+            },
+
+            /**
+             * 跳转到指定索引
+             */
+            goToIndex: (index: number) => {
+                const { reviewQueue } = get();
+
+                if (index >= 0 && index < reviewQueue.length) {
+                    set({
+                        currentIndex: index,
+                        currentAlphabet: reviewQueue[index]
+                    });
+                }
+            },
+
+            /**
+             * 重置会话
+             */
+            resetSession: () => {
+                set({
+                    phase: LearningPhase.REVIEW,
+                    reviewQueue: [],
+                    currentAlphabet: null,
+                    currentIndex: 0,
+                    completedCount: 0,
+                    totalCount: 0,
+                    unlockInfo: null,
+                    isLoading: false,
+                    error: null
+                });
+            },
+
+            /**
+             * 清除错误
+             */
+            clearError: () => {
+                set({ error: null });
+            }
         }),
         {
             name: 'alphabet-storage',
             storage: createJSONStorage(() => AsyncStorage),
-            // 只持久化关键数据
+            // 只持久化必要的状态
             partialize: (state) => ({
-                masteredIds: state.masteredIds,
-                accuracy: state.accuracy,
-                letterProgress: state.letterProgress,
-                wordUnlocked: state.wordUnlocked,
-            }),
+                completedCount: state.completedCount,
+                unlockInfo: state.unlockInfo
+            })
         }
     )
 );
+
+// ==================== 导出辅助Hooks ====================
+
+/**
+ * 获取当前学习进度百分比
+ */
+export const useAlphabetProgress = () => {
+    const { completedCount, totalCount } = useAlphabetStore();
+    return totalCount > 0 ? (completedCount / totalCount) * 100 : 0;
+};
+
+/**
+ * 检查是否还有未完成的字母
+ */
+export const useHasRemainingLetters = () => {
+    const { reviewQueue, currentIndex } = useAlphabetStore();
+    return currentIndex < reviewQueue.length - 1;
+};
+
+/**
+ * 获取当前字母的详细信息
+ */
+export const useCurrentLetterDetails = () => {
+    const { currentAlphabet } = useAlphabetStore();
+
+    if (!currentAlphabet?.letterData) {
+        return null;
+    }
+
+    return {
+        letter: currentAlphabet.letterData,
+        displayInfo: getLetterDisplayInfo(currentAlphabet.letterData),
+        progress: {
+            currentAttempts: currentAlphabet.currentAttempts,
+            requiredAttempts: currentAlphabet.requiredAttempts,
+            isCompleted: currentAlphabet.isCompleted
+        }
+    };
+};

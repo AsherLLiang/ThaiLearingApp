@@ -1,4 +1,4 @@
-// src/entities/enum/LearningPhase.enum.ts
+// src/entities/enums/LearningPhase.enum.ts
 
 export enum LearningPhase {
   REVIEW = 'REVIEW',

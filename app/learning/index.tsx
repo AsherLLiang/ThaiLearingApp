@@ -9,6 +9,8 @@ import { Colors } from '@/src/constants/colors';
 import { Typography } from '@/src/constants/typography';
 import { NewWordView, WordData } from '@/src/components/learning/NewWordView';
 import { ReviewWordView } from '@/src/components/learning/ReviewWordView';
+import { useVocabularyStore } from '@/src/stores/vocabularyStore';
+import { useAlphabetStore } from '@/src/stores/alphabetStore';
 
 // --- Mock Data ---
 
@@ -235,6 +237,24 @@ export default function LearningSession() {
     const [currentIndex, setCurrentIndex] = useState(0);
     const [mode, setMode] = useState<SessionMode>('REVIEW');
     const [isSessionComplete, setIsSessionComplete] = useState(false);
+
+    const {
+        reviewQueue: alphaQueue,
+        initSession: initAlphaSession
+    } = useAlphabetStore();
+    const {
+        reviewQueue: vocabQueue,
+        initSession: initVocabSession,
+        currentCourseSource
+    } = useVocabularyStore();
+
+    // Redirect to Alphabet Learning if current course is alphabet
+    useEffect(() => {
+        if (currentCourseSource === 'alphabet') {
+            router.replace('/learning/alphabet');
+        }
+    }, [currentCourseSource]);
+
 
     // Initialize Session
     useEffect(() => {
