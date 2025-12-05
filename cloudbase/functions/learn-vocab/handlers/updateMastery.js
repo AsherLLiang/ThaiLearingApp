@@ -9,11 +9,22 @@
 'use strict';
 
 
-const { progressCollection } = require('../utils/database');
-const { SM2_PARAMS, ErrorCodes } = require('../utils/constants');
-const { successResponse, errorResponse, userNotFoundResponse, vocabularyNotFoundResponse } = require('../utils/response');
-const { validateUser, validateVocabulary, isValidMastery } = require('../utils/validators');
-const { calculateSM2Optimized, generateReviewTimeline } = require('../utils/sm2');
+const { progressCollection } = require('@thai-app/shared').database;
+const {
+  createResponse,
+  successResponse,
+  errorResponse,
+  userNotFoundResponse,
+  vocabularyNotFoundResponse
+} = require('@thai-app/shared').response;
+const {
+  COLLECTIONS,
+  MasteryLevel,
+  SM2_PARAMS
+} = require('@thai-app/shared').constants;
+
+const { validateUser, validateVocabulary, isValidMastery } = require('@thai-app/shared').validators;
+const { calculateSM2Optimized, generateReviewTimeline } = require('@thai-app/shared').sm2;
 
 /**
  * 更新单词掌握状态
@@ -34,44 +45,44 @@ async function updateMastery({ userId, vocabularyId, mastery }) {
   if (!isValidMastery(mastery)) {
     return errorResponse(ErrorCodes.INVALID_MASTERY);
   }
-  
+
   // 验证用户
   const user = await validateUser(userId);
   if (!user) {
     return userNotFoundResponse();
   }
-  
+
   // 验证词汇
   const vocabulary = await validateVocabulary(vocabularyId);
   if (!vocabulary) {
     return vocabularyNotFoundResponse();
   }
-  
+
   // 查找现有进度记录
   const { data: existingProgress } = await progressCollection
     .where({ userId, vocabularyId })
     .limit(1)
     .get();
-  
+
   const now = new Date().toISOString();
   let progressData;
   let isNewRecord = false;
   let newReviewCount;
-  
+
   if (existingProgress.length > 0) {
     // ========== 更新现有记录 ==========
     const current = existingProgress[0];
-    
+
     const sm2Result = calculateSM2Optimized(
       mastery,
       current.intervalDays || 1,
       current.easinessFactor || SM2_PARAMS.INITIAL_EASINESS_FACTOR,
       current.reviewCount || 0
     );
-    
+
     // 计算新的复习次数
     newReviewCount = sm2Result.shouldResetCount ? 1 : (current.reviewCount || 0) + 1;
-    
+
     progressData = {
       mastery,
       lastReviewed: now,
@@ -81,23 +92,23 @@ async function updateMastery({ userId, vocabularyId, mastery }) {
       nextReviewDate: sm2Result.nextReviewDate,
       updatedAt: now,
     };
-    
+
     await progressCollection.doc(current._id).update({
       data: progressData
     });
-    
+
   } else {
     // ========== 创建新记录 ==========
     isNewRecord = true;
     newReviewCount = 1;
-    
+
     const sm2Result = calculateSM2Optimized(
       mastery,
       1,
       SM2_PARAMS.INITIAL_EASINESS_FACTOR,
       0
     );
-    
+
     progressData = {
       userId,
       vocabularyId,
@@ -111,10 +122,10 @@ async function updateMastery({ userId, vocabularyId, mastery }) {
       createdAt: now,
       updatedAt: now,
     };
-    
+
     await progressCollection.add(progressData);
   }
-  
+
   return successResponse({
     vocabularyId,
     mastery,

@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const { createResponse } = require('../utils/response');
+const { createResponse } = require('@thai-app/shared').response;
 
 /**
  * 格式化词汇为列表项
@@ -40,7 +40,7 @@ async function getSkippedWords(db, params) {
 
   try {
     // 2. 检查用户是否完成字母学习
-    const { checkModuleAccess } = require('../utils/memoryEngine');
+    const { checkModuleAccess } = require('@thai-app/shared').memoryEngine;
     const accessResult = await checkModuleAccess(db, userId, 'word');
 
     if (!accessResult.allowed) {

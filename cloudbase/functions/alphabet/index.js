@@ -4,14 +4,31 @@ const db = cloud.database();
 
 
 // ✅ 处理函数
-const { createResponse } = require('../utils/response');
+const { createResponse } = require('@thai-app/shared').response;
 const getLetterTest = require('./handlers/getLetterTest');
 const submitLetterTest = require('./handlers/submitLetterTest');
 const passLetterTest = require('./handlers/passLetterTest');
 
 exports.main = async (event, context) => {
 
-    const { action, userId, answers } = event;
+    // ===== 解析 HTTP 请求 =====
+    let requestData = event;
+
+    // HTTP 触发器：body 可能是字符串或对象
+    if (event.body) {
+        if (typeof event.body === 'string') {
+            try {
+                requestData = JSON.parse(event.body);
+            } catch (e) {
+                console.error('[alphabet] JSON 解析失败:', e.message);
+                return createResponse(false, null, 'Invalid JSON in request body', 'INVALID_JSON');
+            }
+        } else if (typeof event.body === 'object') {
+            requestData = event.body;
+        }
+    }
+
+    const { action, userId, answers } = requestData;
 
     try {
         switch (action) {
