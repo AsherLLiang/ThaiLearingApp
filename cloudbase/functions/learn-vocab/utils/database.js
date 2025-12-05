@@ -9,7 +9,7 @@ const _ = db.command;
 
 const collections = {
   users: db.collection('users'),
-  vocabularies: db.collection('vocabularies'),
+  vocabulary: db.collection('vocabulary'),
   letters: db.collection('letters'),
   sentences: db.collection('sentences'),
   memory_status: db.collection('memory_status'),
@@ -21,7 +21,7 @@ module.exports = {
   db,
   _,
   userCollection: collections.users,
-  vocabularyCollection: collections.vocabularies,
+  vocabularyCollection: collections.vocabulary,
   letterCollection: collections.letters,
   sentenceCollection: collections.sentences,
   memoryStatusCollection: collections.memory_status,

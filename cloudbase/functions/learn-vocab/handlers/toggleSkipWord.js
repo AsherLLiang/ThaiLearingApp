@@ -8,76 +8,83 @@
 
 'use strict';
 
-const { progressCollection } = require('../utils/database');
-const { SM2_PARAMS, ErrorCodes } = require('../utils/constants');
-const { successResponse, errorResponse, userNotFoundResponse, vocabularyNotFoundResponse } = require('../utils/response');
-const { validateUser, validateVocabulary, validateBoolean } = require('../utils/validators');
+const { createResponse } = require('../utils/response');
 
 /**
  * 划掉或恢复单词
- * 
- * @param {Object} params
- * @param {string} params.userId - 用户ID
- * @param {string} params.vocabularyId - 词汇ID
- * @param {boolean} params.skipped - true=划掉, false=恢复
  */
-async function toggleSkipWord({ userId, vocabularyId, skipped }) {
+async function toggleSkipWord(db, params) {
+  const { userId, vocabularyId, skipped } = params;
+  
   // 参数验证
-  const boolValidation = validateBoolean(skipped, 'skipped');
-  if (!boolValidation.valid) {
-    return errorResponse(ErrorCodes.INVALID_PARAMS, boolValidation.error);
+  if (!userId || !vocabularyId || typeof skipped !== 'boolean') {
+    return createResponse(false, null, '缺少必填参数或参数类型错误', 'INVALID_PARAMS');
   }
   
-  // 验证用户
-  const user = await validateUser(userId);
-  if (!user) {
-    return userNotFoundResponse();
-  }
-  
-  // 验证词汇
-  const vocabulary = await validateVocabulary(vocabularyId);
-  if (!vocabulary) {
-    return vocabularyNotFoundResponse();
-  }
-  
-  const now = new Date().toISOString();
-  
-  // 查找现有进度记录
-  const { data: existingProgress } = await progressCollection
-    .where({ userId, vocabularyId })
-    .limit(1)
-    .get();
-  
-  if (existingProgress.length > 0) {
-    // 更新现有记录
-    await progressCollection.doc(existingProgress[0]._id).update({
-      skipped,
-      updatedAt: now,
-    });
-  } else {
-    // 创建新记录 (仅标记跳过状态)
-    await progressCollection.add({
-      userId,
+  try {
+    // 验证用户
+    const userResult = await db.collection('users')
+      .where({ userId })
+      .get();
+    
+    if (!userResult.data || userResult.data.length === 0) {
+      return createResponse(false, null, '用户不存在', 'USER_NOT_FOUND');
+    }
+    
+    // 验证词汇
+    const vocabResult = await db.collection('vocabulary')
+      .where({ _id: vocabularyId })
+      .get();
+    
+    if (!vocabResult.data || vocabResult.data.length === 0) {
+      return createResponse(false, null, '词汇不存在', 'VOCABULARY_NOT_FOUND');
+    }
+    
+    const now = new Date();
+    
+    // 查找现有进度记录
+    const existingProgress = await db.collection('user_vocabulary_progress')
+      .where({ userId, vocabularyId })
+      .limit(1)
+      .get();
+    
+    if (existingProgress.data && existingProgress.data.length > 0) {
+      // 更新现有记录
+      await db.collection('user_vocabulary_progress')
+        .doc(existingProgress.data[0]._id)
+        .update({
+          skipped,
+          updatedAt: now
+        });
+    } else {
+      // 创建新记录
+      await db.collection('user_vocabulary_progress').add({
+        userId,
+        vocabularyId,
+        mastery: null,
+        skipped,
+        lastReviewed: null,
+        reviewCount: 0,
+        intervalDays: 1,
+        easinessFactor: 2.5,
+        nextReviewDate: null,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+    
+    const message = skipped ? '已从复习队列移除' : '已加入复习队列';
+    
+    return createResponse(true, {
       vocabularyId,
-      mastery: null,
       skipped,
-      lastReviewed: null,
-      reviewCount: 0,
-      intervalDays: 1,
-      easinessFactor: SM2_PARAMS.INITIAL_EASINESS_FACTOR,
-      nextReviewDate: null,
-      createdAt: now,
-      updatedAt: now,
-    });
+      message,
+    }, skipped ? '单词已划掉' : '单词已恢复');
+    
+  } catch (error) {
+    console.error('toggleSkipWord error:', error);
+    return createResponse(false, null, error.message, 'SERVER_ERROR');
   }
-  
-  const message = skipped ? '已从复习队列移除' : '已加入复习队列';
-  
-  return successResponse({
-    vocabularyId,
-    skipped,
-    message,
-  }, skipped ? '单词已划掉' : '单词已恢复');
 }
 
-module.exports = { toggleSkipWord };
+module.exports = toggleSkipWord;

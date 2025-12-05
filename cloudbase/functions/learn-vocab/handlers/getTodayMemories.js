@@ -20,32 +20,11 @@ async function getTodayMemories(db, params) {
   }
 
   try {
-    // 1. 检查用户是否完成字母学习 (如果是学单词或句子)
-    if (entityType !== 'letter') {
-      const progressResult = await db.collection("user_progress")
-        .where({ userId })
-        .get();
-
-      if (!progressResult.data || progressResult.data.length === 0) {
-        return createResponse(false, null, '未找到用户进度', 'USER_NOT_FOUND');
-      }
-
-      const p = progressResult.data[0];
-      if (!p.wordUnlocked) {
-         return createResponse(false, null, "请先完成字母学习", "MODULE_LOCKED");
-      }
-    }
-
-    // 2. 检查模块访问权限
-    // 注意：需要确保 memoryEngine 里的 checkModuleAccess 函数签名支持传入 db
-    // 如果不支持，可能需要修改 utils/memoryEngine.js，或者暂时注释掉这行
-    try {
-      const accessCheck = await checkModuleAccess(db, userId, entityType);
-      if (!accessCheck.allowed) {
-        return createResponse(false, null, accessCheck.message, accessCheck.errorCode);
-      }
-    } catch (e) {
-      console.warn('Module access check skipped or failed:', e);
+    // 1. 检查模块访问权限
+    // 使用 memoryEngine 中的统一权限检查
+    const accessCheck = await checkModuleAccess(db, userId, entityType);
+    if (!accessCheck.allowed) {
+      return createResponse(false, null, accessCheck.message, accessCheck.errorCode);
     }
 
     // 3. 获取今日复习实体
@@ -58,7 +37,7 @@ async function getTodayMemories(db, params) {
 
       const collectionMap = {
         letter: 'letters',
-        word: 'vocabularies',
+        word: 'vocabulary',
         sentence: 'sentences'
       };
 
@@ -68,7 +47,7 @@ async function getTodayMemories(db, params) {
       }
 
       const existingEntityIds = reviewMemories.map(m => m.entityId);
-      
+
       // 这里的逻辑有点简单，实际可能需要随机获取或按顺序获取
       // 为简化，这里演示基本逻辑
       const newEntitiesResult = await db.collection(collectionName)
@@ -93,32 +72,32 @@ async function getTodayMemories(db, params) {
 
     // 5. 合并
     const allMemories = [...reviewMemories, ...newMemories];
-    
+
     if (allMemories.length === 0) {
-       return createResponse(true, { items: [], summary: { total: 0 } }, '今日无学习内容');
+      return createResponse(true, { items: [], summary: { total: 0 } }, '今日无学习内容');
     }
 
     // 6. 获取详情
     const entityIds = allMemories.map(m => m.entityId);
     const collectionMap = {
       letter: 'letters',
-      word: 'vocabularies',
+      word: 'vocabulary',
       sentence: 'sentences'
     };
-    
+
     const entitiesResult = await db.collection(collectionMap[entityType])
       .where({
         _id: db.command.in(entityIds)
       })
       .get();
-      
+
     const entitiesMap = new Map(entitiesResult.data.map(e => [e._id, e]));
 
     // 7. 组装
     const data = allMemories.map(memory => {
       const entity = entitiesMap.get(memory.entityId);
       if (!entity) return null;
-      
+
       return {
         ...entity,
         memoryState: {

@@ -1,9 +1,0 @@
-{
-  "name": "learn-vocab",
-  "version": "2.0.0",
-  "description": "Vocabulary learning cloud function",
-  "main": "index.js",
-  "dependencies": {
-    "wx-server-sdk": "~2.6.3"
-  }
-}

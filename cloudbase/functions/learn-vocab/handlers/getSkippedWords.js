@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const { createResponse } = require('../utils/response'); 
+const { createResponse } = require('../utils/response');
 
 /**
  * 格式化词汇为列表项
@@ -40,19 +40,11 @@ async function getSkippedWords(db, params) {
 
   try {
     // 2. 检查用户是否完成字母学习
-    const progressResult = await db.collection("user_progress")
-      .where({ userId })
-      .get();
+    const { checkModuleAccess } = require('../utils/memoryEngine');
+    const accessResult = await checkModuleAccess(db, userId, 'word');
 
-    // 如果找不到用户进度，通常视为未解锁或新用户
-    if (!progressResult.data || progressResult.data.length === 0) {
-       return createResponse(false, null, '未找到用户进度', 'USER_NOT_FOUND');
-    }
-
-    const p = progressResult.data[0];
-
-    if (!p.wordUnlocked) {
-      return createResponse(false, null, "请先完成字母学习", "MODULE_LOCKED");
+    if (!accessResult.allowed) {
+      return createResponse(false, null, accessResult.message, accessResult.errorCode);
     }
 
     // 3. 获取已划掉单词总数
@@ -67,7 +59,7 @@ async function getSkippedWords(db, params) {
       .skip(offset)
       .limit(limit)
       .get();
-    
+
     const skippedProgress = skippedProgressResult.data || [];
 
     if (skippedProgress.length === 0) {
@@ -79,23 +71,23 @@ async function getSkippedWords(db, params) {
 
     // 5. 获取对应的词汇详情
     const vocabIds = skippedProgress.map(p => p.vocabularyId);
-    
+
     // 注意：这里假设 vocabularies 表的主键是 _id 或者 vocabularyId
     // 如果你的词汇表主键是 _id，请使用 db.command.in(vocabIds) 查询 _id
     const vocabResult = await db.collection('vocabularies')
-      .where({ 
+      .where({
         // 假设 vocabularyId 字段存储的是词汇的 _id
-        _id: db.command.in(vocabIds) 
-      }) 
+        _id: db.command.in(vocabIds)
+      })
       .get();
 
     const vocabMap = new Map(vocabResult.data.map(v => [v._id, v]));
 
     // 6. 组装数据
     const words = skippedProgress.map(progress => {
-      const vocab = vocabMap.get(progress.vocabularyId); 
+      const vocab = vocabMap.get(progress.vocabularyId);
       if (!vocab) return null;
-      
+
       return {
         ...formatVocabularyForList(vocab),
         skippedAt: progress.updatedAt,

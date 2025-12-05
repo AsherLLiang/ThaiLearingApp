@@ -33,40 +33,36 @@ async function getVocabularyList(db, params) {
   try {
     // 1. 检查用户权限 (如果传了 userId)
     if (userId) {
-      const progressResult = await db.collection("user_progress")
-        .where({ userId })
-        .get();
-        
-      if (progressResult.data && progressResult.data.length > 0) {
-        const p = progressResult.data[0];
-        if (!p.wordUnlocked) {
-          return createResponse(false, null, "请先完成字母学习", "MODULE_LOCKED");
-        }
+      const { checkModuleAccess } = require('../utils/memoryEngine');
+      const accessResult = await checkModuleAccess(db, userId, 'word');
+
+      if (!accessResult.allowed) {
+        return createResponse(false, null, accessResult.message, accessResult.errorCode);
       }
     }
 
     // 2. 验证分页参数
     const validLimit = Math.max(1, Math.min(limit, 100));
     const validOffset = Math.max(0, offset);
-    
+
     // 3. 构建查询条件
-    const query = db.collection('vocabularies');
+    const query = db.collection('vocabulary');
     const whereConditions = {};
-    
+
     if (filters.level) whereConditions.level = filters.level;
     if (filters.lessonNumber) whereConditions.lessonNumber = filters.lessonNumber;
     if (filters.startingLetter) whereConditions.startingLetter = filters.startingLetter;
     if (filters.partOfSpeech) whereConditions.partOfSpeech = filters.partOfSpeech;
-    
+
     let dbQuery = query;
     if (Object.keys(whereConditions).length > 0) {
       dbQuery = dbQuery.where(whereConditions);
     }
-    
+
     // 4. 获取总数
     const countResult = await dbQuery.count();
     const total = countResult.total;
-    
+
     // 5. 获取分页数据
     // 注意：orderBy 字段需要确保有索引，否则可能报错或慢
     const dataResult = await dbQuery
@@ -74,9 +70,9 @@ async function getVocabularyList(db, params) {
       .skip(validOffset)
       .limit(validLimit)
       .get();
-    
+
     const vocabularies = dataResult.data.map(formatVocabularyForList);
-    
+
     return createResponse(true, {
       vocabularies,
       pagination: {

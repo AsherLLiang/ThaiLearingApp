@@ -74,7 +74,7 @@ exports.main = async (event, context) => {
     }
 
     if (action === 'updateMastery') {
-      return await updateMastery(db, data);
+      return await updateMastery(data);
     }
 
     if (action === 'toggleSkipWord') {

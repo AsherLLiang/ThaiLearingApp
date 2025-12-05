@@ -8,6 +8,7 @@
 
 'use strict';
 
+
 const { progressCollection } = require('../utils/database');
 const { SM2_PARAMS, ErrorCodes } = require('../utils/constants');
 const { successResponse, errorResponse, userNotFoundResponse, vocabularyNotFoundResponse } = require('../utils/response');
@@ -81,7 +82,9 @@ async function updateMastery({ userId, vocabularyId, mastery }) {
       updatedAt: now,
     };
     
-    await progressCollection.doc(current._id).update(progressData);
+    await progressCollection.doc(current._id).update({
+      data: progressData
+    });
     
   } else {
     // ========== 创建新记录 ==========
@@ -124,4 +127,4 @@ async function updateMastery({ userId, vocabularyId, mastery }) {
   }, '更新掌握状态成功');
 }
 
-module.exports = { updateMastery };
+module.exports = updateMastery;
