@@ -7,7 +7,7 @@
 'use strict';
 
 const { userCollection, vocabularyCollection } = require('./database');
-const { MasteryLevel } = require('./constants');
+const { MasteryLevel } = require('@thai-app/shared').constants;
 
 /**
  * 验证用户是否存在
@@ -19,13 +19,13 @@ async function validateUser(userId) {
   if (!userId || typeof userId !== 'string') {
     return null;
   }
-  
+
   try {
     const { data } = await userCollection
       .where({ userId })
       .limit(1)
       .get();
-    
+
     return data.length > 0 ? data[0] : null;
   } catch (error) {
     console.error('[validateUser] Error:', error);
@@ -43,13 +43,13 @@ async function validateVocabulary(vocabularyId) {
   if (!vocabularyId || typeof vocabularyId !== 'string') {
     return null;
   }
-  
+
   try {
     const { data } = await vocabularyCollection
       .where({ vocabularyId })
       .limit(1)
       .get();
-    
+
     return data.length > 0 ? data[0] : null;
   } catch (error) {
     console.error('[validateVocabulary] Error:', error);
@@ -125,20 +125,20 @@ function validateBoolean(value, name) {
  */
 function validateParams(params, requiredFields) {
   const missing = [];
-  
+
   for (const field of requiredFields) {
     if (params[field] === undefined || params[field] === null || params[field] === '') {
       missing.push(field);
     }
   }
-  
+
   if (missing.length > 0) {
     return {
       isValid: false,
       message: `缺少必填参数: ${missing.join(', ')}`
     };
   }
-  
+
   return { isValid: true };
 }
 

@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const { createResponse } = require('../utils/response');
+const { createResponse } = require('@thai-app/shared').response;
 
 /**
  * @param {Object} db - 数据库实例
@@ -14,7 +14,7 @@ async function getUserProgress(db, params) {
   const { userId } = params;
 
   if (!userId) {
-     return createResponse(false, null, 'Missing userId', 'INVALID_PARAMS');
+    return createResponse(false, null, 'Missing userId', 'INVALID_PARAMS');
   }
 
   try {
@@ -22,7 +22,7 @@ async function getUserProgress(db, params) {
     // ❌ 修正: 不要用 getOne(), 用 limit(1).get()
     const progressResult = await db.collection('user_progress')
       .where({ userId })
-      .limit(1) 
+      .limit(1)
       .get();
 
     if (!progressResult.data || progressResult.data.length === 0) {
@@ -36,7 +36,7 @@ async function getUserProgress(db, params) {
     const letterCountResult = await db.collection('memory_status')
       .where({ userId, entityType: 'letter' })
       .count();
-      
+
     const letterMasteredResult = await db.collection('memory_status')
       .where({ userId, entityType: 'letter', masteryLevel: db.command.gte(0.7) })
       .count();

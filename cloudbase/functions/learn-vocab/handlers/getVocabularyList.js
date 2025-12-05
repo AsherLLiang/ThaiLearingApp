@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const { createResponse } = require('../utils/response');
+const { createResponse } = require('@thai-app/shared').response;
 
 /**
  * 格式化词汇为列表项
@@ -33,7 +33,7 @@ async function getVocabularyList(db, params) {
   try {
     // 1. 检查用户权限 (如果传了 userId)
     if (userId) {
-      const { checkModuleAccess } = require('../utils/memoryEngine');
+      const { checkModuleAccess } = require('@thai-app/shared').memoryEngine;
       const accessResult = await checkModuleAccess(db, userId, 'word');
 
       if (!accessResult.allowed) {

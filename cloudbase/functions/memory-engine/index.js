@@ -17,7 +17,7 @@ const checkModuleAccessHandler = require('./handlers/checkModuleAccess');
 const getUserProgress = require('./handlers/getUserProgress');
 
 // ===== Utils =====
-const { createResponse } = require('./utils/response');
+const { createResponse } = require('@thai-app/shared').response;
 
 /**
  * 云函数主入口

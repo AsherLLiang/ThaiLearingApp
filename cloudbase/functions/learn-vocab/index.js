@@ -23,7 +23,7 @@ const getSkippedWords = require('./handlers/getSkippedWords');
 // (已迁移至 memory-engine 云函数)
 
 // ===== 工具函数 =====
-const { createResponse } = require('./utils/response');
+const { createResponse } = require('@thai-app/shared').response;
 
 /**
  * 云函数主入口

@@ -5,8 +5,8 @@
 'use strict';
 
 // 假设 memoryEngine 内部没有严重的全局副作用，如果有问题，可能需要检查 memoryEngine
-const { getTodayReviewEntities, getOrCreateMemory, checkModuleAccess } = require('../utils/memoryEngine');
-const { createResponse } = require('../utils/response');
+const { getTodayReviewEntities, getOrCreateMemory, checkModuleAccess } = require('@thai-app/shared').memoryEngine;
+const { createResponse } = require('@thai-app/shared').response;
 
 /**
  * @param {Object} db - 数据库实例
@@ -27,13 +27,35 @@ async function getTodayMemories(db, params) {
       return createResponse(false, null, accessCheck.message, accessCheck.errorCode);
     }
 
+    // 1.5 获取/更新用户每日学习量设置
+    // "设置的今日学习的字母数量应该传入userProgress 中被getTodayMemory获取"
+    let effectiveLimit = limit;
+    const userProgress = accessCheck.progress; // checkModuleAccess returns progress
+
+    if (userProgress) {
+      // 如果请求中明确传入了 limit (且不是默认值/空)，则更新到 user_progress
+      // 注意：这里假设前端传来的 limit 是用户意图的设置
+      if (params.limit && params.limit !== userProgress.dailyLimit) {
+        await db.collection('user_progress').where({ userId }).update({
+          data: {
+            dailyLimit: params.limit,
+            updatedAt: new Date().toISOString()
+          }
+        });
+        effectiveLimit = params.limit;
+      } else if (!params.limit && userProgress.dailyLimit) {
+        // 如果请求没传 limit，但数据库有存，则使用存储的值
+        effectiveLimit = userProgress.dailyLimit;
+      }
+    }
+
     // 3. 获取今日复习实体
-    const reviewMemories = await getTodayReviewEntities(db, userId, entityType, limit);
+    const reviewMemories = await getTodayReviewEntities(db, userId, entityType, effectiveLimit);
 
     // 4. 获取新学习内容
     let newMemories = [];
-    if (includeNew && reviewMemories.length < limit) {
-      const remainingSlots = limit - reviewMemories.length;
+    if (includeNew && reviewMemories.length < effectiveLimit) {
+      const remainingSlots = effectiveLimit - reviewMemories.length;
 
       const collectionMap = {
         letter: 'letters',
@@ -46,17 +68,28 @@ async function getTodayMemories(db, params) {
         return createResponse(false, null, `不支持的实体类型: ${entityType}`, 'INVALID_ENTITY_TYPE');
       }
 
+      // 优化：使用 nin 过滤已存在的实体，并按课程顺序排序
+      const query = db.collection(collectionName);
+      let queryRef = query;
+
+      // 获取已存在的实体ID (包括复习队列中的)
       const existingEntityIds = reviewMemories.map(m => m.entityId);
 
-      // 这里的逻辑有点简单，实际可能需要随机获取或按顺序获取
-      // 为简化，这里演示基本逻辑
-      const newEntitiesResult = await db.collection(collectionName)
-        .limit(remainingSlots + existingEntityIds.length + 10) // 多取一些以防重复
+      if (existingEntityIds.length > 0) {
+        queryRef = queryRef.where({
+          _id: db.command.nin(existingEntityIds)
+        });
+      }
+
+      // 按课程顺序和ID排序 (确保符合课程表顺序)
+      // "按固定的方式顺序获取字母，保证用户按难度学习字母"
+      const newEntitiesResult = await queryRef
+        .orderBy('lessonNumber', 'asc')
+        .orderBy('_id', 'asc')
+        .limit(remainingSlots)
         .get();
 
-      const newEntities = newEntitiesResult.data.filter(entity => {
-        return !existingEntityIds.includes(entity._id);
-      }).slice(0, remainingSlots);
+      const newEntities = newEntitiesResult.data;
 
       for (const entity of newEntities) {
         const memory = await getOrCreateMemory(
@@ -70,8 +103,26 @@ async function getTodayMemories(db, params) {
       }
     }
 
-    // 5. 合并
-    const allMemories = [...reviewMemories, ...newMemories];
+    // 5. 合并 & 穿插 (Interleave)
+    // "单词和字母学习开始前，优先复习之前学的内容" -> 优先放入复习内容
+    // "这部分内容复习完后才进入三新1复习的穿插学习" -> 复习完老内容后，新内容按 3新:1复习(新) 穿插
+    let allMemories = [...reviewMemories];
+
+    // 处理新内容 (3新 : 1复习)
+    // 这里 "1复习" 指的是对刚刚学习的新内容的巩固复习 (Intra-session repetition)
+    // 例如: N1, N2, N3, N1(复习), N4, N5, N6, N4(复习)...
+    if (newMemories.length > 0) {
+      for (let i = 0; i < newMemories.length; i++) {
+        allMemories.push(newMemories[i]);
+
+        // 每3个新词，插入一个复习 (复习这组的第一个)
+        if ((i + 1) % 3 === 0) {
+          // 插入 i-2 (即这组的第一个) 作为复习
+          // 注意：这里直接push同一个对象，前端会再次渲染它
+          allMemories.push(newMemories[i - 2]);
+        }
+      }
+    }
 
     if (allMemories.length === 0) {
       return createResponse(true, { items: [], summary: { total: 0 } }, '今日无学习内容');

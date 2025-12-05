@@ -9,7 +9,8 @@
         "test": "tcb fn invoke memory-engine --data '{\"action\":\"checkModuleAccess\",\"data\":{\"userId\":\"test\"}}'"
     },
     "dependencies": {
-        "wx-server-sdk": "~2.6.3"
+        "wx-server-sdk": "~2.6.3",
+        "@thai-app/shared": "file:../shared"
     },
     "author": "Liang JianYu",
     "license": "MIT",

@@ -1,5 +1,5 @@
 // ✅ 获取固定字母测试题
-const { createResponse } = require('../utils/response');
+const { createResponse } = require('@thai-app/shared').response;
 
 async function getLetterTest(db) {
     const res = await db.collection('letter_test_bank')

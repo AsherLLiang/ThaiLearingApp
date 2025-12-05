@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const { createResponse } = require('../utils/response');
+const { createResponse } = require('@thai-app/shared').response;
 
 /**
  * 获取词汇详细信息
@@ -23,7 +23,7 @@ async function getVocabularyDetail(db, params) {
   try {
     // 1. 检查权限 (如果有 userId)
     if (userId) {
-      const { checkModuleAccess } = require('../utils/memoryEngine');
+      const { checkModuleAccess } = require('@thai-app/shared').memoryEngine;
       const accessResult = await checkModuleAccess(db, userId, 'word');
 
       if (!accessResult.allowed) {

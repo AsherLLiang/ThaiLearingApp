@@ -11,7 +11,8 @@
     "test:stats": "tcb fn invoke learn-vocab --data '{\"action\":\"getReviewStatistics\",\"data\":{\"userId\":\"test\"}}'"
   },
   "dependencies": {
-    "wx-server-sdk": "~2.6.3"
+    "wx-server-sdk": "~2.6.3",
+    "@thai-app/shared": "file:../shared"
   },
   "author": "Liang JianYu",
   "license": "MIT",

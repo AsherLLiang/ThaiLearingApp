@@ -8,8 +8,14 @@
 
 'use strict';
 
-const { MasteryLevel, DAILY_LEARNING_CONFIG } = require('../utils/constants');
-const { createResponse } = require('../utils/response');
+const { createResponse } = require('@thai-app/shared').response;
+const {
+  COLLECTIONS,
+  MasteryLevel,
+  SM2_PARAMS,
+  EARLY_INTERVALS,
+  DAILY_LEARNING_CONFIG
+} = require('@thai-app/shared').constants;
 
 /**
  * 格式化词汇为列表项 (精简版)
@@ -56,7 +62,7 @@ async function getTodayWords(db, params) {
     }
 
     // ===== Step 2: 检查用户是否完成字母学习（权限检查）=====
-    const { checkModuleAccess } = require('../utils/memoryEngine');
+    const { checkModuleAccess } = require('@thai-app/shared').memoryEngine;
     const accessResult = await checkModuleAccess(db, userId, 'word');
 
     if (!accessResult.allowed) {

@@ -11,7 +11,7 @@
 
 'use strict';
 
-const { MasteryLevel, SM2_PARAMS, EARLY_INTERVALS } = require('./constants');
+const { MasteryLevel, SM2_PARAMS, EARLY_INTERVALS } = require('@thai-app/shared').constants;
 
 /**
  * 将掌握程度映射到 SM-2 Quality 值

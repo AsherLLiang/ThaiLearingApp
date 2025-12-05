@@ -3,9 +3,9 @@
  * Action: submitMemoryResult
  */
 
-const { updateMemoryAfterReview } = require('../utils/memoryEngine');
-const { validateParams } = require('../utils/validators');
-const { createResponse } = require('../utils/response');
+const { updateMemoryAfterReview } = require('@thai-app/shared').memoryEngine;
+const { validateParams } = require('@thai-app/shared').validators;
+const { createResponse } = require('@thai-app/shared').response;
 
 /**
  * @param {Object} db - 数据库实例

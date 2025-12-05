@@ -4,6 +4,7 @@
     "description": "Alphabet learning function",
     "main": "index.js",
     "dependencies": {
-        "wx-server-sdk": "latest"
+        "wx-server-sdk": "latest",
+        "@thai-app/shared": "file:../shared"
     }
 }
