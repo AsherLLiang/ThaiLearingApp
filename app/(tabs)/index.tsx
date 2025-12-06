@@ -46,7 +46,8 @@ export default function HomeScreen() {
         name: t('modules.alphabet'),
         level: t('alphabet.level'),
         progress: 0,
-        route: '/learning/alphabet' as const,
+        route: '/learning' as const,
+        module: 'alphabet' as const,
         thaiText: 'กขฃค',
         translation: t('alphabet.description'),
       };
@@ -60,7 +61,8 @@ export default function HomeScreen() {
         name: t('modules.alphabet'),
         level: t('alphabet.level'),
         progress: letterProgress,
-        route: '/learning/alphabet' as const,
+        route: '/learning' as const,
+        module: 'alphabet' as const,
         thaiText: 'ก ข ฃ ค',
         translation: t('alphabet.description'),
       };
@@ -143,7 +145,16 @@ export default function HomeScreen() {
           <View>
             <Pressable
               style={styles.heroCard}
-              onPress={() => router.push(currentCourse.route)}
+              onPress={() => {
+                if (currentCourse.module) {
+                  router.push({
+                    pathname: currentCourse.route,
+                    params: { module: currentCourse.module }
+                  });
+                } else {
+                  router.push(currentCourse.route);
+                }
+              }}
             >
               <View style={styles.heroContent}>
                 <View style={styles.heroTopRow}>
