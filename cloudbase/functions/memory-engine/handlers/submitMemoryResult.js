@@ -1,74 +1,128 @@
 /**
- * 统一提交学习结果 (字母/单词/句子)
- * Action: submitMemoryResult
+ * 提交学习结果（支持单条 + 批量）
+ * 
+ * 支持两种请求格式：
+ * 1）旧版单条：
+ * {
+ *   userId,
+ *   entityType,
+ *   entityId,
+ *   quality
+ * }
+ * 
+ * 2）新版批量：
+ * {
+ *   userId,
+ *   results: [
+ *     { entityType, entityId, quality },
+ *     ...
+ *   ]
+ * }
  */
 
-const { updateMemoryAfterReview } = require('../utils/memoryEngine');
-const { validateParams } = require('../utils/validators');
+'use strict';
+
 const { createResponse } = require('../utils/response');
+const { updateMemoryAfterReview } = require('../utils/memoryEngine');
 
 /**
- * @param {Object} db - 数据库实例
- * @param {Object} params - 请求参数
- * @param {string} params.userId - 用户ID
- * @param {string} params.entityType - 实体类型: 'letter' | 'word' | 'sentence'
- * @param {string} params.entityId - 实体ID
- * @param {string} params.quality - 答题质量: '陌生' | '模糊' | '记得'
+ * @param {Object} db     - cloud.database()
+ * @param {Object} params - 请求参数（来自 index.js 中的 data）
  */
 async function submitMemoryResult(db, params) {
+  const {
+    userId,
+    entityType,
+    entityId,
+    quality,
+    results
+  } = params || {};
 
-  // 1. 参数验证
-  const validation = validateParams(params, ['userId', 'entityType', 'entityId', 'quality']);
-  if (!validation.isValid) {
-    return createResponse(false, null, validation.message, 'INVALID_PARAMS');
-  }
-
-  const { userId, entityType, entityId, quality } = params;
-
-  // 2. 验证quality值
-  const validQualities = ['陌生', '模糊', '记得'];
-  if (!validQualities.includes(quality)) {
+  // 1. 基本校验：必须有 userId
+  if (!userId) {
     return createResponse(
       false,
       null,
-      `无效的答题质量: ${quality}, 请使用: 陌生/模糊/记得`,
-      'INVALID_QUALITY'
+      '缺少必填参数: userId',
+      'INVALID_PARAMS'
     );
   }
 
-  // 3. 验证entityType
-  const validEntityTypes = ['letter', 'word', 'sentence'];
-  if (!validEntityTypes.includes(entityType)) {
+  // 2. 规范化为统一的数组格式 items[]
+  let items = [];
+
+  // 2.1 新版：data.results 是数组
+  if (Array.isArray(results) && results.length > 0) {
+    items = results.map((r) => ({
+      entityType: r.entityType,
+      entityId: r.entityId,
+      quality: r.quality
+    }));
+  }
+  // 2.2 兼容旧版：单条参数
+  else if (entityType && entityId && quality) {
+    items = [{ entityType, entityId, quality }];
+  } else {
+    // 两种格式都不满足
     return createResponse(
       false,
       null,
-      `无效的实体类型: ${entityType}`,
-      'INVALID_ENTITY_TYPE'
+      '缺少必填参数: entityType, entityId, quality 或 results[]',
+      'INVALID_PARAMS'
     );
   }
 
   try {
-    // 4. 更新记忆状态
-    const updatedMemory = await updateMemoryAfterReview(
-      db,
-      userId,
-      entityType,
-      entityId,
-      quality
+    const updatedMemories = [];
+
+    // 3. 逐条更新记忆状态
+    for (const item of items) {
+      const { entityType, entityId, quality } = item;
+
+      // 防御性校验，避免 results 里混入空对象
+      if (!entityType || !entityId || !quality) continue;
+
+      const memoryState = await updateMemoryAfterReview(
+        db,
+        userId,
+        entityType,
+        entityId,
+        quality
+      );
+
+      updatedMemories.push({
+        entityType,
+        entityId,
+        quality,
+        memoryState
+      });
+    }
+
+    if (updatedMemories.length === 0) {
+      return createResponse(
+        false,
+        null,
+        'results 中没有有效的记录',
+        'INVALID_PARAMS'
+      );
+    }
+
+    // 4. 返回统一结构
+    return createResponse(
+      true,
+      { updatedMemories },
+      '提交学习结果成功'
     );
 
-    // 5. 检查是否需要解锁下一阶段
-    // const unlockResult = await checkAndUnlockNextStage(db, userId);
-
-    // 6. 返回结果
-    return createResponse(true, {
-      ...updatedMemory,
-      // unlockInfo: unlockResult
-    }, '学习结果已记录');
-
   } catch (error) {
-    console.error('submitMemoryResult 错误:', error);
-    return createResponse(false, null, error.message || '服务器错误', 'SERVER_ERROR');
+    console.error('[submitMemoryResult] error:', error);
+
+    return createResponse(
+      false,
+      null,
+      error.message || '服务器内部错误',
+      'SERVER_ERROR'
+    );
   }
 }
 
