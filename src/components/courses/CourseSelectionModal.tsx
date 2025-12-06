@@ -30,7 +30,7 @@ export function CourseSelectionModal({
                 <View style={styles.modalContainer}>
                     <Text style={styles.title}>{t('courses.switchCourseTitle', 'Switch Course?')}</Text>
                     <Text style={styles.message}>
-                        {t('courses.switchCourseMessage', 'Switching to {{course}} will reset your current vocabulary progress. Are you sure?', { course: courseTitle })}
+                        {t('courses.switchCourseMessage', '切换到 {{course}} 会先保存当前课程的进度，再开始新的课程。是否继续？', { course: courseTitle })}
                     </Text>
 
                     <View style={styles.buttonContainer}>

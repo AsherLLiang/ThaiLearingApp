@@ -86,6 +86,7 @@ interface ModuleAccessStore {
     getUserProgress: () => Promise<void>;
     clearCache: () => void;
     setError: (error: string | null) => void;
+    setDailyLimit: (moduleType: ModuleType, limit: number) => void;
 }
 
 // ==================== 默认进度数据 ====================
@@ -292,5 +293,17 @@ export const useModuleAccessStore = create<ModuleAccessStore>()((set, get) => ({
     // ===== 设置错误 =====
     setError: (error: string | null): void => {
         set({ error });
+    },
+
+    // ===== 更新每日学习量（前端缓存）=====
+    setDailyLimit: (moduleType: ModuleType, limit: number) => {
+        set((state) => ({
+            userProgress: {
+                ...(state.userProgress || { ...defaultProgress }),
+                dailyLimit: limit,
+            },
+        }));
+
+        console.log(`📌 已更新 ${moduleType} dailyLimit 为 ${limit}`);
     },
 }));

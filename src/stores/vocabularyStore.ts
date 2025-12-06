@@ -38,6 +38,7 @@ interface VocabularyStore {
 
     // ===== 本地进度 =====
     progress: VocabularyProgress;
+    courseProgressMap: Record<string, VocabularyProgress>;
 
     // ===== 学习会话操作 =====
     initSession: (userId: string) => Promise<void>;
@@ -67,6 +68,7 @@ export const useVocabularyStore = create<VocabularyStore>()(
             currentVocabulary: null,
             currentCourseSource: null, // Initial state
             progress: defaultProgress,
+            courseProgressMap: {},
 
             // ===== 初始化学习会话 =====
             initSession: async (userId: string) => {
@@ -134,16 +136,22 @@ export const useVocabularyStore = create<VocabularyStore>()(
 
             // ===== 开始课程 =====
             startCourse: async (source: string) => {
-                const { currentCourseSource } = get();
+                const { currentCourseSource, progress, courseProgressMap } = get();
 
                 // If switching to a different course, reset progress
                 if (currentCourseSource !== source) {
-                    console.log(`🔄 Switching course from ${currentCourseSource} to ${source}. Resetting progress.`);
+                    console.log(`🔄 Switching course from ${currentCourseSource} to ${source}. Caching current progress.`);
+
+                    const cachedProgress = courseProgressMap[source];
+                    const updatedCache = currentCourseSource
+                        ? { ...courseProgressMap, [currentCourseSource]: progress }
+                        : { ...courseProgressMap };
 
                     // 1. Update local state
                     set({
+                        courseProgressMap: updatedCache,
                         currentCourseSource: source,
-                        progress: defaultProgress,
+                        progress: cachedProgress || defaultProgress,
                         reviewQueue: [],
                         currentVocabulary: null,
                         phase: LearningPhase.REVIEW // Or START?

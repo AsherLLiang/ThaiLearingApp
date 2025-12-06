@@ -1,25 +1,26 @@
 // app/(tabs)/courses.tsx
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'expo-router';
-import { View, Text, StyleSheet, ScrollView, TextInput, Pressable, Image, ImageSourcePropType } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TextInput, ImageSourcePropType, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Search, BookOpen, Video, Mic, Type, Grid } from 'lucide-react-native';
+import { Search, BookOpen, Type, Grid } from 'lucide-react-native';
 import { ThaiPatternBackground } from '@/src/components/common/ThaiPatternBackground';
 import { Colors } from '@/src/constants/colors';
 import { Typography } from '@/src/constants/typography';
 import { useTranslation } from 'react-i18next';
-import { AlphabetCourseCard } from '@/src/components/courses/AlphabetCourseCard';
 import { useVocabularyStore } from '@/src/stores/vocabularyStore';
 import { CourseSelectionModal } from '@/src/components/courses/CourseSelectionModal';
 import coursesData from '@/assets/courses/courses.json';
+import alphabetCourses from '@/assets/courses/alphabetCourses.json';
+import { CourseCard, type CourseCardData } from '@/src/components/courses/CourseCard';
+import { AlphabetCourseCard } from '@/src/components/courses/AlphabetCourseCard';
+import { useLearningPreferenceStore } from '@/src/stores/learningPreferenceStore';
+import { useModuleAccessStore, type ModuleType } from '@/src/stores/moduleAccessStore';
 
-// Course Data
 const CATEGORIES = [
   { id: 'all', label: '全部', icon: Grid },
   { id: 'letter', label: '字母', icon: Type },
   { id: 'word', label: '单词', icon: BookOpen },
-  // { id: 'sentence', label: '句子', icon: Mic },
-  // { id: 'video', label: '视频', icon: Video },
 ];
 
 type CourseItem = {
@@ -42,10 +43,16 @@ const COURSE_IMAGE_MAP: Record<string, ImageSourcePropType> = {
   'ThaiBase_2.png': require('@/assets/images/courses/ThaiBase_2.png'),
   'ThaiBase_3.png': require('@/assets/images/courses/ThaiBase_3.png'),
   'ThaiBase_4.png': require('@/assets/images/courses/ThaiBase_4.png'),
+  'thai_alphabet.png': require('@/assets/images/courses/thai_alphabet.png'),
   default: require('@/assets/images/courses/ThaiBase_1.png'),
 };
 
-const COURSES: CourseWithImage[] = (coursesData as CourseItem[]).map((course) => ({
+const COURSES: CourseWithImage[] = (
+  [
+    ...(alphabetCourses as CourseItem[]),
+    ...(coursesData as CourseItem[]),
+  ]
+).map((course) => ({
   ...course,
   imageSource: COURSE_IMAGE_MAP[course.image] || COURSE_IMAGE_MAP.default,
 }));
@@ -56,35 +63,102 @@ export default function CoursesScreen() {
   const [activeCategory, setActiveCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Store & Modal State
   const { currentCourseSource, startCourse } = useVocabularyStore();
+  const { hasDailyLimit } = useLearningPreferenceStore();
+  const { userProgress, getUserProgress } = useModuleAccessStore();
   const [modalVisible, setModalVisible] = useState(false);
   const [pendingCourse, setPendingCourse] = useState<CourseWithImage | null>(null);
 
-  const filteredCourses = COURSES.filter(course => {
-    const matchesCategory = activeCategory === 'all' || course.category === activeCategory;
-    const matchesSearch = course.title.includes(searchQuery) || course.description.includes(searchQuery);
-    return matchesCategory && matchesSearch;
-  });
+  useEffect(() => {
+    if (!userProgress) {
+      getUserProgress().catch((err) => console.warn('Failed to fetch user progress', err));
+    }
+  }, [userProgress, getUserProgress]);
 
-  const handleStartLearning = (course: CourseWithImage) => {
-    // If it's the same course, just navigate
+  const getModuleType = (course: CourseWithImage): ModuleType => {
+    switch (course.category) {
+      case 'letter':
+        return 'alphabet';
+      case 'sentence':
+        return 'sentence';
+      case 'article':
+        return 'article';
+      default:
+        return 'word';
+    }
+  };
+
+  const getCourseProgress = (course: CourseWithImage) => {
+    if (!userProgress) return undefined;
+    const moduleType = getModuleType(course);
+    if (moduleType === 'alphabet') {
+      return {
+        completed: userProgress.letterMasteredCount,
+        total: userProgress.letterTotalCount || course.lessons,
+      };
+    }
+    if (moduleType === 'word') {
+      return {
+        completed: userProgress.wordMasteredCount,
+        total: userProgress.wordTotalCount || course.lessons,
+      };
+    }
+    return undefined;
+  };
+
+  const filteredCourses = useMemo(() => {
+    return COURSES.filter(course => {
+      const matchesCategory = activeCategory === 'all' || course.category === activeCategory;
+      const matchesSearch =
+        course.title.includes(searchQuery) || course.description.includes(searchQuery);
+      return matchesCategory && matchesSearch;
+    });
+  }, [activeCategory, searchQuery]);
+
+  const proceedToCourse = async (course: CourseWithImage) => {
+    const moduleType = getModuleType(course);
+    const needsDailySetup = !hasDailyLimit(moduleType);
+
+    await startCourse(course.source);
+    setModalVisible(false);
+    setPendingCourse(null);
+
+    router.push({
+      pathname: needsDailySetup ? '/learning/setup' : '/learning',
+      params: {
+        module: moduleType,
+        source: course.source,
+      },
+    });
+  };
+
+  // ⭐ 统一的 Start Learning 逻辑：接收 course，返回一个点击 handler
+const handleStartLearning = (course: CourseWithImage) => {
+  return () => {
+    const moduleType = getModuleType(course);
+    const needsDailySetup = !hasDailyLimit(moduleType);
+
+    // ✅ 同一个课程：直接按照是否已设置日计划进行跳转
     if (currentCourseSource === course.source) {
-      router.push('/learning/vocab'); // Navigate to vocabulary learning page
+      router.push({
+        pathname: needsDailySetup ? '/learning/setup' : '/learning',
+        params: {
+          module: moduleType,      // 字母时就是 'alphabet'
+          source: course.source,
+        },
+      });
       return;
     }
 
-    // If switching courses, show confirmation
+    // ✅ 切换课程：弹确认框
     setPendingCourse(course);
     setModalVisible(true);
   };
+};
 
   const confirmSwitchCourse = async () => {
     if (pendingCourse) {
-      await startCourse(pendingCourse.source);
-      setModalVisible(false);
-      setPendingCourse(null);
-      router.push('/learning/vocab');
+      await proceedToCourse(pendingCourse);
     }
   };
 
@@ -140,47 +214,36 @@ export default function CoursesScreen() {
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Alphabet Learning - Always available */}
-        <AlphabetCourseCard />
-
-        {/* Course List */}
         {filteredCourses.map((course) => {
-          // Check if this is the active course
           const isCurrent = currentCourseSource === course.source;
+          const moduleType = getModuleType(course);
+          const progress = getCourseProgress(course);
+
+          if (moduleType === 'alphabet') {
+            return (
+              <AlphabetCourseCard
+                key={course.id}
+                course={course}
+                isCurrent={isCurrent}
+                progress={progress}
+                onStart={handleStartLearning(course)}
+              />
+            );
+          }
 
           return (
-            <Pressable
+            <CourseCard
               key={course.id}
-              style={[styles.courseCard, isCurrent && styles.activeCourseCard]}
-              onPress={() => handleStartLearning(course)}
-            >
-              <Image source={course.imageSource} style={styles.courseImage} />
-              <View style={styles.courseInfo}>
-                <View style={styles.courseHeader}>
-                  <Text style={styles.courseTitle} numberOfLines={1}>{course.title}</Text>
-                  <View style={styles.levelBadge}>
-                    <Text style={styles.levelText}>{course.level}</Text>
-                  </View>
-                </View>
-                <Text style={styles.courseDescription} numberOfLines={2}>
-                  {course.description}
-                </Text>
-                <View style={styles.courseFooter}>
-                  <Text style={styles.lessonCount}>{course.lessons} 课时</Text>
-                  <View style={[styles.startBtn, isCurrent && styles.activeStartBtn]}>
-                    <Text style={[styles.startBtnText, isCurrent && styles.activeStartBtnText]}>
-                      {isCurrent ? t('courses.continue', '继续学习') : t('courses.startBtnText', '开始学习')}
-                    </Text>
-                  </View>
-                </View>
-              </View>
-            </Pressable>
+              course={course as CourseCardData}
+              isCurrent={isCurrent}
+              progress={progress}
+              onStart={handleStartLearning(course)}
+            />
           );
         })}
         <View style={{ height: 100 }} />
       </ScrollView>
 
-      {/* Confirmation Modal */}
       <CourseSelectionModal
         visible={modalVisible}
         courseTitle={pendingCourse?.title || ''}
@@ -279,95 +342,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingBottom: 24,
     gap: 16,
-  },
-  courseCard: {
-    flexDirection: 'row',
-    backgroundColor: Colors.white,
-    borderRadius: 16,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: Colors.sand,
-    height: 120,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  activeCourseCard: {
-    borderColor: Colors.thaiGold,
-    borderWidth: 2,
-    backgroundColor: '#FFFCF5', // Very light gold tint
-  },
-  courseImage: {
-    width: 100,
-    height: '100%',
-    resizeMode: 'cover',
-  },
-  courseInfo: {
-    flex: 1,
-    padding: 12,
-    justifyContent: 'space-between',
-  },
-  courseHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 4,
-  },
-  courseTitle: {
-    flex: 1,
-    fontFamily: Typography.notoSerifBold,
-    fontSize: 16,
-    color: Colors.ink,
-    marginRight: 8,
-  },
-  levelBadge: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    backgroundColor: 'rgba(212, 175, 55, 0.1)',
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: 'rgba(212, 175, 55, 0.3)',
-  },
-  levelText: {
-    fontSize: 10,
-    color: Colors.thaiGold,
-    fontFamily: Typography.notoSerifRegular,
-  },
-  courseDescription: {
-    fontFamily: Typography.notoSerifRegular,
-    fontSize: 12,
-    color: Colors.taupe,
-    lineHeight: 16,
-    marginBottom: 8,
-  },
-  courseFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  lessonCount: {
-    fontSize: 11,
-    color: Colors.taupe,
-    fontFamily: Typography.notoSerifRegular,
-  },
-  startBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: Colors.ink,
-    borderRadius: 12,
-  },
-  activeStartBtn: {
-    backgroundColor: Colors.thaiGold,
-  },
-  startBtnText: {
-    fontSize: 11,
-    color: Colors.white,
-    fontFamily: Typography.notoSerifRegular,
-  },
-  activeStartBtnText: {
-    color: Colors.white,
-    fontWeight: 'bold',
   },
 });
