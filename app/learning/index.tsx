@@ -16,7 +16,7 @@ import { useLearningPreferenceStore } from '@/src/stores/learningPreferenceStore
 import { useAlphabetStore } from '@/src/stores/alphabetStore';
 import { LearningPhase } from '@/src/entities/enums/LearningPhase.enum';
 import { useUserStore } from '@/src/stores/userStore';
-import AlphabetLearningScreen from './alphabet/index';
+import AlphabetLearningScreen from '../alphabet/index';
 
 
 // --- Mock Data ---

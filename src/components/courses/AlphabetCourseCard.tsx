@@ -33,7 +33,7 @@ export function AlphabetCourseCard({ course, isCurrent, progress, onStart }: Alp
       ? Math.min(100, Math.round((progress.completed / progress.total) * 100))
       : null;
 
-  // 卡片点击：只负责进入字母学习模块
+  // 卡片点击：进入字母学习模块（保持原有路径 /learning/alphabet）
   const handleCardPress = () => {
     router.push('/learning/alphabet');
   };

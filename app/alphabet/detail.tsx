@@ -2,12 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ChevronLeft, Volume2, Check, ChevronRight } from 'lucide-react-native';
+import { ChevronLeft, Volume2, ChevronRight } from 'lucide-react-native';
 import { ThaiPatternBackground } from '@/src/components/common/ThaiPatternBackground';
 import { Colors } from '@/src/constants/colors';
 import { Typography } from '@/src/constants/typography';
 import { getAllLetters, getLetterById } from '@/src/utils/letterData';
-import { useAlphabetStore } from '@/src/stores/alphabetStore';
 import type { Letter } from '@/src/entities/types/letter.types';
 import { Audio } from 'expo-av';
 
@@ -15,9 +14,7 @@ export default function AlphabetDetailScreen() {
     const router = useRouter();
     const params = useLocalSearchParams();
     const [letter, setLetter] = useState<Letter | null>(null);
-    const [isMastered, setIsMastered] = useState(false);
     const [sound, setSound] = useState<Audio.Sound>();
-    const { isLetterMastered, markAsMastered } = useAlphabetStore();
 
     useEffect(() => {
         loadLetter(params.letterId as string);
@@ -32,7 +29,6 @@ export default function AlphabetDetailScreen() {
         const found = getLetterById(id);
         if (found) {
             setLetter(found);
-            setIsMastered(isLetterMastered(id));
         }
     };
 
@@ -45,12 +41,7 @@ export default function AlphabetDetailScreen() {
         // await sound.playAsync();
     };
 
-    const handleMastered = async () => {
-        if (letter) {
-            await markAsMastered(letter._id);
-            setIsMastered(true);
-        }
-    };
+
 
     const handleNext = () => {
         if (!letter) return;
@@ -59,7 +50,7 @@ export default function AlphabetDetailScreen() {
         if (currentIndex < allLetters.length - 1) {
             const nextId = allLetters[currentIndex + 1]._id;
             router.replace({
-                pathname: '/learning/alphabet/detail',
+                pathname: '/alphabet/detail',
                 params: { letterId: nextId }
             });
         }
@@ -72,7 +63,7 @@ export default function AlphabetDetailScreen() {
         if (currentIndex > 0) {
             const prevId = allLetters[currentIndex - 1]._id;
             router.replace({
-                pathname: '/learning/alphabet/detail',
+                pathname: '/alphabet/detail',
                 params: { letterId: prevId }
             });
         }
@@ -138,26 +129,12 @@ export default function AlphabetDetailScreen() {
                 </View>
             </ScrollView>
 
-            {/* Bottom Actions */}
+            {/* Bottom Navigation */}
             <View style={styles.footer}>
                 <View style={styles.navRow}>
                     <Pressable style={styles.navButton} onPress={handlePrev}>
                         <ChevronLeft size={24} color={Colors.ink} />
                         <Text style={styles.navText}>上一个</Text>
-                    </Pressable>
-
-                    <Pressable
-                        style={[styles.masterButton, isMastered && styles.masterButtonActive]}
-                        onPress={handleMastered}
-                    >
-                        {isMastered ? (
-                            <>
-                                <Check size={20} color={Colors.white} style={{ marginRight: 8 }} />
-                                <Text style={styles.masterButtonText}>已掌握</Text>
-                            </>
-                        ) : (
-                            <Text style={styles.masterButtonText}>标记为已掌握</Text>
-                        )}
                     </Pressable>
 
                     <Pressable style={styles.navButton} onPress={handleNext}>
