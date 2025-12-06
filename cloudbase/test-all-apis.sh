@@ -1,34 +1,71 @@
 #!/bin/bash
 
-BASE_URL="https://cloud1-1gjcyrdd7ab927c6-1387301748.ap-shanghai.app.tcloudbase.com/learn-vocab"
+MEMORY_ENGINE_URL="https://cloud1-1gjcyrdd7ab927c6-1387301748.ap-shanghai.app.tcloudbase.com/memory-engine"
+LEARN_VOCAB_URL="https://cloud1-1gjcyrdd7ab927c6-1387301748.ap-shanghai.app.tcloudbase.com/learn-vocab"
 USER_ID="u_1764867682959_dwqxjcjoo"
 
 echo "======================================"
-echo "Thai Learning App - 完整 API 测试"
+echo "Thai Learning App - 正确的 API 测试"
 echo "======================================"
 echo ""
 
-# 1. submitMemoryResult
-echo "1️⃣ submitMemoryResult - 提交学习结果"
-echo "--------------------------------------"
-curl -s -X POST "$BASE_URL" \
+# ============ memory-engine 测试 ============
+echo "📦 memory-engine 云函数测试"
+echo "========================================="
+echo ""
+
+echo "1️⃣ submitMemoryResult (✅ 正确端点)"
+curl -s -X POST "$MEMORY_ENGINE_URL" \
   -H 'Content-Type: application/json' \
   -d "{
     \"action\": \"submitMemoryResult\",
     \"data\": {
       \"userId\": \"$USER_ID\",
-      \"entityType\": \"letter\",
-      \"entityId\": \"TH_C_02\",
-      \"quality\": \"模糊\"
+      \"results\": [{
+        \"entityType\": \"letter\",
+        \"entityId\": \"TH_C_02\",
+        \"quality\": \"模糊\"
+      }]
     }
   }" | jq .
 echo ""
 echo ""
 
-# 2. getReviewStatistics
-echo "2️⃣ getReviewStatistics - 获取复习统计"
-echo "--------------------------------------"
-curl -s -X POST "$BASE_URL" \
+echo "2️⃣ getTodayMemories (✅ 正确端点)"
+curl -s -X POST "$MEMORY_ENGINE_URL" \
+  -H 'Content-Type: application/json' \
+  -d "{
+    \"action\": \"getTodayMemories\",
+    \"data\": {
+      \"userId\": \"$USER_ID\",
+      \"entityType\": \"word\",
+      \"limit\": 20
+    }
+  }" | jq .
+echo ""
+echo ""
+
+# ============ learn-vocab 测试 ============
+echo "📚 learn-vocab 云函数测试"
+echo "========================================="
+echo ""
+
+echo "3️⃣ getTodayWords"
+curl -s -X POST "$LEARN_VOCAB_URL" \
+  -H 'Content-Type: application/json' \
+  -d "{
+    \"action\": \"getTodayWords\",
+    \"data\": {
+      \"userId\": \"$USER_ID\",
+      \"limit\": 20,
+      \"offset\": 0
+    }
+  }" | jq .
+echo ""
+echo ""
+
+echo "4️⃣ getReviewStatistics"
+curl -s -X POST "$LEARN_VOCAB_URL" \
   -H 'Content-Type: application/json' \
   -d "{
     \"action\": \"getReviewStatistics\",
@@ -39,15 +76,12 @@ curl -s -X POST "$BASE_URL" \
 echo ""
 echo ""
 
-# 3. getVocabularyList
-echo "3️⃣ getVocabularyList - 获取词汇列表"
-echo "--------------------------------------"
-curl -s -X POST "$BASE_URL" \
+echo "5️⃣ getVocabularyList"
+curl -s -X POST "$LEARN_VOCAB_URL" \
   -H 'Content-Type: application/json' \
   -d "{
     \"action\": \"getVocabularyList\",
     \"data\": {
-      \"userId\": \"$USER_ID\",
       \"limit\": 5,
       \"offset\": 0
     }
@@ -55,10 +89,8 @@ curl -s -X POST "$BASE_URL" \
 echo ""
 echo ""
 
-# 4. getVocabularyDetail (需要真实的 vocabularyId)
-echo "4️⃣ getVocabularyDetail - 获取词汇详情"
-echo "--------------------------------------"
-curl -s -X POST "$BASE_URL" \
+echo "6️⃣ getVocabularyDetail"
+curl -s -X POST "$LEARN_VOCAB_URL" \
   -H 'Content-Type: application/json' \
   -d "{
     \"action\": \"getVocabularyDetail\",
@@ -70,10 +102,8 @@ curl -s -X POST "$BASE_URL" \
 echo ""
 echo ""
 
-# 5. updateMastery
-echo "5️⃣ updateMastery - 更新掌握度"
-echo "--------------------------------------"
-curl -s -X POST "$BASE_URL" \
+echo "7️⃣ updateMastery"
+curl -s -X POST "$LEARN_VOCAB_URL" \
   -H 'Content-Type: application/json' \
   -d "{
     \"action\": \"updateMastery\",
@@ -86,10 +116,8 @@ curl -s -X POST "$BASE_URL" \
 echo ""
 echo ""
 
-# 6. toggleSkipWord
-echo "6️⃣ toggleSkipWord - 划掉单词"
-echo "--------------------------------------"
-curl -s -X POST "$BASE_URL" \
+echo "8️⃣ toggleSkipWord"
+curl -s -X POST "$LEARN_VOCAB_URL" \
   -H 'Content-Type: application/json' \
   -d "{
     \"action\": \"toggleSkipWord\",
@@ -102,10 +130,8 @@ curl -s -X POST "$BASE_URL" \
 echo ""
 echo ""
 
-# 7. getSkippedWords
-echo "7️⃣ getSkippedWords - 获取已划掉单词"
-echo "--------------------------------------"
-curl -s -X POST "$BASE_URL" \
+echo "9️⃣ getSkippedWords"
+curl -s -X POST "$LEARN_VOCAB_URL" \
   -H 'Content-Type: application/json' \
   -d "{
     \"action\": \"getSkippedWords\",
@@ -119,5 +145,5 @@ echo ""
 echo ""
 
 echo "======================================"
-echo "✅ 测试完成！"
+echo "✅ 测试完成!"
 echo "======================================"

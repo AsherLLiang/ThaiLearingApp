@@ -1,20 +1,19 @@
 {
-    "name": "memory-engine",
-    "version": "1.0.0",
-    "description": "Unified Memory Engine Cloud Function",
-    "main": "index.js",
-    "scripts": {
-        "deploy": "tcb fn deploy memory-engine",
-        "logs": "tcb fn log memory-engine",
-        "test": "tcb fn invoke memory-engine --data '{\"action\":\"checkModuleAccess\",\"data\":{\"userId\":\"test\"}}'"
-    },
-    "dependencies": {
-        "wx-server-sdk": "~2.6.3",
-        "@thai-app/shared": "file:../shared"
-    },
-    "author": "Liang JianYu",
-    "license": "MIT",
-    "engines": {
-        "node": ">=16.0.0"
-    }
+  "name": "memory-engine",
+  "version": "1.0.0",
+  "description": "Unified Memory Engine Cloud Function",
+  "main": "index.js",
+  "scripts": {
+    "deploy": "tcb fn deploy memory-engine",
+    "logs": "tcb fn log memory-engine",
+    "test": "tcb fn invoke memory-engine --data '{\"action\":\"checkModuleAccess\",\"data\":{\"userId\":\"test\"}}'"
+  },
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  },
+  "author": "Liang JianYu",
+  "license": "MIT",
+  "engines": {
+    "node": "18.20.0"
+  }
 }

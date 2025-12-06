@@ -5,8 +5,8 @@
 'use strict';
 
 // 假设 memoryEngine 内部没有严重的全局副作用，如果有问题，可能需要检查 memoryEngine
-const { getTodayReviewEntities, getOrCreateMemory, checkModuleAccess } = require('@thai-app/shared').memoryEngine;
-const { createResponse } = require('@thai-app/shared').response;
+const { getTodayReviewEntities, getOrCreateMemory, checkModuleAccess } = require('../utils/memoryEngine');
+const { createResponse } = require('../utils/response');
 
 /**
  * @param {Object} db - 数据库实例

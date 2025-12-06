@@ -4,7 +4,7 @@ const db = cloud.database();
 
 
 // ✅ 处理函数
-const { createResponse } = require('@thai-app/shared').response;
+const { createResponse } = require('./utils/response');
 const getLetterTest = require('./handlers/getLetterTest');
 const submitLetterTest = require('./handlers/submitLetterTest');
 const passLetterTest = require('./handlers/passLetterTest');

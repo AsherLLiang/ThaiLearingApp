@@ -3,9 +3,9 @@
  * Action: checkModuleAccess
  */
 
-const { checkModuleAccess } = require('@thai-app/shared').memoryEngine;
-const { validateParams } = require('@thai-app/shared').validators;
-const { createResponse } = require('@thai-app/shared').response;
+const { checkModuleAccess } = require('../utils/memoryEngine');
+const { validateParams } = require('../utils/validators');
+const { createResponse } = require('../utils/response');
 
 async function checkModuleAccessHandler(db, params) {
 

@@ -8,7 +8,7 @@
 
 'use strict';
 
-const { createResponse } = require('@thai-app/shared').response;
+const { createResponse } = require('../utils/response');
 
 /**
  * 划掉或恢复单词
