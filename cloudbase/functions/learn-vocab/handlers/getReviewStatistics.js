@@ -10,8 +10,9 @@
 
 const { createResponse } = require('../utils/response');
 const {
-  COLLECTIONS,
-  MasteryLevel
+  MasteryLevel,
+  EARLY_INTERVALS,
+  DAILY_LEARNING_CONFIG
 } = require('../utils/constants');
 
 /**

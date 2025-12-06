@@ -99,7 +99,7 @@ async function getTodayWords(db, params) {
     });
 
     // ===== Step 5: 获取新词 (用户从未学过的词汇) =====
-    const maxNewWords = DAILY_LEARNING_CONFIG?.MAX_NEW_WORDS || 10;
+    const maxNewWords = (DAILY_LEARNING_CONFIG && DAILY_LEARNING_CONFIG.MAX_NEW_WORDS) || 10;
 
     let newWordsQuery = db.collection('vocabulary');
 

@@ -9,14 +9,10 @@ const { createResponse } = require('../utils/response');
 
 async function checkModuleAccessHandler(db, params) {
 
-  // ✅ ✅ ✅ 正确的开发模式强制放行写法
-  console.log('🔥 当前 NODE_ENV =', process.env.NODE_ENV);
-  const env = process.env.NODE_ENV || 'development';
-
-  if (env !== 'production') {
+  if (DEV_FORCE_UNLOCK) {
     return createResponse(true, {
       allowed: true,
-      moduleType: params?.moduleType || 'unknown',
+      moduleType: params.moduleType,
       progress: 100
     }, '【开发模式】模块已强制放行');
   }

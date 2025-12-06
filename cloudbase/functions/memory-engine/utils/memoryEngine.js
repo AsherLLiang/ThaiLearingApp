@@ -358,21 +358,7 @@ async function initUserProgress(db, userId) {
  */
 async function checkModuleAccess(db, userId, moduleType) {
 
-    // ✅✅✅【调试总开关：跳过所有学习锁】
-    if (process.env.FORCE_UNLOCK === 'true') {
-        console.warn('⚠️ FORCE_UNLOCK 已开启, 强制放行模块:', moduleType);
-        return {
-            allowed: true,
-            progress: {
-                letterCompleted: true,
-                letterProgress: 1,
-                wordUnlocked: true,
-                sentenceUnlocked: true,
-                articleUnlocked: true,
-                currentStage: moduleType
-            }
-        };
-    }
+    // FORCE_UNLOCK logic removed for CloudBase compatibility
 
     const progressResult = await db.collection('user_progress')
         .where({ userId })
