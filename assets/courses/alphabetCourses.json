@@ -1,0 +1,12 @@
+[
+  {
+    "id": "alphabet",
+    "source": "alphabet",
+    "title": "泰语字母表",
+    "description": "从44个辅音到元音与声调，逐步掌握泰语读写基础。",
+    "level": "入门",
+    "image": "thai_alphabet.png",
+    "category": "letter",
+    "lessons": 44
+  }
+]

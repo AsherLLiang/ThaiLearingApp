@@ -1,16 +1,23 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { View, Text, StyleSheet, Pressable, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { X } from 'lucide-react-native';
 import { ThaiPatternBackground } from '@/src/components/common/ThaiPatternBackground';
 import { Colors } from '@/src/constants/colors';
 import { Typography } from '@/src/constants/typography';
 import { NewWordView, WordData } from '@/src/components/learning/NewWordView';
 import { ReviewWordView } from '@/src/components/learning/ReviewWordView';
+import { AlphabetLearningView } from '@/src/components/learning/AlphabetLearningView';
+import { AlphabetReviewView } from '@/src/components/learning/AlphabetReviewView';
 import { useVocabularyStore } from '@/src/stores/vocabularyStore';
+import { useLearningPreferenceStore } from '@/src/stores/learningPreferenceStore';
 import { useAlphabetStore } from '@/src/stores/alphabetStore';
+import { LearningPhase } from '@/src/entities/enums/LearningPhase.enum';
+import { useUserStore } from '@/src/stores/userStore';
+import AlphabetLearningScreen from './alphabet/index';
+
 
 // --- Mock Data ---
 
@@ -200,21 +207,21 @@ const MOCK_NEW_WORDS: WordData[] = [
     },
     {
         id: 'new5',
-        thai: 'ฟัง',
-        phonetic: 'Fang',
+        thai: 'อ่าน',
+        phonetic: 'Aan',
         type: '动词',
-        meaning: '听',
+        meaning: '读',
         definitions: {
-            basic: '听，倾听',
+            basic: '阅读，念',
             examples: [
-                { thai: 'ฟังเพลง', meaning: '听音乐' },
-                { thai: 'ฟังไม่ทัน', meaning: '听不及/没听清' }
+                { thai: 'อ่านหนังสือ', meaning: '读书' },
+                { thai: 'อ่านออกเสียง', meaning: '朗读' }
             ],
             usage: {
                 grammar: [],
                 diff: '无',
                 mistakes: '无',
-                similar: 'ได้ยิน (听见)'
+                similar: 'ศึกษา (学习/研究)'
             }
         }
     }
@@ -223,6 +230,7 @@ const MOCK_NEW_WORDS: WordData[] = [
 // --- Types ---
 
 type SessionMode = 'REVIEW' | 'LEARN_NEW';
+type ModuleVariant = 'alphabet' | 'word';
 
 interface QueueItem {
     word: WordData;
@@ -231,52 +239,65 @@ interface QueueItem {
 }
 
 export default function LearningSession() {
+    const params = useLocalSearchParams();
+    const moduleParam = typeof params.module === 'string' ? params.module : 'word';
+    const moduleType: ModuleVariant = moduleParam === 'alphabet' ? 'alphabet' : 'word';
+    const courseSource = typeof params.source === 'string' ? params.source : undefined;
+    const { startCourse, currentCourseSource } = useVocabularyStore();
+
+    useEffect(() => {
+        if (!courseSource) return;
+
+        // ⭐ 1. 字母模块：不在这里自动 startCourse
+        if (moduleType === 'alphabet') {
+            return;
+        }
+
+        // ⭐ 2. 只有当当前没有课程时，才初始化一次
+        if (!currentCourseSource) {
+            startCourse(courseSource);
+        }
+    }, [moduleType, courseSource, currentCourseSource, startCourse]);
+
+    if (moduleType === 'alphabet') {
+        return <AlphabetSession />;
+    }
+
+    return <WordSession />;
+}
+
+function WordSession() {
     const { t } = useTranslation();
     const router = useRouter();
     const [queue, setQueue] = useState<QueueItem[]>([]);
     const [currentIndex, setCurrentIndex] = useState(0);
     const [mode, setMode] = useState<SessionMode>('REVIEW');
     const [isSessionComplete, setIsSessionComplete] = useState(false);
-
-    const {
-        reviewQueue: alphaQueue,
-        initSession: initAlphaSession
-    } = useAlphabetStore();
-    const {
-        reviewQueue: vocabQueue,
-        initSession: initVocabSession,
-        currentCourseSource
-    } = useVocabularyStore();
-
-    // Redirect to Alphabet Learning if current course is alphabet
-    useEffect(() => {
-        if (currentCourseSource === 'alphabet') {
-            router.replace('/learning/alphabet');
-        }
-    }, [currentCourseSource]);
-
+    const { dailyLimits } = useLearningPreferenceStore();
 
     // Initialize Session
     useEffect(() => {
-        // 1. Add Old Words (Review Phase) - 3 reps each
-        const reviewItems: QueueItem[] = MOCK_OLD_WORDS.map(w => ({
+        const dailyLimit = dailyLimits.word || 20;
+        const reviewCap = Math.min(MOCK_OLD_WORDS.length, Math.max(1, Math.floor(dailyLimit / 2)));
+        const limitedReview = MOCK_OLD_WORDS.slice(0, reviewCap);
+
+        const remaining = Math.max(1, dailyLimit - limitedReview.length);
+        const limitedNew = MOCK_NEW_WORDS.slice(0, Math.min(MOCK_NEW_WORDS.length, remaining));
+
+        const reviewItems: QueueItem[] = limitedReview.map(w => ({
             word: w,
             type: 'review',
-            repetitionsLeft: 3
+            repetitionsLeft: 3,
         }));
 
-        // 2. Add New Words (Learn Phase) - 3 reps each
-        const newItems: QueueItem[] = MOCK_NEW_WORDS.map(w => ({
+        const newItems: QueueItem[] = limitedNew.map(w => ({
             word: w,
             type: 'new',
-            repetitionsLeft: 3
+            repetitionsLeft: 3,
         }));
 
-        // Combine: Review items first, then New items
-        // Note: In a real app, you might interleave them or manage separate queues.
-        // Here we just concat them. The 'mode' state will help us track where we are conceptually.
         setQueue([...reviewItems, ...newItems]);
-    }, []);
+    }, [dailyLimits.word]);
 
     const currentItem = queue[currentIndex];
 
@@ -300,25 +321,19 @@ export default function LearningSession() {
         // Decrease repetitions
         currentQueueItem.repetitionsLeft -= 1;
 
-        // If still needs repetition, move to end of queue (or some spaced interval)
-        // For this mock, we'll just push it to the end if reps > 0
         if (currentQueueItem.repetitionsLeft > 0) {
             nextQueue.push({ ...currentQueueItem });
         }
 
-        // Move to next item
         if (currentIndex < nextQueue.length - 1) {
             setQueue(nextQueue);
             setCurrentIndex(prev => prev + 1);
         } else {
-            // Session Complete
             setIsSessionComplete(true);
         }
     };
 
     const handleSkipReview = () => {
-        // Filter out all remaining 'review' items from the queue
-        // and jump straight to the first 'new' item
         const newQueue = queue.filter(item => item.type === 'new');
 
         if (newQueue.length === 0) {
@@ -353,7 +368,7 @@ export default function LearningSession() {
                     </Pressable>
                 </View>
             </SafeAreaView>
-        )
+        );
     }
 
     if (!currentItem) {
@@ -364,7 +379,6 @@ export default function LearningSession() {
         );
     }
 
-    // Calculate Progress
     const progress = Math.round(((currentIndex) / queue.length) * 100);
 
     return (
@@ -386,7 +400,7 @@ export default function LearningSession() {
                         <Text style={styles.skipText}>{t('learning.skipReview')}</Text>
                     </Pressable>
                 ) : (
-                    <View style={{ width: 60 }} /> // Spacer
+                    <View style={{ width: 60 }} />
                 )}
             </View>
 
@@ -394,7 +408,7 @@ export default function LearningSession() {
             <View style={styles.content}>
                 {currentItem.type === 'review' ? (
                     <ReviewWordView
-                        key={`${currentItem.word.id}-review-${currentIndex}`} // Force re-render on index change
+                        key={`${currentItem.word.id}-review-${currentIndex}`}
                         word={currentItem.word}
                         onAnswer={(quality) => {
                             console.log(`Answered ${quality} for ${currentItem.word.thai}`);
@@ -410,6 +424,147 @@ export default function LearningSession() {
                 )}
             </View>
         </SafeAreaView>
+    );
+}
+
+function AlphabetSession() {
+    const { t } = useTranslation();
+    const router = useRouter();
+    const { currentUser } = useUserStore();
+    const { dailyLimits } = useLearningPreferenceStore();
+    const [hasViewedIntro, setHasViewedIntro] = useState(false);
+    const [sessionStarted, setSessionStarted] = useState(false);
+
+    const {
+        currentAlphabet,
+        reviewQueue,
+        phase,
+        isLoading,
+        initSession,
+        submitResult,
+        resetSession,
+        completedCount,
+        totalCount,
+    } = useAlphabetStore();
+
+    useEffect(() => {
+        setHasViewedIntro(false);
+    }, [currentAlphabet?.alphabetId]);
+
+    useEffect(() => {
+        const start = async () => {
+            if (sessionStarted || isLoading) return;
+            const userId = currentUser?.userId || 'user_123';
+            await initSession(userId, dailyLimits.alphabet || 20);
+            setSessionStarted(true);
+        };
+
+        start();
+    }, [sessionStarted, isLoading, initSession, currentUser?.userId, dailyLimits.alphabet]);
+
+    const handleClose = () => {
+        Alert.alert(
+            t('learning.endSessionTitle', '结束学习?'),
+            t('learning.endSessionMessage', '当前进度将不会保存'),
+            [
+                { text: t('common.cancel', '取消'), style: "cancel" },
+                {
+                    text: t('learning.quit', '退出'),
+                    style: "destructive",
+                    onPress: () => {
+                        resetSession();
+                        router.back();
+                    }
+                }
+            ]
+        );
+    };
+
+    if (isLoading && !sessionStarted) {
+        return (
+            <SafeAreaView style={styles.container}>
+                <View style={styles.centerContent}>
+                    <Text>{t('common.loading', '加载中...')}</Text>
+                </View>
+            </SafeAreaView>
+        );
+    }
+
+    if (phase === LearningPhase.COMPLETED) {
+        return (
+            <SafeAreaView style={styles.container}>
+                <View style={styles.centerContent}>
+                    <Text style={styles.completeTitle}>{t('learning.sessionComplete', '今日学习完成!')}</Text>
+                    <Pressable style={styles.completeButton} onPress={() => router.back()}>
+                        <Text style={styles.completeButtonText}>{t('learning.backToHome', '返回首页')}</Text>
+                    </Pressable>
+                </View>
+            </SafeAreaView>
+        );
+    }
+
+    if (!currentAlphabet) {
+        return (
+            <SafeAreaView style={styles.container}>
+                <View style={styles.centerContent}>
+                    <Text>{t('common.loading', '加载中...')}</Text>
+                </View>
+            </SafeAreaView>
+        );
+    }
+
+    const isNew = !currentAlphabet.memoryState || currentAlphabet.memoryState.isNew;
+    const showIntro = isNew && !hasViewedIntro && currentAlphabet.currentAttempts === 0;
+    const progress = totalCount > 0 ? (completedCount / totalCount) * 100 : 0;
+
+    return (
+        <SafeAreaView edges={['top', 'bottom']} style={styles.container}>
+            <ThaiPatternBackground opacity={0.05} />
+
+            <View style={styles.header}>
+                <Pressable onPress={handleClose} style={styles.closeButton}>
+                    <X size={24} color={Colors.taupe} />
+                </Pressable>
+
+                <View style={styles.progressBarContainer}>
+                    <View style={[styles.progressBarFill, { width: `${progress}%` }]} />
+                </View>
+
+                <View style={{ width: 60 }} />
+            </View>
+
+            <View style={styles.content}>
+                {showIntro ? (
+                    <AlphabetLearningView
+                        alphabet={currentAlphabet}
+                        onNext={() => setHasViewedIntro(true)}
+                    />
+                ) : (
+                    <AlphabetReviewViewWrapper
+                        key={currentAlphabet.alphabetId}
+                        alphabet={currentAlphabet}
+                        onSubmit={(quality) => {
+                            const userId = currentUser?.userId || 'user_123';
+                            submitResult(userId, quality);
+                        }}
+                    />
+                )}
+            </View>
+        </SafeAreaView>
+    );
+}
+
+function AlphabetReviewViewWrapper({ alphabet, onSubmit }: { alphabet: any, onSubmit: (q: any) => void }) {
+    const [quality, setQuality] = useState<any>(null);
+
+    return (
+        <AlphabetReviewView
+            alphabet={alphabet}
+            onAnswer={(q) => setQuality(q)}
+            onNext={() => {
+                if (quality) onSubmit(quality);
+            }}
+        />
     );
 }
 
@@ -443,11 +598,6 @@ const styles = StyleSheet.create({
         backgroundColor: Colors.thaiGold,
         borderRadius: 3,
     },
-    skipText: {
-        fontFamily: Typography.notoSerifRegular,
-        fontSize: 14,
-        color: Colors.taupe,
-    },
     content: {
         flex: 1,
     },
@@ -471,5 +621,15 @@ const styles = StyleSheet.create({
     completeButtonText: {
         color: Colors.white,
         fontFamily: Typography.notoSerifBold,
+    },
+    centerContent: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    skipText: {
+        fontFamily: Typography.notoSerifRegular,
+        fontSize: 14,
+        color: Colors.taupe,
     },
 });
