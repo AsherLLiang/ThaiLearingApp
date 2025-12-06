@@ -8,11 +8,11 @@
 
 'use strict';
 
-const { createResponse } = require('@thai-app/shared').response;
+const { createResponse } = require('../utils/response');
 const {
   COLLECTIONS,
   MasteryLevel
-} = require('@thai-app/shared').constants;
+} = require('../utils/constants');
 
 /**
  * 计算连续学习天数

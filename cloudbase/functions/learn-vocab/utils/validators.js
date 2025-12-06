@@ -7,7 +7,7 @@
 'use strict';
 
 const { userCollection, vocabularyCollection } = require('./database');
-const { MasteryLevel } = require('@thai-app/shared').constants;
+const { MasteryLevel } = require('./constants');
 
 /**
  * 验证用户是否存在
@@ -16,21 +16,21 @@ const { MasteryLevel } = require('@thai-app/shared').constants;
  * @returns {Promise<Object|null>} 用户对象或 null
  */
 async function validateUser(userId) {
-  if (!userId || typeof userId !== 'string') {
-    return null;
-  }
+    if (!userId || typeof userId !== 'string') {
+        return null;
+    }
 
-  try {
-    const { data } = await userCollection
-      .where({ userId })
-      .limit(1)
-      .get();
+    try {
+        const { data } = await userCollection
+            .where({ userId })
+            .limit(1)
+            .get();
 
-    return data.length > 0 ? data[0] : null;
-  } catch (error) {
-    console.error('[validateUser] Error:', error);
-    return null;
-  }
+        return data.length > 0 ? data[0] : null;
+    } catch (error) {
+        console.error('[validateUser] Error:', error);
+        return null;
+    }
 }
 
 /**
@@ -40,21 +40,21 @@ async function validateUser(userId) {
  * @returns {Promise<Object|null>} 词汇对象或 null
  */
 async function validateVocabulary(vocabularyId) {
-  if (!vocabularyId || typeof vocabularyId !== 'string') {
-    return null;
-  }
+    if (!vocabularyId || typeof vocabularyId !== 'string') {
+        return null;
+    }
 
-  try {
-    const { data } = await vocabularyCollection
-      .where({ vocabularyId })
-      .limit(1)
-      .get();
+    try {
+        const { data } = await vocabularyCollection
+            .where({ vocabularyId })
+            .limit(1)
+            .get();
 
-    return data.length > 0 ? data[0] : null;
-  } catch (error) {
-    console.error('[validateVocabulary] Error:', error);
-    return null;
-  }
+        return data.length > 0 ? data[0] : null;
+    } catch (error) {
+        console.error('[validateVocabulary] Error:', error);
+        return null;
+    }
 }
 
 /**
@@ -64,8 +64,8 @@ async function validateVocabulary(vocabularyId) {
  * @returns {boolean} 是否有效
  */
 function isValidMastery(mastery) {
-  const validValues = Object.values(MasteryLevel);
-  return validValues.includes(mastery);
+    const validValues = Object.values(MasteryLevel);
+    return validValues.includes(mastery);
 }
 
 /**
@@ -77,10 +77,10 @@ function isValidMastery(mastery) {
  * @returns {Object} 验证后的分页参数
  */
 function validatePagination(limit, offset, maxLimit = 100) {
-  return {
-    limit: Math.min(Math.max(1, parseInt(limit) || 20), maxLimit),
-    offset: Math.max(0, parseInt(offset) || 0),
-  };
+    return {
+        limit: Math.min(Math.max(1, parseInt(limit) || 20), maxLimit),
+        offset: Math.max(0, parseInt(offset) || 0),
+    };
 }
 
 /**
@@ -91,13 +91,13 @@ function validatePagination(limit, offset, maxLimit = 100) {
  * @returns {Object} { valid: boolean, error?: string }
  */
 function validateRequiredString(value, name) {
-  if (!value || typeof value !== 'string' || value.trim() === '') {
-    return {
-      valid: false,
-      error: `${name} 是必填参数且不能为空`,
-    };
-  }
-  return { valid: true };
+    if (!value || typeof value !== 'string' || value.trim() === '') {
+        return {
+            valid: false,
+            error: `${name} 是必填参数且不能为空`,
+        };
+    }
+    return { valid: true };
 }
 
 /**
@@ -108,13 +108,13 @@ function validateRequiredString(value, name) {
  * @returns {Object} { valid: boolean, error?: string }
  */
 function validateBoolean(value, name) {
-  if (typeof value !== 'boolean') {
-    return {
-      valid: false,
-      error: `${name} 必须是布尔值`,
-    };
-  }
-  return { valid: true };
+    if (typeof value !== 'boolean') {
+        return {
+            valid: false,
+            error: `${name} 必须是布尔值`,
+        };
+    }
+    return { valid: true };
 }
 /**
  * 通用参数验证函数
@@ -124,30 +124,30 @@ function validateBoolean(value, name) {
  * @returns {Object} { isValid: boolean, message?: string }
  */
 function validateParams(params, requiredFields) {
-  const missing = [];
+    const missing = [];
 
-  for (const field of requiredFields) {
-    if (params[field] === undefined || params[field] === null || params[field] === '') {
-      missing.push(field);
+    for (const field of requiredFields) {
+        if (params[field] === undefined || params[field] === null || params[field] === '') {
+            missing.push(field);
+        }
     }
-  }
 
-  if (missing.length > 0) {
-    return {
-      isValid: false,
-      message: `缺少必填参数: ${missing.join(', ')}`
-    };
-  }
+    if (missing.length > 0) {
+        return {
+            isValid: false,
+            message: `缺少必填参数: ${missing.join(', ')}`
+        };
+    }
 
-  return { isValid: true };
+    return { isValid: true };
 }
 
 module.exports = {
-  validateUser,
-  validateVocabulary,
-  isValidMastery,
-  validatePagination,
-  validateRequiredString,
-  validateBoolean,
-  validateParams,
+    validateUser,
+    validateVocabulary,
+    isValidMastery,
+    validatePagination,
+    validateRequiredString,
+    validateBoolean,
+    validateParams,
 };

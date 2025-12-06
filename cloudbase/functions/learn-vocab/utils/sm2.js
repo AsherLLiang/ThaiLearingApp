@@ -11,7 +11,7 @@
 
 'use strict';
 
-const { MasteryLevel, SM2_PARAMS, EARLY_INTERVALS } = require('@thai-app/shared').constants;
+const { MasteryLevel, SM2_PARAMS, EARLY_INTERVALS } = require('./constants');
 
 /**
  * 将掌握程度映射到 SM-2 Quality 值
@@ -28,16 +28,16 @@ const { MasteryLevel, SM2_PARAMS, EARLY_INTERVALS } = require('@thai-app/shared'
  * @returns {number} Quality值 (1-5)
  */
 function masteryToQuality(mastery) {
-  switch (mastery) {
-    case MasteryLevel.UNFAMILIAR:
-      return 1;  // 完全不记得
-    case MasteryLevel.FUZZY:
-      return 3;  // 有印象但不确定
-    case MasteryLevel.REMEMBERED:
-      return 5;  // 完全记得
-    default:
-      return 1;
-  }
+    switch (mastery) {
+        case MasteryLevel.UNFAMILIAR:
+            return 1;  // 完全不记得
+        case MasteryLevel.FUZZY:
+            return 3;  // 有印象但不确定
+        case MasteryLevel.REMEMBERED:
+            return 5;  // 完全记得
+        default:
+            return 1;
+    }
 }
 
 /**
@@ -62,72 +62,72 @@ function masteryToQuality(mastery) {
  * //   nextReviewDate: "2025-12-01T10:00:00Z",
  * //   shouldResetCount: false
  * // }
- */
+ * */
 function calculateSM2Optimized(
-  mastery,
-  currentInterval = 1,
-  easinessFactor = SM2_PARAMS.INITIAL_EASINESS_FACTOR,
-  reviewCount = 0
+    mastery,
+    currentInterval = 1,
+    easinessFactor = SM2_PARAMS.INITIAL_EASINESS_FACTOR,
+    reviewCount = 0
 ) {
-  let nextInterval = currentInterval;
-  let nextEF = easinessFactor;
-  let shouldResetCount = false;
+    let nextInterval = currentInterval;
+    let nextEF = easinessFactor;
+    let shouldResetCount = false;
 
-  const quality = masteryToQuality(mastery);
+    const quality = masteryToQuality(mastery);
 
-  // ==================== 核心算法逻辑 ====================
+    // ==================== 核心算法逻辑 ====================
 
-  if (quality < 3) {
-    // ========== 忘记: 完全重置 ==========
-    // 用户完全不记得，需要从头开始学习
-    nextInterval = 1;
-    nextEF = Math.max(SM2_PARAMS.MIN_EASINESS_FACTOR, nextEF - 0.2);
-    shouldResetCount = true;
+    if (quality < 3) {
+        // ========== 忘记: 完全重置 ==========
+        // 用户完全不记得，需要从头开始学习
+        nextInterval = 1;
+        nextEF = Math.max(SM2_PARAMS.MIN_EASINESS_FACTOR, nextEF - 0.2);
+        shouldResetCount = true;
 
-  } else if (quality === 3) {
-    // ========== 模糊: 缩短间隔，加强复习 ==========
-    // 改进: 不是维持不变，而是缩短20%
-    nextInterval = Math.max(1, Math.round(currentInterval * SM2_PARAMS.FUZZY_MULTIPLIER));
-    nextEF = Math.max(SM2_PARAMS.MIN_EASINESS_FACTOR, nextEF - 0.1);
+    } else if (quality === 3) {
+        // ========== 模糊: 缩短间隔，加强复习 ==========
+        // 改进: 不是维持不变，而是缩短20%
+        nextInterval = Math.max(1, Math.round(currentInterval * SM2_PARAMS.FUZZY_MULTIPLIER));
+        nextEF = Math.max(SM2_PARAMS.MIN_EASINESS_FACTOR, nextEF - 0.1);
 
-  } else {
-    // ========== 记得: 使用优化的间隔序列 ==========
-    if (reviewCount < EARLY_INTERVALS.length) {
-      // 早期阶段: 使用预定义的渐进间隔
-      // 这是关键改进: 1→2→4→7→14 而非原版的 1→6
-      nextInterval = EARLY_INTERVALS[reviewCount];
     } else {
-      // 后期阶段: 使用 EF 计算指数增长
-      nextInterval = Math.round(currentInterval * nextEF);
+        // ========== 记得: 使用优化的间隔序列 ==========
+        if (reviewCount < EARLY_INTERVALS.length) {
+            // 早期阶段: 使用预定义的渐进间隔
+            // 这是关键改进: 1→2→4→7→14 而非原版的 1→6
+            nextInterval = EARLY_INTERVALS[reviewCount];
+        } else {
+            // 后期阶段: 使用 EF 计算指数增长
+            nextInterval = Math.round(currentInterval * nextEF);
+        }
+
+        // 提高简易度 (标准 SM-2 公式)
+        nextEF = nextEF + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02));
+        nextEF = Math.max(SM2_PARAMS.MIN_EASINESS_FACTOR, nextEF);
     }
 
-    // 提高简易度 (标准 SM-2 公式)
-    nextEF = nextEF + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02));
-    nextEF = Math.max(SM2_PARAMS.MIN_EASINESS_FACTOR, nextEF);
-  }
+    // 限制最大间隔
+    nextInterval = Math.min(nextInterval, SM2_PARAMS.MAX_INTERVAL_DAYS);
 
-  // 限制最大间隔
-  nextInterval = Math.min(nextInterval, SM2_PARAMS.MAX_INTERVAL_DAYS);
+    // 计算下次复习日期
+    const nextReviewDate = new Date();
+    nextReviewDate.setDate(nextReviewDate.getDate() + nextInterval);
 
-  // 计算下次复习日期
-  const nextReviewDate = new Date();
-  nextReviewDate.setDate(nextReviewDate.getDate() + nextInterval);
+    // 计算新的复习次数
+    const newRepetitions = shouldResetCount ? 0 : reviewCount + 1;
 
-  // 计算新的复习次数
-  const newRepetitions = shouldResetCount ? 0 : reviewCount + 1;
+    return {
+        // === 兼容 memoryEngine.js 的旧接口 ===
+        interval: nextInterval,
+        easinessFactor: parseFloat(nextEF.toFixed(2)),
+        repetitions: newRepetitions,
 
-  return {
-    // === 兼容 memoryEngine.js 的旧接口 ===
-    interval: nextInterval,
-    easinessFactor: parseFloat(nextEF.toFixed(2)),
-    repetitions: newRepetitions,
-
-    // === 新接口（保留供未来使用）===
-    nextInterval,
-    nextEasinessFactor: parseFloat(nextEF.toFixed(2)),
-    nextReviewDate: nextReviewDate.toISOString(),
-    shouldResetCount,
-  };
+        // === 新接口（保留供未来使用）===
+        nextInterval,
+        nextEasinessFactor: parseFloat(nextEF.toFixed(2)),
+        nextReviewDate: nextReviewDate.toISOString(),
+        shouldResetCount,
+    };
 }
 
 /**
@@ -149,25 +149,25 @@ function calculateSM2Optimized(
  * // ]
  */
 function generateReviewTimeline(currentReviewCount, maxItems = 5) {
-  const timeline = [];
-  let interval = 1;
-  let ef = SM2_PARAMS.INITIAL_EASINESS_FACTOR;
+    const timeline = [];
+    let interval = 1;
+    let ef = SM2_PARAMS.INITIAL_EASINESS_FACTOR;
 
-  for (let i = currentReviewCount; i < currentReviewCount + maxItems; i++) {
-    if (i < EARLY_INTERVALS.length) {
-      interval = EARLY_INTERVALS[i];
-    } else {
-      interval = Math.round(interval * ef);
+    for (let i = currentReviewCount; i < currentReviewCount + maxItems; i++) {
+        if (i < EARLY_INTERVALS.length) {
+            interval = EARLY_INTERVALS[i];
+        } else {
+            interval = Math.round(interval * ef);
+        }
+        interval = Math.min(interval, SM2_PARAMS.MAX_INTERVAL_DAYS);
+
+        timeline.push({
+            reviewNumber: i + 1,
+            intervalDays: interval,
+        });
     }
-    interval = Math.min(interval, SM2_PARAMS.MAX_INTERVAL_DAYS);
 
-    timeline.push({
-      reviewNumber: i + 1,
-      intervalDays: interval,
-    });
-  }
-
-  return timeline;
+    return timeline;
 }
 
 /**
@@ -176,25 +176,25 @@ function generateReviewTimeline(currentReviewCount, maxItems = 5) {
  * @returns {Object} { startOfDay, endOfDay, timestamp }
  */
 function getTodayRange() {
-  const now = new Date();
-  const startOfDay = new Date(Date.UTC(
-    now.getUTCFullYear(),
-    now.getUTCMonth(),
-    now.getUTCDate(),
-    0, 0, 0, 0
-  ));
-  const endOfDay = new Date(Date.UTC(
-    now.getUTCFullYear(),
-    now.getUTCMonth(),
-    now.getUTCDate() + 1,
-    0, 0, 0, 0
-  ));
+    const now = new Date();
+    const startOfDay = new Date(Date.UTC(
+        now.getUTCFullYear(),
+        now.getUTCMonth(),
+        now.getUTCDate(),
+        0, 0, 0, 0
+    ));
+    const endOfDay = new Date(Date.UTC(
+        now.getUTCFullYear(),
+        now.getUTCMonth(),
+        now.getUTCDate() + 1,
+        0, 0, 0, 0
+    ));
 
-  return {
-    startOfDay: startOfDay.toISOString(),
-    endOfDay: endOfDay.toISOString(),
-    timestamp: now.toISOString(),
-  };
+    return {
+        startOfDay: startOfDay.toISOString(),
+        endOfDay: endOfDay.toISOString(),
+        timestamp: now.toISOString(),
+    };
 }
 
 /**
@@ -203,19 +203,19 @@ function getTodayRange() {
  * @returns {Object} 算法元信息
  */
 function getAlgorithmInfo() {
-  return {
-    name: 'Optimized SM-2',
-    version: '1.1.0',
-    earlyIntervals: EARLY_INTERVALS,
-    maxInterval: SM2_PARAMS.MAX_INTERVAL_DAYS,
-    description: '基于艾宾浩斯遗忘曲线优化的间隔重复算法',
-  };
+    return {
+        name: 'Optimized SM-2',
+        version: '1.1.0',
+        earlyIntervals: EARLY_INTERVALS,
+        maxInterval: SM2_PARAMS.MAX_INTERVAL_DAYS,
+        description: '基于艾宾浩斯遗忘曲线优化的间隔重复算法',
+    };
 }
 
 module.exports = {
-  calculateSM2Optimized,
-  generateReviewTimeline,
-  getTodayRange,
-  getAlgorithmInfo,
-  masteryToQuality,
+    calculateSM2Optimized,
+    generateReviewTimeline,
+    getTodayRange,
+    getAlgorithmInfo,
+    masteryToQuality,
 };

@@ -1,20 +1,7 @@
-# 🔍 Thai Learning App - 云函数真实源码快照
+# Thai Learning App — 云函数真实源码快照
 
-**版本**: v1.0.0  
-**生成时间**: 2025-12-06T06:30:00+07:00  
-**审计类型**: 工程事故级代码取证  
-**目的**: 前后端事实对齐与系统级错误排查
-
-> ⚠️ **重要提示**: 本文档为100%真实源码快照，不含任何优化、猜测或省略。
-
----
-
-## ======================
-## 【Part 1】alphabet - index.js
-## ======================
-
-**文件路径**: `/Users/liangjianyu/LearnOnThailand/ThaiLearningApp/cloudbase/functions/alphabet/index.js`
-
+======================
+【Part 1】alphabet - index.js
 ```javascript
 const cloud = require('wx-server-sdk');
 cloud.init({ env: cloud.SYMBOL_CURRENT_ENV });
@@ -59,7 +46,7 @@ exports.main = async (event, context) => {
             case 'submitLetterTest':
                 return await submitLetterTest(db, userId, answers);
 
-            //✅ 3️⃣ 直接通过字母测试（调试/特殊逻辑用）
+            // ✅ 3️⃣ 直接通过字母测试（调试/特殊逻辑用）
             case 'passLetterTest':
                 return await passLetterTest(db, userId);
 
@@ -73,14 +60,8 @@ exports.main = async (event, context) => {
 };
 ```
 
----
-
-## ======================
-## 【Part 1.1】alphabet - handlers/getLetterTest.js
-## ======================
-
-**文件路径**: `/Users/liangjianyu/LearnOnThailand/ThaiLearningApp/cloudbase/functions/alphabet/handlers/getLetterTest.js`
-
+======================
+【Part 1.2】alphabet - handlers/getLetterTest.js
 ```javascript
 // ✅ 获取固定字母测试题
 const { createResponse } = require('@thai-app/shared').response;
@@ -99,14 +80,8 @@ async function getLetterTest(db) {
 module.exports = getLetterTest;
 ```
 
----
-
-## ======================
-## 【Part 1.2】alphabet - handlers/submitLetterTest.js
-## ======================
-
-**文件路径**: `/Users/liangjianyu/LearnOnThailand/ThaiLearningApp/cloudbase/functions/alphabet/handlers/submitLetterTest.js`
-
+======================
+【Part 1.2】alphabet - handlers/submitLetterTest.js
 ```javascript
 // ✅ 提交字母测试并判定是否通过
 const { createResponse } = require('@thai-app/shared').response;
@@ -168,14 +143,8 @@ async function submitLetterTest(db, userId, answers) {
 module.exports = submitLetterTest;
 ```
 
----
-
-## ======================
-## 【Part 1.3】alphabet - handlers/passLetterTest.js
-## ======================
-
-**文件路径**: `/Users/liangjianyu/LearnOnThailand/ThaiLearningApp/cloudbase/functions/alphabet/handlers/passLetterTest.js`
-
+======================
+【Part 1.2】alphabet - handlers/passLetterTest.js
 ```javascript
 // ✅ 记录字母测试通过状态
 async function passLetterTest(db, userId) {
@@ -204,14 +173,8 @@ async function passLetterTest(db, userId) {
 module.exports = passLetterTest;
 ```
 
----
-
-## ======================
-## 【Part 2】memory-engine - index.js
-##======================
-
-**文件路径**: `/Users/liangjianyu/LearnOnThailand/ThaiLearningApp/cloudbase/functions/memory-engine/index.js`
-
+======================
+【Part 2】memory-engine - index.js
 ```javascript
 /**
  * memory-engine 云函数
@@ -327,16 +290,8 @@ exports.main = async (event, context) => {
 };
 ```
 
----
-
-## ======================
-## 【Part 2.1】memory-engine - handlers/getTodayMemories.js
-## ======================
-
-**文件路径**: `/Users/liangjianyu/LearnOnThailand/ThaiLearningApp/cloudbase/functions/memory-engine/handlers/getTodayMemories.js`
-
-**⚠️ 高复杂度文件 - 184行**
-
+======================
+【Part 2.2】memory-engine - handlers/getTodayMemories.js
 ```javascript
 /**
  * 统一获取今日学习内容 (字母/单词/句子)
@@ -524,14 +479,8 @@ async function getTodayMemories(db, params) {
 module.exports = getTodayMemories;
 ```
 
----
-
-## ======================
-## 【Part 2.2】memory-engine - handlers/submitMemoryResult.js
-## ======================
-
-**文件路径**: `/Users/liangjianyu/LearnOnThailand/ThaiLearningApp/cloudbase/functions/memory-engine/handlers/submitMemoryResult.js`
-
+======================
+【Part 2.2】memory-engine - handlers/submitMemoryResult.js
 ```javascript
 /**
  * 统一提交学习结果 (字母/单词/句子)
@@ -610,16 +559,8 @@ async function submitMemoryResult(db, params) {
 module.exports = submitMemoryResult;
 ```
 
----
-
-## ======================
-## 【Part 2.3】memory-engine - handlers/checkModuleAccess.js
-## ======================
-
-**文件路径**: `/Users/liangjianyu/LearnOnThailand/ThaiLearningApp/cloudbase/functions/memory-engine/handlers/checkModuleAccess.js`
-
-**‼️ 模块解锁逻辑关键文件**
-
+======================
+【Part 2.2】memory-engine - handlers/checkModuleAccess.js
 ```javascript
 /**
  * 检查模块访问权限
@@ -689,14 +630,8 @@ async function checkModuleAccessHandler(db, params) {
 module.exports = checkModuleAccessHandler;
 ```
 
----
-
-## ======================
-## 【Part 2.4】memory-engine - handlers/getUserProgress.js
-## ======================
-
-**文件路径**: `/Users/liangjianyu/LearnOnThailand/ThaiLearningApp/cloudbase/functions/memory-engine/handlers/getUserProgress.js`
-
+======================
+【Part 2.2】memory-engine - handlers/getUserProgress.js
 ```javascript
 /**
  * 获取用户学习进度
@@ -785,47 +720,35 @@ async function getUserProgress(db, params) {
 module.exports = getUserProgress;
 ```
 
----
-
-## ======================
-## 【Part 3】shared - package.json
-## ======================
-
-**文件路径**: `/Users/liangjianyu/LearnOnThailand/ThaiLearningApp/cloudbase/functions/shared/package.json`
-
+======================
+【Part 3】shared - package.json
 ```json
 {
-    "name": "@thai-app/shared",
-    "version": "1.0.0",
-    "description": "Shared utilities for CloudBase cloud functions",
-    "main": "index.js",
-    "scripts": {
-        "test": "echo \"Error: no test specified\" && exit 1"
-    },
-    "keywords": [
-        "cloudbase",
-        "shared",
-        "utilities"
-    ],
-    "author": "Liang JianYu",
-    "license": "MIT",
-    "dependencies": {
-        "wx-server-sdk": "~2.6.3"
-    },
-    "engines": {
-        "node": ">=16.0.0"
-    }
+  "name": "@thai-app/shared",
+  "version": "1.0.0",
+  "description": "Shared utilities for CloudBase cloud functions",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "cloudbase",
+    "shared",
+    "utilities"
+  ],
+  "author": "Liang JianYu",
+  "license": "MIT",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
 }
 ```
 
----
-
-## ======================
-## 【Part 3.1】shared - index.js
-## ======================
-
-**文件路径**: `/Users/liangjianyu/LearnOnThailand/ThaiLearningApp/cloudbase/functions/shared/index.js`
-
+======================
+【Part 3.1】shared - index.js
 ```javascript
 /**
  * Shared Utilities Package Entry Point
@@ -857,18 +780,8 @@ module.exports = {
 };
 ```
 
----
-
-## ======================
-## 【Part 3.2】shared - memoryEngine.js (CRITICAL)
-## ======================
-
-**文件路径**: `/Users/liangjianyu/LearnOnThailand/ThaiLearningApp/cloudbase/functions/shared/memoryEngine.js`
-
-**⚠️ 核心模块 - 425行 - 所有学习逻辑的中枢**
-
-由于篇幅限制，仅提取关键函数签名和模块解锁逻辑：
-
+======================
+【Part 3.2】shared - memoryEngine.js
 ```javascript
 /**
  * 统一记忆引擎核心模块
@@ -879,15 +792,261 @@ module.exports = {
 
 const { calculateSM2Optimized } = require('./sm2');
 
-// === 导出函数列表 ===
-// - createMemoryRecord(db, userId, entityType, entityId, isLocked = false)
-// - getOrCreateMemory(db, userId, entityType, entityId, isLocked = false)
-// - updateMemoryAfterReview(db, userId, entityType, entityId, quality)
-// - getTodayReviewEntities(db, userId, entityType, limit = 20)
-// - initUserProgress(db, userId)
-// - checkModuleAccess(db, userId, moduleType) ⬅️ 关键解锁逻辑
+/**
+ * 创建新的记忆记录
+ */
+async function createMemoryRecord(db, userId, entityType, entityId, isLocked = false) {
 
-// === 模块解锁核心逻辑 (第359-414行) ===
+    // 验证参数
+    if (!userId || !entityType || !entityId) {
+        console.error('[createMemoryRecord] 参数缺失:', { userId, entityType, entityId });
+        throw new Error('userId, entityType, entityId 都是必需参数');
+    }
+
+    const now = new Date();
+    const nextReviewAt = isLocked ? null : new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString();
+
+    const memoryRecord = {
+        userId,
+        entityType,
+        entityId,
+        masteryLevel: 0.0,
+        reviewStage: 0,
+        easinessFactor: 2.5,
+        intervalDays: 1,
+        lastReviewAt: null,
+        nextReviewAt,
+        correctCount: 0,
+        wrongCount: 0,
+        streakCorrect: 0,
+        isLocked,
+        createdAt: now.toISOString(),
+        updatedAt: now.toISOString()
+    };
+
+    try {
+        // 尝试插入
+        const result = await db.collection('memory_status').add(memoryRecord);
+
+        console.log('[createMemoryRecord] 创建成功:', { userId, entityType, entityId });
+
+        return {
+            _id: result._id,
+            ...memoryRecord
+        };
+    } catch (error) {
+        // 如果是重复键错误，查询并返回现有记录
+        if (error.errCode === -502001 || error.message.includes('duplicate key')) {
+            console.log('[createMemoryRecord] 记录已存在，查询返回:', { userId, entityType, entityId });
+
+            const existingResult = await db.collection('memory_status')
+                .where({ userId, entityType, entityId })
+                .get();
+
+            if (existingResult.data && existingResult.data.length > 0) {
+                return existingResult.data[0];
+            }
+        }
+
+        // 其他错误继续抛出
+        console.error('[createMemoryRecord] 创建失败:', error);
+        throw error;
+    }
+}
+
+/**
+ * 获取或创建记忆记录
+ * 修复：使用 get() 代替 getOne()
+ */
+async function getOrCreateMemory(db, userId, entityType, entityId, isLocked = false) {
+    // 1. 尝试查询现有记录
+    const existingMemory = await db.collection('memory_status')
+        .where({
+            userId,
+            entityType,
+            entityId
+        })
+        .get();
+
+    // 2. 如果存在,直接返回第一条
+    if (existingMemory.data && existingMemory.data.length > 0) {
+        return existingMemory.data[0];
+    }
+
+    // 3. 不存在则创建新记录
+    return await createMemoryRecord(db, userId, entityType, entityId, isLocked);
+}
+
+/**
+ * 更新记忆状态(答题后调用)
+ */
+async function updateMemoryAfterReview(db, userId, entityType, entityId, quality) {
+    console.log('【测试】updateMemoryAfterReview 被调用了！', { userId, quality });
+    console.log('=== [updateMemoryAfterReview] 开始 ===');
+    console.log('参数:', JSON.stringify({ userId, entityType, entityId, quality }));
+
+    try {
+        // 1. 获取当前记忆记录
+        console.log('步骤1: 获取记忆记录');
+        const memory = await getOrCreateMemory(db, userId, entityType, entityId);
+        console.log('记忆记录:', JSON.stringify(memory));
+
+        // 2. 映射质量到SM-2评分
+        console.log('步骤2: 映射质量');
+        const qualityMap = {
+            '陌生': 1,
+            '模糊': 3,
+            '记得': 5
+        };
+        const sm2Quality = qualityMap[quality] || 3;
+        console.log('SM-2质量:', sm2Quality);
+
+        // 3. 计算新的SM-2参数
+        console.log('步骤3: 调用 calculateSM2Optimized');
+        console.log('调用参数:', {
+            quality,
+            intervalDays: memory.intervalDays,
+            easinessFactor: memory.easinessFactor,
+            reviewStage: memory.reviewStage
+        });
+
+        const sm2Result = calculateSM2Optimized(
+            quality,
+            memory.intervalDays,
+            memory.easinessFactor,
+            memory.reviewStage
+        );
+
+        console.log('SM-2结果:', JSON.stringify(sm2Result));
+
+        // 4. 更新掌握度
+        console.log('步骤4: 计算新掌握度');
+        let newMasteryLevel = memory.masteryLevel;
+        if (quality === '记得') {
+            newMasteryLevel = Math.min(1.0, memory.masteryLevel + 0.15);
+        } else if (quality === '模糊') {
+            newMasteryLevel = Math.max(0.0, memory.masteryLevel + 0.05);
+        } else {
+            newMasteryLevel = Math.max(0.0, memory.masteryLevel - 0.2);
+        }
+        console.log('新掌握度:', newMasteryLevel);
+
+        // 5. 更新连胜和计数
+        console.log('步骤5: 计算连胜');
+        const newStreakCorrect = quality === '记得' ? memory.streakCorrect + 1 : 0;
+        const newCorrectCount = quality === '记得' ? memory.correctCount + 1 : memory.correctCount;
+        const newWrongCount = quality === '陌生' ? memory.wrongCount + 1 : memory.wrongCount;
+
+        // 6. 计算下次复习时间
+        console.log('步骤6: 计算下次复习时间');
+        const now = new Date();
+        const nextReviewAt = new Date(now.getTime() + sm2Result.interval * 24 * 60 * 60 * 1000);
+        console.log('下次复习时间:', nextReviewAt);
+
+        // 7. 准备更新数据
+        console.log('步骤7: 准备更新数据库');
+        const updateData = {
+            masteryLevel: newMasteryLevel,
+            reviewStage: sm2Result.repetitions,
+            easinessFactor: sm2Result.easinessFactor,
+            intervalDays: sm2Result.interval,
+            lastReviewAt: now.toISOString(),
+            nextReviewAt: nextReviewAt.toISOString(),
+            correctCount: newCorrectCount,
+            wrongCount: newWrongCount,
+            streakCorrect: newStreakCorrect,
+            updatedAt: now.toISOString()
+        };
+
+        console.log('更新数据对象:', JSON.stringify(updateData));
+
+        // 检查是否有 undefined
+        for (const [key, value] of Object.entries(updateData)) {
+            if (value === undefined) {
+                console.error(`❌ 发现 undefined 值: ${key}`);
+            }
+        }
+
+        // 8. 执行更新
+        console.log('步骤8: 执行数据库更新');
+        await db.collection('memory_status')
+            .where({
+                userId,
+                entityType,
+                entityId
+            })
+            .update({
+                data: updateData   // ✅ CloudBase 必须这样写
+            });
+
+        console.log('✅ 更新成功');
+
+        return {
+            entityId,
+            entityType,
+            masteryLevel: newMasteryLevel,
+            reviewStage: sm2Result.repetitions,
+            easinessFactor: sm2Result.easinessFactor,
+            intervalDays: sm2Result.interval,
+            nextReviewAt: nextReviewAt.toISOString(),
+            correctCount: newCorrectCount,
+            wrongCount: newWrongCount,
+            streakCorrect: newStreakCorrect
+        };
+
+    } catch (error) {
+        console.error('❌ [updateMemoryAfterReview] 错误:', error);
+        console.error('错误堆栈:', error.stack);
+        throw error;
+    }
+}
+
+/**
+ * 获取今日待复习的实体
+ */
+async function getTodayReviewEntities(db, userId, entityType, limit = 20) {
+    const now = new Date();
+
+    const result = await db.collection('memory_status')
+        .where({
+            userId,
+            entityType,
+            isLocked: false,
+            nextReviewAt: db.command.lte(now)
+        })
+        .orderBy('nextReviewAt', 'asc')
+        .limit(limit)
+        .get();
+
+    return result.data || [];
+}
+
+/**
+ * 初始化用户的学习进度记录
+ */
+async function initUserProgress(db, userId) {
+    const now = new Date();
+
+    const progressRecord = {
+        userId,
+        letterCompleted: false,
+        letterProgress: 0.0,
+        wordUnlocked: false,
+        wordProgress: 0.0,
+        sentenceUnlocked: false,
+        sentenceProgress: 0.0,
+        articleUnlocked: false,
+        currentStage: 'letter',
+        totalStudyDays: 0,
+        streakDays: 0,
+        lastStudyDate: null,
+        createdAt: now,
+        updatedAt: now
+    };
+
+    await db.collection('user_progress').add(progressRecord);
+    return progressRecord;
+}
 
 /**
  * 检查模块访问权限
@@ -961,127 +1120,8 @@ module.exports = {
 };
 ```
 
-**完整源码已生成，包含425行，详见实际文件**
-
----
-
-## ======================
-## 【Part 3.3】shared - response.js
-## ======================
-
-**文件路径**: `/Users/liangjianyu/LearnOnThailand/ThaiLearningApp/cloudbase/functions/shared/response.js`
-
-```javascript
-/**
- * 响应格式化模块
- * 
- * 统一 API 响应格式
- * 与前端 ApiResponse<T> 类型定义保持一致
- */
-
-'use strict';
-
-const { ErrorCodes, ERROR_MESSAGES } = require('./constants');
-
-/**
- * 创建标准化 API 响应
- */
-function createResponse(success, data = null, message = '', errorCode = null) {
-  return {
-    success,
-    data,
-    message,
-    errorCode,
-    timestamp: new Date().toISOString(),
-  };
-}
-
-// ... 其他辅助函数
-
-module.exports = {
-  createResponse,
-  successResponse,
-  errorResponse,
-  invalidParamsResponse,
-  userNotFoundResponse,
-  vocabularyNotFoundResponse,
-  serverErrorResponse,
-};
-```
-
----
-
-## ======================
-## 【Part 3.4】shared - constants.js
-## ======================
-
-**文件路径**: `/Users/liangjianyu/LearnOnThailand/ThaiLearningApp/cloudbase/functions/shared/constants.js`
-
-```javascript
-/**
- * 常量定义模块
- */
-
-'use strict';
-
-const COLLECTIONS = {
-  USERS: 'users',
-  VOCABULARY: 'vocabulary',
-  USER_VOCABULARY_PROGRESS: 'user_vocabulary_progress',
-  LETTERS: 'letters',
-  USER_ALPHABET_PROGRESS: 'user_alphabet_progress',
-  LETTER_TEST_BANK: 'letter_test_bank',
-  COURSES: 'courses',
-  LESSONS: 'lessons',
-  PROGRESS: 'progress',
-};
-
-const MasteryLevel = Object.freeze({
-  UNFAMILIAR: '陌生',
-  FUZZY: '模糊',
-  REMEMBERED: '记得',
-});
-
-const SM2_PARAMS = Object.freeze({
-  INITIAL_EASINESS_FACTOR: 2.5,
-  MIN_EASINESS_FACTOR: 1.3,
-  MAX_INTERVAL_DAYS: 180,
-  FUZZY_MULTIPLIER: 0.8,
-});
-
-const EARLY_INTERVALS = Object.freeze([1, 2, 4, 7, 14]);
-
-const DAILY_LEARNING_CONFIG = Object.freeze({
-  MAX_NEW_WORDS: 10,
-  MAX_REVIEW_WORDS: 20,
-  TOTAL_WORDS_LIMIT: 30,
-});
-
-// ... 其他常量
-
-module.exports = {
-  COLLECTIONS,
-  MasteryLevel,
-  LEVELS,
-  ErrorCodes,
-  SM2_PARAMS,
-  EARLY_INTERVALS,
-  DAILY_LEARNING_CONFIG,
-  ERROR_MESSAGES,
-  SUPPORTED_ACTIONS,
-};
-```
-
----
-
-## ======================
-## 【Part 3.5】shared - sm2.js
-## ======================
-
-**文件路径**: `/Users/liangjianyu/LearnOnThailand/ThaiLearningApp/cloudbase/functions/shared/sm2.js`
-
-**核心算法模块 - 222行**
-
+======================
+【Part 3.2】shared - sm2.js
 ```javascript
 /**
  * SM-2 间隔重复算法模块（优化版）
@@ -1090,12 +1130,64 @@ module.exports = {
  * - 早期复习间隔更密集: 1→2→4→7→14 天
  * - "模糊"状态缩短间隔而非维持不变
  * - "陌生"状态重置复习进度
+ * 
+ * 算法论文: https://www.supermemo.com/en/archives1990-2015/english/ol/sm2
  */
 
 'use strict';
 
 const { MasteryLevel, SM2_PARAMS, EARLY_INTERVALS } = require('./constants');
 
+/**
+ * 将掌握程度映射到 SM-2 Quality 值
+ * 
+ * SM-2 Quality 定义:
+ * 0 - 完全不记得
+ * 1 - 错误回答，但看到正确答案后想起
+ * 2 - 错误回答，正确答案看起来很熟悉
+ * 3 - 正确回答，但困难较大
+ * 4 - 正确回答，有些犹豫
+ * 5 - 正确回答，毫无困难
+ * 
+ * @param {string} mastery - 掌握程度
+ * @returns {number} Quality值 (1-5)
+ */
+function masteryToQuality(mastery) {
+    switch (mastery) {
+        case MasteryLevel.UNFAMILIAR:
+            return 1;  // 完全不记得
+        case MasteryLevel.FUZZY:
+            return 3;  // 有印象但不确定
+        case MasteryLevel.REMEMBERED:
+            return 5;  // 完全记得
+        default:
+            return 1;
+    }
+}
+
+/**
+ * 计算下次复习日期（优化版 SM-2 算法）
+ * 
+ * 改进点:
+ * 1. 早期阶段（前5次）使用固定的渐进间隔 [1,2,4,7,14]
+ * 2. "模糊"时缩短间隔而非维持不变
+ * 3. "陌生"时完全重置复习进度
+ * 
+ * @param {string} mastery - 掌握程度: 忘记/模糊/认识
+ * @param {number} currentInterval - 当前复习间隔（天）
+ * @param {number} easinessFactor - 简易度因子（1.3-2.5+）
+ * @param {number} reviewCount - 已复习次数
+ * @returns {Object} 算法计算结果
+ * 
+ * @example
+ * const result = calculateSM2Optimized('认识', 2, 2.5, 1);
+ * // {
+ * //   nextInterval: 4,
+ * //   nextEasinessFactor: 2.6,
+ * //   nextReviewDate: "2025-12-01T10:00:00Z",
+ * //   shouldResetCount: false
+ * // }
+ * */
 function calculateSM2Optimized(
     mastery,
     currentInterval = 1,
@@ -1112,42 +1204,136 @@ function calculateSM2Optimized(
 
     if (quality < 3) {
         // ========== 忘记: 完全重置 ==========
+        // 用户完全不记得，需要从头开始学习
         nextInterval = 1;
         nextEF = Math.max(SM2_PARAMS.MIN_EASINESS_FACTOR, nextEF - 0.2);
         shouldResetCount = true;
 
     } else if (quality === 3) {
         // ========== 模糊: 缩短间隔，加强复习 ==========
+        // 改进: 不是维持不变，而是缩短20%
         nextInterval = Math.max(1, Math.round(currentInterval * SM2_PARAMS.FUZZY_MULTIPLIER));
         nextEF = Math.max(SM2_PARAMS.MIN_EASINESS_FACTOR, nextEF - 0.1);
 
     } else {
         // ========== 记得: 使用优化的间隔序列 ==========
         if (reviewCount < EARLY_INTERVALS.length) {
+            // 早期阶段: 使用预定义的渐进间隔
+            // 这是关键改进: 1→2→4→7→14 而非原版的 1→6
             nextInterval = EARLY_INTERVALS[reviewCount];
         } else {
+            // 后期阶段: 使用 EF 计算指数增长
             nextInterval = Math.round(currentInterval * nextEF);
         }
 
+        // 提高简易度 (标准 SM-2 公式)
         nextEF = nextEF + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02));
         nextEF = Math.max(SM2_PARAMS.MIN_EASINESS_FACTOR, nextEF);
     }
 
+    // 限制最大间隔
     nextInterval = Math.min(nextInterval, SM2_PARAMS.MAX_INTERVAL_DAYS);
 
+    // 计算下次复习日期
     const nextReviewDate = new Date();
     nextReviewDate.setDate(nextReviewDate.getDate() + nextInterval);
 
+    // 计算新的复习次数
     const newRepetitions = shouldResetCount ? 0 : reviewCount + 1;
 
     return {
+        // === 兼容 memoryEngine.js 的旧接口 ===
         interval: nextInterval,
         easinessFactor: parseFloat(nextEF.toFixed(2)),
         repetitions: newRepetitions,
+
+        // === 新接口（保留供未来使用）===
         nextInterval,
         nextEasinessFactor: parseFloat(nextEF.toFixed(2)),
         nextReviewDate: nextReviewDate.toISOString(),
         shouldResetCount,
+    };
+}
+
+/**
+ * 生成预计复习时间线
+ * 
+ * 用于前端展示未来的复习计划
+ * 
+ * @param {number} currentReviewCount - 当前复习次数
+ * @param {number} maxItems - 返回的时间线项数 (默认5)
+ * @returns {Array} 未来复习计划
+ * 
+ * @example
+ * generateReviewTimeline(2);
+ * // [
+ * //   { reviewNumber: 3, intervalDays: 4 },
+ * //   { reviewNumber: 4, intervalDays: 7 },
+ * //   { reviewNumber: 5, intervalDays: 14 },
+ * //   ...
+ * // ]
+ * */
+function generateReviewTimeline(currentReviewCount, maxItems = 5) {
+    const timeline = [];
+    let interval = 1;
+    let ef = SM2_PARAMS.INITIAL_EASINESS_FACTOR;
+
+    for (let i = currentReviewCount; i < currentReviewCount + maxItems; i++) {
+        if (i < EARLY_INTERVALS.length) {
+            interval = EARLY_INTERVALS[i];
+        } else {
+            interval = Math.round(interval * ef);
+        }
+        interval = Math.min(interval, SM2_PARAMS.MAX_INTERVAL_DAYS);
+
+        timeline.push({
+            reviewNumber: i + 1,
+            intervalDays: interval,
+        });
+    }
+
+    return timeline;
+}
+
+/**
+ * 获取今天的时间范围 (UTC)
+ * 
+ * @returns {Object} { startOfDay, endOfDay, timestamp }
+ */
+function getTodayRange() {
+    const now = new Date();
+    const startOfDay = new Date(Date.UTC(
+        now.getUTCFullYear(),
+        now.getUTCMonth(),
+        now.getUTCDate(),
+        0, 0, 0, 0
+    ));
+    const endOfDay = new Date(Date.UTC(
+        now.getUTCFullYear(),
+        now.getUTCMonth(),
+        now.getUTCDate() + 1,
+        0, 0, 0, 0
+    ));
+
+    return {
+        startOfDay: startOfDay.toISOString(),
+        endOfDay: endOfDay.toISOString(),
+        timestamp: now.toISOString(),
+    };
+}
+
+/**
+ * 获取算法信息 (用于前端展示)
+ * 
+ * @returns {Object} 算法元信息
+ */
+function getAlgorithmInfo() {
+    return {
+        name: 'Optimized SM-2',
+        version: '1.1.0',
+        earlyIntervals: EARLY_INTERVALS,
+        maxInterval: SM2_PARAMS.MAX_INTERVAL_DAYS,
+        description: '基于艾宾浩斯遗忘曲线优化的间隔重复算法',
     };
 }
 
@@ -1160,14 +1346,8 @@ module.exports = {
 };
 ```
 
----
-
-## ======================
-## 【Part 3.6】shared - database.js
-## ======================
-
-**文件路径**: `/Users/liangjianyu/LearnOnThailand/ThaiLearningApp/cloudbase/functions/shared/database.js`
-
+======================
+【Part 3.2】shared - database.js
 ```javascript
 const cloud = require('wx-server-sdk');
 
@@ -1202,17 +1382,13 @@ module.exports = {
 };
 ```
 
----
-
-## ======================
-## 【Part 3.7】shared - validators.js
-## ======================
-
-**文件路径**: `/Users/liangjianyu/LearnOnThailand/ThaiLearningApp/cloudbase/functions/shared/validators.js`
-
+======================
+【Part 3.2】shared - validators.js
 ```javascript
 /**
  * 参数验证模块
+ * 
+ * 用户、词汇验证及通用验证工具
  */
 
 'use strict';
@@ -1220,15 +1396,120 @@ module.exports = {
 const { userCollection, vocabularyCollection } = require('./database');
 const { MasteryLevel } = require('./constants');
 
-// === 核心验证函数 ===
-
+/**
+ * 验证用户是否存在
+ * 
+ * @param {string} userId - 用户ID
+ * @returns {Promise<Object|null>} 用户对象或 null
+ */
 async function validateUser(userId) {
     if (!userId || typeof userId !== 'string') {
         return null;
     }
-    // ...
+
+    try {
+        const { data } = await userCollection
+            .where({ userId })
+            .limit(1)
+            .get();
+
+        return data.length > 0 ? data[0] : null;
+    } catch (error) {
+        console.error('[validateUser] Error:', error);
+        return null;
+    }
 }
 
+/**
+ * 验证词汇是否存在
+ * 
+ * @param {string} vocabularyId - 词汇ID
+ * @returns {Promise<Object|null>} 词汇对象或 null
+ */
+async function validateVocabulary(vocabularyId) {
+    if (!vocabularyId || typeof vocabularyId !== 'string') {
+        return null;
+    }
+
+    try {
+        const { data } = await vocabularyCollection
+            .where({ vocabularyId })
+            .limit(1)
+            .get();
+
+        return data.length > 0 ? data[0] : null;
+    } catch (error) {
+        console.error('[validateVocabulary] Error:', error);
+        return null;
+    }
+}
+
+/**
+ * 验证掌握程度是否有效
+ * 
+ * @param {string} mastery - 掌握程度
+ * @returns {boolean} 是否有效
+ */
+function isValidMastery(mastery) {
+    const validValues = Object.values(MasteryLevel);
+    return validValues.includes(mastery);
+}
+
+/**
+ * 验证并规范化分页参数
+ * 
+ * @param {number} limit - 限制数量
+ * @param {number} offset - 偏移量
+ * @param {number} maxLimit - 最大限制 (默认100)
+ * @returns {Object} 验证后的分页参数
+ */
+function validatePagination(limit, offset, maxLimit = 100) {
+    return {
+        limit: Math.min(Math.max(1, parseInt(limit) || 20), maxLimit),
+        offset: Math.max(0, parseInt(offset) || 0),
+    };
+}
+
+/**
+ * 验证必填字符串参数
+ * 
+ * @param {string} value - 参数值
+ * @param {string} name - 参数名 (用于错误消息)
+ * @returns {Object} { valid: boolean, error?: string }
+ */
+function validateRequiredString(value, name) {
+    if (!value || typeof value !== 'string' || value.trim() === '') {
+        return {
+            valid: false,
+            error: `${name} 是必填参数且不能为空`,
+        };
+    }
+    return { valid: true };
+}
+
+/**
+ * 验证布尔参数
+ * 
+ * @param {any} value - 参数值
+ * @param {string} name - 参数名
+ * @returns {Object} { valid: boolean, error?: string }
+ */
+function validateBoolean(value, name) {
+    if (typeof value !== 'boolean') {
+        return {
+            valid: false,
+            error: `${name} 必须是布尔值`,
+        };
+    }
+    return { valid: true };
+}
+/**
+ * 通用参数验证函数
+ * 
+ * @param {Object} params - 需要验证的参数对象
+ * @param {Array<string>} requiredFields - 必需字段列表
+ * @returns {Object} { isValid: boolean, message?: string }
+ */
 function validateParams(params, requiredFields) {
     const missing = [];
 
@@ -1259,16 +1540,253 @@ module.exports = {
 };
 ```
 
----
+======================
+【Part 3.2】shared - constants.js
+```javascript
+/**
+ * 常量定义模块
+ * 
+ * 与前端 src/config/constants.ts 保持一致的设计风格
+ * 集中管理所有云函数常量
+ */
 
-## ======================
-## 【Part 4】user-register - index.js
-## ======================
+'use strict';
 
-**文件路径**: `/Users/liangjianyu/LearnOnThailand/ThaiLearningApp/cloudbase/functions/user-register/index.js`
+// ==================== 数据库集合名称 ====================
+// 与前端 COLLECTIONS 保持一致
+const COLLECTIONS = {
+  USERS: 'users',
+  VOCABULARY: 'vocabulary',
+  USER_VOCABULARY_PROGRESS: 'user_vocabulary_progress',
+  LETTERS: 'letters',
+  USER_ALPHABET_PROGRESS: 'user_alphabet_progress',
+  LETTER_TEST_BANK: 'letter_test_bank',
+  COURSES: 'courses',
+  LESSONS: 'lessons',
+  PROGRESS: 'progress',
+};
 
-**‼️ 高危双表创建逻辑**
+// ==================== 掌握程度 ====================
+// 使用中文值，便于前端直接显示
+const MasteryLevel = Object.freeze({
+  UNFAMILIAR: '陌生',
+  FUZZY: '模糊',
+  REMEMBERED: '记得',
+});
 
+// ==================== 学习等级 ====================
+// 与前端 LEVELS 保持一致
+const LEVELS = Object.freeze({
+  BEGINNER_A: 'BEGINNER_A',
+  BEGINNER_B: 'BEGINNER_B',
+  INTERMEDIATE: 'INTERMEDIATE',
+  ADVANCED: 'ADVANCED',
+});
+
+// ==================== SM-2 算法参数 ====================
+// 优化版参数，基于艾宾浩斯遗忘曲线
+const SM2_PARAMS = Object.freeze({
+  INITIAL_EASINESS_FACTOR: 2.5,   // 初始简易度
+  MIN_EASINESS_FACTOR: 1.3,       // 最小简易度
+  MAX_INTERVAL_DAYS: 180,         // 最大间隔（天）
+  FUZZY_MULTIPLIER: 0.8,          // "模糊"时间隔缩短比例
+});
+
+// ==================== 早期复习间隔序列 ====================
+// 基于艾宾浩斯遗忘曲线优化: 1→2→4→7→14 天
+const EARLY_INTERVALS = Object.freeze([1, 2, 4, 7, 14]);
+
+// ==================== 每日学习配置 ====================
+const DAILY_LEARNING_CONFIG = Object.freeze({
+  MAX_NEW_WORDS: 10,              // 每日新词上限
+  MAX_REVIEW_WORDS: 20,           // 每日复习上限
+  TOTAL_WORDS_LIMIT: 30,          // 每日总词数上限
+});
+
+// ==================== 错误码 ====================
+// 统一错误码定义
+const ErrorCodes = Object.freeze({
+  SUCCESS: 'SUCCESS',
+  USER_NOT_FOUND: 'USER_NOT_FOUND',
+  VOCABULARY_NOT_FOUND: 'VOCABULARY_NOT_FOUND',
+  INVALID_PARAMS: 'INVALID_PARAMS',
+  INVALID_MASTERY: 'INVALID_MASTERY',
+  UNKNOWN_ACTION: 'UNKNOWN_ACTION',
+  SERVER_ERROR: 'SERVER_ERROR',
+});
+
+// ==================== 错误消息 ====================
+// 与前端 ERROR_MESSAGES 风格一致
+const ERROR_MESSAGES = Object.freeze({
+  USER_NOT_FOUND: '用户不存在，请检查用户ID或重新登录',
+  VOCABULARY_NOT_FOUND: '词汇不存在，请检查词汇ID',
+  INVALID_PARAMS: '参数格式错误，请检查输入',
+  INVALID_MASTERY: '无效的掌握程度，允许值: 陌生/模糊/记得',
+  UNKNOWN_ACTION: '未知操作类型',
+  SERVER_ERROR: '服务器内部错误，请稍后重试',
+});
+
+// ==================== 支持的 Actions ====================
+const SUPPORTED_ACTIONS = Object.freeze([
+  'getTodayWords',
+  'updateMastery',
+  'toggleSkipWord',
+  'getVocabularyDetail',
+  'getReviewStatistics',
+  'getVocabularyList',
+  'getSkippedWords',
+  'getLetterTest',
+  'submitLetterTest',
+  'passLetterTest',
+  'getTodayMemories',
+  'submitMemoryResult',
+  'checkModuleAccess',
+  'getUserProgress'
+]);
+
+module.exports = {
+  // 集合
+  COLLECTIONS,
+
+  // 枚举
+  MasteryLevel,
+  LEVELS,
+  ErrorCodes,
+
+  // 算法参数
+  SM2_PARAMS,
+  EARLY_INTERVALS,
+
+  // 配置
+  DAILY_LEARNING_CONFIG,
+
+  // 消息
+  ERROR_MESSAGES,
+  SUPPORTED_ACTIONS,
+};
+```
+
+======================
+【Part 3.2】shared - response.js
+```javascript
+/**
+ * 响应格式化模块
+ * 
+ * 统一 API 响应格式
+ * 与前端 ApiResponse<T> 类型定义保持一致
+ */
+
+'use strict';
+
+const { ErrorCodes, ERROR_MESSAGES } = require('./constants');
+
+/**
+ * 创建标准化 API 响应
+ * 
+ * 对应前端类型:
+ * interface ApiResponse<T> {
+ *   success: boolean;
+ *   data?: T;
+ *   message?: string;
+ *   errorCode?: string;
+ *   timestamp: string;
+ * }
+ * 
+ * @param {boolean} success - 是否成功
+ * @param {Object} data - 返回数据
+ * @param {string} message - 提示消息
+ * @param {string} errorCode - 错误码
+ * @returns {Object} 标准化响应对象
+ */
+function createResponse(success, data = null, message = '', errorCode = null) {
+  return {
+    success,
+    data,
+    message,
+    errorCode,
+    timestamp: new Date().toISOString(),
+  };
+}
+
+/**
+ * 创建成功响应
+ * 
+ * @param {Object} data - 返回数据
+ * @param {string} message - 成功消息
+ * @returns {Object} 成功响应对象
+ */
+function successResponse(data, message = '操作成功') {
+  return createResponse(true, data, message, null);
+}
+
+/**
+ * 创建错误响应
+ * 
+ * @param {string} errorCode - 错误码 (来自 ErrorCodes)
+ * @param {string} customMessage - 自定义消息 (可选)
+ * @returns {Object} 错误响应对象
+ */
+function errorResponse(errorCode, customMessage = null) {
+  const message = customMessage || ERROR_MESSAGES[errorCode] || '未知错误';
+  return createResponse(false, null, message, errorCode);
+}
+
+/**
+ * 创建参数错误响应
+ * 
+ * @param {string} detail - 错误详情
+ * @returns {Object} 错误响应对象
+ */
+function invalidParamsResponse(detail) {
+  return errorResponse(ErrorCodes.INVALID_PARAMS, detail);
+}
+
+/**
+ * 创建用户不存在响应
+ * 
+ * @returns {Object} 错误响应对象
+ */
+function userNotFoundResponse() {
+  return errorResponse(ErrorCodes.USER_NOT_FOUND);
+}
+
+/**
+ * 创建词汇不存在响应
+ * 
+ * @returns {Object} 错误响应对象
+ */
+function vocabularyNotFoundResponse() {
+  return errorResponse(ErrorCodes.VOCABULARY_NOT_FOUND);
+}
+
+/**
+ * 创建服务器错误响应
+ * 
+ * @param {Error} error - 错误对象
+ * @returns {Object} 错误响应对象
+ */
+function serverErrorResponse(error) {
+  // 生产环境不暴露错误详情
+  const message = process.env.NODE_ENV === 'development' 
+    ? `服务器错误: ${error.message}`
+    : ERROR_MESSAGES.SERVER_ERROR;
+  
+  return errorResponse(ErrorCodes.SERVER_ERROR, message);
+}
+
+module.exports = {
+  createResponse,
+  successResponse,
+  errorResponse,
+  invalidParamsResponse,
+  userNotFoundResponse,
+  vocabularyNotFoundResponse,
+  serverErrorResponse,
+};
+```
+
+======================
+【Part 4】user-register - index.js
 ```javascript
 const cloud = require('wx-server-sdk');
 const bcrypt = require('bcryptjs');
@@ -1348,14 +1866,11 @@ exports.main = async (event, context) => {
         notificationsEnabled: true
       }
     };
-    
     // ===== Save to database =====
-    // ⚠️⚠️⚠️ 第一次数据库写入
     await db.collection('users').add({
       data: userDoc
     });
 
-    // ⚠️⚠️⚠️ 第二次数据库写入 - 高危: 若失败用户无法使用系统
     // 初始化用户学习进度
     await db.collection('user_progress').add({
       data: {
@@ -1383,7 +1898,6 @@ exports.main = async (event, context) => {
       JWT_SECRET,
       { expiresIn: JWT_EXPIRES_IN }
     );
-    
     // ===== Return user data (exclude password hash) =====
     const { passwordHash: _, ...userResponse } = userDoc;
 
@@ -1406,228 +1920,69 @@ exports.main = async (event, context) => {
 };
 ```
 
----
+======================
+【Part 5】CloudBase 错误日志
+> ⚠️ **注意**: 无法直接访问 CloudBase 控制台实时日志。以下为基于代码逻辑推断的潜在错误点，或请在控制台查看实际日志。
 
-## ======================
-## 【Part 5】CloudBase 错误日志
-## ======================
+(No local error logs found in workspace)
 
-**状态**: ❌ 无法访问该文件
+======================
+【Part 6】模块解锁逻辑逐行定位
 
-**原因**: CloudBase 控制台日志需要登录腾讯云控制台才能查看，本地无法直接读取。
+### 1. cloudbase/functions/memory-engine/index.js
+```javascript
+// Line 75: 路由分发，将 'checkModuleAccess' 请求转发给 handler
+if (action === 'checkModuleAccess') {
+    return await checkModuleAccessHandler(db, data);
+}
+```
 
-**访问路径**: 
-1. 登录腾讯云控制台
-2. 进入CloudBase控制台
-3. 选择环境 → 云函数 → 相应函数 → 调用日志
+### 2. cloudbase/functions/memory-engine/handlers/checkModuleAccess.js
+```javascript
+// Line 13: 打印当前环境变量，用于调试
+console.log('🔥 当前 NODE_ENV =', process.env.NODE_ENV);
 
-**需要提供的信息**:
-- `errorMessage`: 错误消息
-- `errorType`: 错误类型 (如 `FUNCTION_INVOCATION_FAILED`)
-- `stackTrace`: 完整堆栈追踪
-- `requestId`: 请求ID
-- `functionName`: 云函数名称
+// Line 16: 【关键逻辑】检查是否为非生产环境 (Dev Mode)
+if (env !== 'production') {
+    // Line 17: 【关键逻辑】如果是开发环境，直接返回 allowed: true (强制解锁)
+    return createResponse(true, {
+      allowed: true,
+      // ...
+    }, '【开发模式】模块已强制放行');
+}
 
-**替代方案**: 用户需手动从控制台复制日志
+// Line 47: 【关键逻辑】调用 shared 模块的 checkModuleAccess 进行正式校验
+const accessResult = await checkModuleAccess(db, userId, moduleType);
 
----
+// Line 49: 检查校验结果
+if (!accessResult.allowed) {
+    // Line 50: 如果不允许，返回失败信息
+    return createResponse(false, accessResult, accessResult.message, accessResult.errorCode);
+}
 
-## ======================
-## 【Part 6】模块解锁逻辑逐行定位
-## ======================
+// Line 54: 【关键逻辑】校验通过，返回 allowed: true
+return createResponse(true, {
+    allowed: true,
+    // ...
+}, '模块已解锁,可以访问');
+```
 
-### 📍 文件1: `shared/memoryEngine.js`
-
-**第359-414行: checkModuleAccess 函数**
+### 3. (补充) cloudbase/functions/shared/memoryEngine.js
+> ⚠️ 核心逻辑实际位于此处
 
 ```javascript
-Line 359: async function checkModuleAccess(db, userId, moduleType) {
-Line 360: 
-Line 361:     // ✅✅✅【调试总开关：跳过所有学习锁】
-Line 362:     if (process.env.FORCE_UNLOCK === 'true') {
-              ▲ 判断环境变量 FORCE_UNLOCK
-Line 363:         console.warn('⚠️ FORCE_UNLOCK 已开启, 强制放行模块:', moduleType);
-Line 364:         return {
-Line 365:             allowed: true,  ⬅️ 强制放行
-Line 366:             progress: {
-Line 367:                 letterCompleted: true,
-Line 368:                 letterProgress: 1,
-Line 369:                 wordUnlocked: true,
-Line 370:                 sentenceUnlocked: true,
-Line 371:                 articleUnlocked: true,
-Line 372:                 currentStage: moduleType
-Line 373:             }
-Line 374:         };
-Line 375:     }
-Line 376: 
-Line 377:     const progressResult = await db.collection('user_progress')
-              ▲ 查询用户进度表
-Line 378:         .where({ userId })
-Line 379:         .get();
-Line 380: 
-Line 381:     if (!progressResult.data || progressResult.data.length === 0) {
-              ▲ 若进度记录不存在 → 返回 allowed: false
-Line 382:         return {
-Line 383:             allowed: false,
-Line 384:             errorCode: 'USER_PROGRESS_NOT_FOUND',
-Line 385:             message: '用户学习进度不存在,请联系管理员'
-Line 386:         };
-Line 387:     }
-Line 388: 
-Line 389:     const progress = progressResult.data[0]; ⬅️ 获取进度对象
-Line 390: 
-Line 391:     // ✅ 字母模块永远允许访问
-Line 392:     if (moduleType === 'letter') {
-              ▲ 若访问字母模块 → 直接放行
-Line 393:         return {
-Line 394:             allowed: true,  ⬅️ 放行
-Line 395:             progress
-Line 396:         };
-Line 397:     }
-Line 398: 
-Line 399:     // ✅ 其他所有模块只依赖 letterCompleted
-Line 400:     if (!progress.letterCompleted) {
-              ▲▲▲ 关键判断：letterCompleted 字段
-              ▲▲▲ 若为 false → 所有非字母模块被锁定
-Line 401:         return {
-Line 402:             allowed: false,  ⬅️ 拒绝访问
-Line 403:             errorCode: 'MODULE_LOCKED',
-Line 404:             message: `请先完成字母学习（当前进度：${Math.round(progress.letterProgress * 100)}%）`,
-Line 405:             progress
-Line 406:         };
-Line 407:     }
-Line 408: 
-Line 409:     // ✅ 字母完成 → 全部模块放行
-Line 410:     return {
-Line 411:         allowed: true,  ⬅️ 字母完成后所有模块放行
-Line 412:         progress
-Line 413:     };
-Line 414: }
+// Line 362: 【关键逻辑】检查 FORCE_UNLOCK 环境变量
+if (process.env.FORCE_UNLOCK === 'true') {
+    // Line 365: 如果开启，强制返回 allowed: true
+    return { allowed: true, ... };
+}
+
+// Line 400: 【关键逻辑】判断 letterCompleted 字段
+if (!progress.letterCompleted) {
+    // Line 402: 如果未完成字母学习，返回 allowed: false
+    return { allowed: false, ... };
+}
+
+// Line 411: 【关键逻辑】字母学习已完成，返回 allowed: true (解锁所有模块)
+return { allowed: true, progress };
 ```
-
----
-
-### 📍 文件2: `memory-engine/handlers/checkModuleAccess.js`
-
-**第10-23行: 开发模式强制放行**
-
-```javascript
-Line 10: async function checkModuleAccessHandler(db, params) {
-Line 11: 
-Line 12:   // ✅ ✅ ✅ 正确的开发模式强制放行写法
-Line 13:   console.log('🔥 当前 NODE_ENV =', process.env.NODE_ENV);
-Line 14:   const env = process.env.NODE_ENV || 'development';
-              ▲ 获取环境变量，默认 'development'
-Line 15: 
-Line 16:   if (env !== 'production') {
-              ▲ 若非生产环境 → 强制放行
-Line 17:     return createResponse(true, {
-Line 18:       allowed: true,  ⬅️ 开发/测试环境直接放行
-Line 19:       moduleType: params?.moduleType || 'unknown',
-Line 20:       progress: 100
-Line 21:     }, '【开发模式】模块已强制放行');
-Line 22:   }
-Line 23: 
-Line 24:   // ================== 以下为正式生产逻辑 ==================
-```
-
-**第47行: 调用shared模块的权限检查**
-
-```javascript
-Line 47:     const accessResult = await checkModuleAccess(db, userId, moduleType);
-              ▲ 调用 shared/memoryEngine.js 中的 checkModuleAccess 函数
-```
-
----
-
-### 📍 文件3: `alphabet/handlers/passLetterTest.js`
-
-**第6-14行: 设置 letterCompleted = true**
-
-```javascript
-Line 6:     await db.collection('user_progress')
-Line 7:         .where({ userId })
-Line 8:         .update({
-Line 9:             data: {
-Line 10:                letterCompleted: true,  ⬅️⬅️⬅️ 关键更新: 解锁所有模块
-Line 11:                letterProgress: 1,
-Line 12:                updatedAt: now
-Line 13:            }
-Line 14:        });
-```
-
----
-
-## 🔍 解锁逻辑总结
-
-### ✅ 解锁触发点
-
-| 位置 | 行号 | 触发条件 | 结果 |
-|------|------|---------|------|
-| `alphabet/handlers/passLetterTest.js` | Line 10 | 用户通过字母测试 (score >=0.8) | `letterCompleted` 设为 `true` |
-| `alphabet/handlers/submitLetterTest.js` | Line 38-39 | 调用 `passLetterTest` | 间接触发解锁 |
-
-### ✅ 权限检查逻辑流程
-
-```
-1. 前端调用 memory-engine/checkModuleAccess
-   ↓
-2. checkModuleAccessHandler (Line 16) 
-   → 若 env !== 'production' → 直接放行 ✅
-   ↓
-3. 调用 shared/memoryEngine.js 的 checkModuleAccess (Line 47)
-   ↓
-4. checkModuleAccess 逻辑 (Line 359-414):
-   - Line 362: 若 FORCE_UNLOCK === 'true' → 强制放行 ✅
-   - Line 392: 若 moduleType === 'letter' → 直接放行 ✅
-   - Line 400: 若 !letterCompleted → 拒绝访问 ❌
-   - Line 410: 若 letterCompleted === true → 所有模块放行 ✅
-```
-
-### ⚠️ 风险点
-
-1. **双重放行机制可能混淆**:
-   - `NODE_ENV !== 'production'` (Handler层)
-   - `FORCE_UNLOCK === 'true'` (Shared层)
-   
-2. **user_progress 缺失导致系统崩溃**:
-   - Line 381-386: 若数据库无记录 → 返回 `USER_PROGRESS_NOT_FOUND`
-
-3. **letterCompleted 是唯一解锁字段**:
-   - `wordUnlocked`, `sentenceUnlocked` 等字段已不使用
-   - 所有逻辑仅依赖 Line 400的`letterCompleted`判断
-
----
-
-## 📋 附录: 文件完整性检查表
-
-| 文件路径 | 状态 | 行数 | 备注 |
-|---------|------|------|------|
-| `alphabet/index.js` | ✅ 完整 | 56 | - |
-| `alphabet/handlers/getLetterTest.js` | ✅ 完整 | 16 | - |
-| `alphabet/handlers/submitLetterTest.js` | ✅ 完整 | 58 | - |
-| `alphabet/handlers/passLetterTest.js` | ✅ 完整 | 26 | - |
-| `memory-engine/index.js` | ✅ 完整 | 113 | - |
-| `memory-engine/handlers/getTodayMemories.js` | ✅ 完整 | 184 | 高复杂度 |
-| `memory-engine/handlers/submitMemoryResult.js` | ✅ 完整 | 75 | - |
-| `memory-engine/handlers/checkModuleAccess.js` | ✅ 完整 | 67 | 解锁关键 |
-| `memory-engine/handlers/getUserProgress.js` | ✅ 完整 | 85 | - |
-| `shared/package.json` | ✅ 完整 | 22 | - |
-| `shared/index.js` | ✅ 完整 | 29 | - |
-| `shared/memoryEngine.js` | ✅ 完整 | 425 | 核心模块 |
-| `shared/sm2.js` | ✅ 完整 | 222 | 算法模块 |
-| `shared/database.js` | ✅ 完整 | 32 | - |
-| `shared/validators.js` | ✅ 完整 | 154 | - |
-| `shared/constants.js` | ✅ 完整 | 122 | - |
-| `shared/response.js` | ✅ 完整 | 115 | - |
-| `user-register/index.js` | ✅ 完整 | 131 | 双表创建风险 |
-
-**总文件数**: 18  
-**总代码行数**: 1,926行  
-**生成时间**: 2025-12-06T06:30:00+07:00
-
----
-
-**最后更新**: 2025-12-06  
-**审计级别**: 工程事故级代码取证  
-**数据准确性**: 100% (基于真实源码)

@@ -1,10 +1,12 @@
 {
-    "name": "alphabet",
-    "version": "1.0.0",
-    "description": "Alphabet learning function",
-    "main": "index.js",
-    "dependencies": {
-        "wx-server-sdk": "latest",
-        "@thai-app/shared": "file:../shared"
-    }
+  "name": "alphabet",
+  "version": "1.0.0",
+  "description": "Alphabet learning function",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "latest"
+  },
+  "engines": {
+    "node": "18.20.0"
+  }
 }

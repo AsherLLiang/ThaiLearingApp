@@ -1,5 +1,5 @@
 // ✅ 提交字母测试并判定是否通过
-const { createResponse } = require('@thai-app/shared').response;
+const { createResponse } = require('../utils/response');
 const passLetterTest = require('./passLetterTest');
 
 async function submitLetterTest(db, userId, answers) {

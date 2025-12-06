@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const { createResponse } = require('@thai-app/shared').response;
+const { createResponse } = require('../utils/response');
 
 /**
  * @param {Object} db - 数据库实例

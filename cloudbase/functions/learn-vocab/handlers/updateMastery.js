@@ -9,22 +9,22 @@
 'use strict';
 
 
-const { progressCollection } = require('@thai-app/shared').database;
+const { progressCollection } = require('../utils/database');
 const {
   createResponse,
   successResponse,
   errorResponse,
   userNotFoundResponse,
   vocabularyNotFoundResponse
-} = require('@thai-app/shared').response;
+} = require('../utils/response');
 const {
   COLLECTIONS,
   MasteryLevel,
   SM2_PARAMS
-} = require('@thai-app/shared').constants;
+} = require('../utils/constants');
 
-const { validateUser, validateVocabulary, isValidMastery } = require('@thai-app/shared').validators;
-const { calculateSM2Optimized, generateReviewTimeline } = require('@thai-app/shared').sm2;
+const { validateUser, validateVocabulary, isValidMastery } = require('../utils/validators');
+const { calculateSM2Optimized, generateReviewTimeline } = require('../utils/sm2');
 
 /**
  * 更新单词掌握状态
