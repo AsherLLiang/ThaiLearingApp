@@ -13,6 +13,7 @@ import { CourseSelectionModal } from '@/src/components/courses/CourseSelectionMo
 import coursesData from '@/assets/courses/courses.json';
 import alphabetCourses from '@/assets/courses/alphabetCourses.json';
 import { CourseCard, type CourseCardData } from '@/src/components/courses/CourseCard';
+import { LettersCard } from '@/src/components/courses/LettersCard';
 import { AlphabetCourseCard } from '@/src/components/courses/AlphabetCourseCard';
 import { useLearningPreferenceStore } from '@/src/stores/learningPreferenceStore';
 import { useModuleAccessStore, type ModuleType } from '@/src/stores/moduleAccessStore';
@@ -47,6 +48,7 @@ const COURSE_IMAGE_MAP: Record<string, ImageSourcePropType> = {
   default: require('@/assets/images/courses/ThaiBase_1.png'),
 };
 
+// 包含字母课程和单词课程
 const COURSES: CourseWithImage[] = (
   [
     ...(alphabetCourses as CourseItem[]),
@@ -117,6 +119,16 @@ export default function CoursesScreen() {
 
   const proceedToCourse = async (course: CourseWithImage) => {
     const moduleType = getModuleType(course);
+
+    // ✅ Alphabet module: always route to /learning/alphabet (has built-in setup)
+    if (moduleType === 'alphabet') {
+      setModalVisible(false);
+      setPendingCourse(null);
+      router.push('/learning/alphabet');
+      return;
+    }
+
+    // Word modules: original logic
     const needsDailySetup = !hasDailyLimit(moduleType);
 
     await startCourse(course.source);
@@ -133,28 +145,36 @@ export default function CoursesScreen() {
   };
 
   // ⭐ 统一的 Start Learning 逻辑：接收 course，返回一个点击 handler
-const handleStartLearning = (course: CourseWithImage) => {
-  return () => {
-    const moduleType = getModuleType(course);
-    const needsDailySetup = !hasDailyLimit(moduleType);
+  const handleStartLearning = (course: CourseWithImage) => {
+    return () => {
+      const moduleType = getModuleType(course);
 
-    // ✅ 同一个课程：直接按照是否已设置日计划进行跳转
-    if (currentCourseSource === course.source) {
-      router.push({
-        pathname: needsDailySetup ? '/learning/setup' : '/learning',
-        params: {
-          module: moduleType,      // 字母时就是 'alphabet'
-          source: course.source,
-        },
-      });
-      return;
-    }
+      // ✅ Alphabet module: always route to /learning/alphabet (has built-in setup)
+      if (moduleType === 'alphabet') {
+        router.push('/learning/alphabet');
+        return;
+      }
 
-    // ✅ 切换课程：弹确认框
-    setPendingCourse(course);
-    setModalVisible(true);
+      // Word modules: check if setup needed
+      const needsDailySetup = !hasDailyLimit(moduleType);
+
+      // ✅ 同一个课程：直接按照是否已设置日计划进行跳转
+      if (currentCourseSource === course.source) {
+        router.push({
+          pathname: needsDailySetup ? '/learning/setup' : '/learning',
+          params: {
+            module: moduleType,
+            source: course.source,
+          },
+        });
+        return;
+      }
+
+      // ✅ 切换课程：弹确认框
+      setPendingCourse(course);
+      setModalVisible(true);
+    };
   };
-};
 
   const confirmSwitchCourse = async () => {
     if (pendingCourse) {
@@ -214,11 +234,23 @@ const handleStartLearning = (course: CourseWithImage) => {
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
       >
+        {/* LettersCard：独立课程卡片，导航到 /alphabet */}
+        {(activeCategory === 'all' || activeCategory === 'letter') && (
+          <LettersCard
+            progress={userProgress ? {
+              completed: userProgress.letterMasteredCount,
+              total: userProgress.letterTotalCount || 44,
+            } : undefined}
+          />
+        )}
+
+        {/* 所有课程（包括AlphabetCourseCard和单词课程） */}
         {filteredCourses.map((course) => {
           const isCurrent = currentCourseSource === course.source;
           const moduleType = getModuleType(course);
           const progress = getCourseProgress(course);
 
+          // 字母课程：使用 AlphabetCourseCard（保持原有逻辑）
           if (moduleType === 'alphabet') {
             return (
               <AlphabetCourseCard
@@ -231,6 +263,7 @@ const handleStartLearning = (course: CourseWithImage) => {
             );
           }
 
+          // 单词课程：使用标准 CourseCard
           return (
             <CourseCard
               key={course.id}

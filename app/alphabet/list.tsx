@@ -2,12 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Pressable, FlatList } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ChevronLeft, CheckCircle, AlertCircle } from 'lucide-react-native';
+import { ChevronLeft } from 'lucide-react-native';
 import { ThaiPatternBackground } from '@/src/components/common/ThaiPatternBackground';
 import { Colors } from '@/src/constants/colors';
 import { Typography } from '@/src/constants/typography';
 import { getLettersByCategory } from '@/src/utils/letterData';
-import { useAlphabetStore } from '@/src/stores/alphabetStore';
 import type { Letter, LetterCategory } from '@/src/entities/types/letter.types';
 
 export default function AlphabetListScreen() {
@@ -17,7 +16,6 @@ export default function AlphabetListScreen() {
     const title = params.title as string;
 
     const [letters, setLetters] = useState<Letter[]>([]);
-    const { masteredIds } = useAlphabetStore();
 
     useEffect(() => {
         loadData();
@@ -29,23 +27,15 @@ export default function AlphabetListScreen() {
     };
 
     const renderItem = ({ item }: { item: Letter }) => {
-        const isMastered = masteredIds.includes(item._id);
-        const isErrorProne = false; // Mock
-
         return (
             <Pressable
-                style={[styles.letterCard, isMastered && styles.letterCardMastered]}
+                style={styles.letterCard}
                 onPress={() => router.push({
-                    pathname: '/learning/alphabet/detail',
+                    pathname: '/alphabet/detail',
                     params: { letterId: item._id }
                 })}
             >
-                <View style={styles.statusIcon}>
-                    {isMastered && <CheckCircle size={16} color={Colors.thaiGold} fill={Colors.white} />}
-                    {isErrorProne && <AlertCircle size={16} color="#FF9800" />}
-                </View>
-
-                <Text style={[styles.thaiChar, isMastered && styles.textMastered]}>{item.thaiChar}</Text>
+                <Text style={styles.thaiChar}>{item.thaiChar}</Text>
                 <Text style={styles.englishName}>{item.initialSound}</Text>
             </Pressable>
         );
