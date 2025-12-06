@@ -13,7 +13,6 @@ import { CourseSelectionModal } from '@/src/components/courses/CourseSelectionMo
 import coursesData from '@/assets/courses/courses.json';
 import alphabetCourses from '@/assets/courses/alphabetCourses.json';
 import { CourseCard, type CourseCardData } from '@/src/components/courses/CourseCard';
-import { LettersCard } from '@/src/components/courses/LettersCard';
 import { AlphabetCourseCard } from '@/src/components/courses/AlphabetCourseCard';
 import { useLearningPreferenceStore } from '@/src/stores/learningPreferenceStore';
 import { useModuleAccessStore, type ModuleType } from '@/src/stores/moduleAccessStore';
@@ -119,16 +118,6 @@ export default function CoursesScreen() {
 
   const proceedToCourse = async (course: CourseWithImage) => {
     const moduleType = getModuleType(course);
-
-    // ✅ Alphabet module: always route to /learning/alphabet (has built-in setup)
-    if (moduleType === 'alphabet') {
-      setModalVisible(false);
-      setPendingCourse(null);
-      router.push('/learning/alphabet');
-      return;
-    }
-
-    // Word modules: original logic
     const needsDailySetup = !hasDailyLimit(moduleType);
 
     await startCourse(course.source);
@@ -148,14 +137,6 @@ export default function CoursesScreen() {
   const handleStartLearning = (course: CourseWithImage) => {
     return () => {
       const moduleType = getModuleType(course);
-
-      // ✅ Alphabet module: always route to /learning/alphabet (has built-in setup)
-      if (moduleType === 'alphabet') {
-        router.push('/learning/alphabet');
-        return;
-      }
-
-      // Word modules: check if setup needed
       const needsDailySetup = !hasDailyLimit(moduleType);
 
       // ✅ 同一个课程：直接按照是否已设置日计划进行跳转
@@ -234,16 +215,6 @@ export default function CoursesScreen() {
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* LettersCard：独立课程卡片，导航到 /alphabet */}
-        {(activeCategory === 'all' || activeCategory === 'letter') && (
-          <LettersCard
-            progress={userProgress ? {
-              completed: userProgress.letterMasteredCount,
-              total: userProgress.letterTotalCount || 44,
-            } : undefined}
-          />
-        )}
-
         {/* 所有课程（包括AlphabetCourseCard和单词课程） */}
         {filteredCourses.map((course) => {
           const isCurrent = currentCourseSource === course.source;
