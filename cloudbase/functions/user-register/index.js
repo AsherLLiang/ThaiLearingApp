@@ -81,7 +81,7 @@ exports.main = async (event, context) => {
       data: userDoc
     });
 
-    // 初始化用户学习进度
+    // 初始化用户整体学习进度 (统一进度表)
     await db.collection('user_progress').add({
       data: {
         userId,
@@ -95,6 +95,26 @@ exports.main = async (event, context) => {
         lastStudyDate: null,
         createdAt: registrationDate,
         updatedAt: registrationDate
+      }
+    });
+
+    // 初始化字母模块专用进度表
+    // 说明:
+    // - letterProgress: 0–1 之间的小数, 0.8 代表 80%
+    // - letterCompleted: 三轮全部完成后由记忆引擎更新为 true
+    // - completedLessons: 已完成的字母课程ID列表 (例如: ["alphabet-lesson1"])
+    // - masteredLetterCount: 已掌握的字母数量
+    // - totalLetterCount: 字母总数 (当前约 80, 预留给未来扩展)
+    await db.collection('user_alphabet_progress').add({
+      data: {
+        userId,
+        letterProgress: 0.0,
+        letterCompleted: false,
+        completedLessons: [],
+        masteredLetterCount: 0,
+        totalLetterCount: 80,
+        createdAt: registrationDate,
+        updatedAt: registrationDate,
       }
     });
 

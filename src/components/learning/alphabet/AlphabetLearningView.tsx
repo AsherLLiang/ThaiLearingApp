@@ -1,8 +1,9 @@
 // src/components/learning/alphabet/AlphabetLearningView.tsx
 
-import React, { memo, useCallback } from 'react';
+import React, { memo, useCallback, useRef, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { ArrowLeft } from 'lucide-react-native';
+import { Audio } from 'expo-av';
 
 import type { AlphabetLearningState } from '@/src/stores/alphabetStore';
 import { Colors } from '@/src/constants/colors';
@@ -19,9 +20,35 @@ export const AlphabetLearningView = memo(function AlphabetLearningView({
   onNext,
   onBack,
 }: AlphabetLearningViewProps) {
-  const handlePlay = useCallback(() => {
-    // 播放音频（后续你会改成 expo-av 或后端真实 url）
-    console.log('Playing audio for:', alphabet.audioUrl);
+  const soundRef = useRef<Audio.Sound | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (soundRef.current) {
+        soundRef.current.unloadAsync().catch(() => {});
+        soundRef.current = null;
+      }
+    };
+  }, []);
+
+  const handlePlay = useCallback(async () => {
+    if (!alphabet.audioUrl) return;
+
+    try {
+      // 如果已有已加载的 sound，直接播放
+      if (soundRef.current) {
+        await soundRef.current.replayAsync();
+        return;
+      }
+
+      const { sound } = await Audio.Sound.createAsync(
+        { uri: alphabet.audioUrl },
+        { shouldPlay: true },
+      );
+      soundRef.current = sound;
+    } catch (e) {
+      console.warn('播放字母音频失败:', e);
+    }
   }, [alphabet.audioUrl]);
 
   const nameEnglish = alphabet.letter?.nameEnglish;

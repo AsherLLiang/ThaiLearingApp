@@ -9,6 +9,68 @@ const { getTodayReviewEntities, getOrCreateMemory, checkModuleAccess } = require
 const { createResponse } = require('../utils/response');
 
 /**
+ * 懒初始化：字母进度表
+ * 兼容旧用户：如果 user_alphabet_progress 中没有记录，则插入一条默认记录
+ *
+ * @param {Object} db
+ * @param {string} userId
+ */
+async function ensureUserAlphabetProgress(db, userId) {
+  const col = db.collection('user_alphabet_progress');
+  const existing = await col.where({ userId }).limit(1).get();
+
+  if (!existing.data || existing.data.length === 0) {
+    const now = new Date().toISOString();
+    await col.add({
+      data: {
+        userId,
+        letterProgress: 0.0,
+        letterCompleted: false,
+        completedLessons: [],
+        masteredLetterCount: 0,
+        totalLetterCount: 80,
+        createdAt: now,
+        updatedAt: now,
+      },
+    });
+  }
+}
+
+/**
+ * 懒初始化：用户词汇进度表（传统进度表）
+ * 说明：
+ * - 该集合原本按单词一条记录，这里只为旧用户插入一条「占位记录」
+ * - 使用 skipped: true，避免影响 getTodayWords 等查询逻辑
+ *
+ * @param {Object} db
+ * @param {string} userId
+ */
+async function ensureUserVocabularyProgress(db, userId) {
+  const col = db.collection('user_vocabulary_progress');
+  const existing = await col.where({ userId }).limit(1).get();
+
+  if (!existing.data || existing.data.length === 0) {
+    const now = new Date().toISOString();
+    await col.add({
+      data: {
+        userId,
+        vocabularyId: null,
+        mastery: null,
+        reviewCount: 0,
+        lastReviewed: null,
+        nextReviewDate: null,
+        intervalDays: 0,
+        // 占位记录默认标记为 skipped，避免被当成真实复习数据
+        skipped: true,
+        easinessFactor: 2.5,
+        createdAt: now,
+        updatedAt: now,
+      },
+    });
+  }
+}
+
+/**
  * @param {Object} db - 数据库实例
  * @param {Object} params - 请求参数
  */
@@ -20,6 +82,13 @@ async function getTodayMemories(db, params) {
   }
 
   try {
+    // 0. 懒初始化用户相关进度表（兼容在新增注册逻辑之前的老用户）
+    if (entityType === 'letter') {
+      await ensureUserAlphabetProgress(db, userId);
+    } else if (entityType === 'word') {
+      await ensureUserVocabularyProgress(db, userId);
+    }
+
     // 1. 检查模块访问权限
     // 使用 memoryEngine 中的统一权限检查
     const accessCheck = await checkModuleAccess(db, userId, entityType);
