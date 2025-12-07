@@ -9,8 +9,8 @@ import { Colors } from '@/src/constants/colors';
 import { Typography } from '@/src/constants/typography';
 import { NewWordView, WordData } from '@/src/components/learning/NewWordView';
 import { ReviewWordView } from '@/src/components/learning/ReviewWordView';
-import { AlphabetLearningView } from '@/src/components/learning/AlphabetLearningView';
-import { AlphabetReviewView } from '@/src/components/learning/AlphabetReviewView';
+import { AlphabetLearningView } from '@/src/components/learning/alphabet/AlphabetLearningView';
+import { AlphabetReviewView } from '@/src/components/learning/alphabet/AlphabetReviewView';
 import { useVocabularyStore } from '@/src/stores/vocabularyStore';
 import { useLearningPreferenceStore } from '@/src/stores/learningPreferenceStore';
 import { useAlphabetStore } from '@/src/stores/alphabetStore';
@@ -435,15 +435,16 @@ function AlphabetSession() {
     const [sessionStarted, setSessionStarted] = useState(false);
 
     const {
-        currentAlphabet,
-        reviewQueue,
         phase,
         isLoading,
-        initSession,
+        initializeSession,
         submitResult,
         resetSession,
         completedCount,
         totalCount,
+        queue,
+        currentItem,
+        currentIndex,
     } = useAlphabetStore();
 
     useEffect(() => {

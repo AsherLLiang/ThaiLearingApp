@@ -10,8 +10,9 @@
  */
 
 import { create } from 'zustand';
-import { callCloudFunction } from '@/src/utils/cloudFunctionAdapter';
+import { callCloudFunction } from '@/src/utils/apiClient';
 import { useUserStore } from './userStore';
+import { SEQUENCE_LESSONS } from '@/src/config/alphabet/lettersSequence';
 
 // ==================== 类型定义 ====================
 
@@ -50,6 +51,12 @@ export interface UserProgress {
     sentenceUnlocked: boolean;        // 句子模块是否解锁
     articleUnlocked: boolean;         // 文章模块是否解锁
 
+    /**
+     * 字母课程完成情况（仅前端使用）
+     * 例如: ['lesson1','lesson2',...]
+     */
+    completedAlphabetLessons?: string[];
+
     // 设置
     dailyLimit?: number;              // 每日学习数量设置
 }
@@ -87,6 +94,10 @@ interface ModuleAccessStore {
     clearCache: () => void;
     setError: (error: string | null) => void;
     setDailyLimit: (moduleType: ModuleType, limit: number) => void;
+    /**
+     * 标记某个字母课程已完成（仅用于字母模块解锁链路）
+     */
+    markAlphabetLessonCompleted: (lessonId: string) => void;
 }
 
 // ==================== 默认进度数据 ====================
@@ -213,26 +224,17 @@ export const useModuleAccessStore = create<ModuleAccessStore>()((set, get) => ({
             return moduleType === 'alphabet';
         }
 
-        switch (moduleType) {
-            case 'alphabet':
-                // 字母模块始终可访问
-                return true;
-
-            case 'word':
-                // 单词模块需要字母进度达到 95% 或明确解锁
-                return userProgress.wordUnlocked || userProgress.letterProgress >= 95;
-
-            case 'sentence':
-                // 句子模块需要单词进度达到 80% 或明确解锁
-                return userProgress.sentenceUnlocked || userProgress.wordProgress >= 80;
-
-            case 'article':
-                // 文章模块需要句子进度达到 80% 或明确解锁
-                return userProgress.articleUnlocked || userProgress.sentenceProgress >= 80;
-
-            default:
-                return false;
+        // 与后端 memory-engine.checkModuleAccess 的意图保持一致，并增加本地阈值：
+        // - 字母模块始终可访问
+        // - 只要 letterCompleted 为 true，或 letterProgress ≥ 85%，所有非字母模块统一解锁
+        if (moduleType === 'alphabet') {
+            return true;
         }
+
+        const finishedByTest = !!userProgress.letterCompleted;
+        const finishedByProgress = (userProgress.letterProgress ?? 0) >= 80;
+
+        return finishedByTest || finishedByProgress;
     },
 
     // ===== 获取用户进度 =====
@@ -305,5 +307,51 @@ export const useModuleAccessStore = create<ModuleAccessStore>()((set, get) => ({
         }));
 
         console.log(`📌 已更新 ${moduleType} dailyLimit 为 ${limit}`);
+    },
+
+    // ===== 标记字母课程完成（前端本地）=====
+    markAlphabetLessonCompleted: (lessonId: string) => {
+        const totalLessons = Object.keys(SEQUENCE_LESSONS).length;
+
+        set((state) => {
+            const prev = state.userProgress || { ...defaultProgress };
+
+            const prevCompleted = new Set(prev.completedAlphabetLessons ?? []);
+            prevCompleted.add(lessonId);
+            const completedAlphabetLessons = Array.from(prevCompleted);
+
+            const completedCount = completedAlphabetLessons.length;
+            const allLessonsDone = completedCount >= totalLessons;
+
+            // 进度：完成 lesson1-4 即视为 80%，全部 5 课完成视为 100%
+            let nextLetterProgress = prev.letterProgress;
+            if (completedCount >= 4 && nextLetterProgress < 80) {
+                nextLetterProgress = 80;
+            }
+            if (completedCount >= totalLessons && nextLetterProgress < 100) {
+                nextLetterProgress = 100;
+            }
+
+            // 只有全部课程完成时，才在前端标记 letterCompleted，
+            // 或保留后端已有的 true 状态（例如通过测试题）
+            const nextLetterCompleted =
+                prev.letterCompleted || allLessonsDone;
+
+            const updated: UserProgress = {
+                ...prev,
+                completedAlphabetLessons,
+                letterCompleted: nextLetterCompleted,
+                letterProgress: nextLetterProgress,
+            };
+
+            return {
+                userProgress: updated,
+                accessCache: allLessonsDone
+                    ? new Map<ModuleType, boolean>()
+                    : state.accessCache,
+            };
+        });
+
+        console.log(`✅ 字母课程已完成: ${lessonId}`);
     },
 }));
