@@ -70,10 +70,7 @@ export function AlphabetCourseCard({ course, isCurrent, progress, onStart }: Alp
             {/* Start Learning 按钮，只调用 onStart，并阻止冒泡 */}
             <Pressable
               style={[styles.startBtn, isCurrent && styles.activeStartBtn]}
-              onPress={(e) => {
-                e.stopPropagation();
-                onStart();
-              }}
+              onPress={() => router.push('/alphabet')}
             >
               <Text style={[styles.startBtnText, isCurrent && styles.activeStartBtnText]}>
                 {isCurrent ? t('courses.continue', '继续学习') : t('courses.startBtnText', '开始学习')}
