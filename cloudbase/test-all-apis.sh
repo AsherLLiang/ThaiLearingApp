@@ -38,7 +38,7 @@ curl -s -X POST "$MEMORY_ENGINE_URL" \
     \"action\": \"getTodayMemories\",
     \"data\": {
       \"userId\": \"$USER_ID\",
-      \"entityType\": \"word\",
+      \"entityType\": \"letter\",
       \"limit\": 20
     }
   }" | jq .

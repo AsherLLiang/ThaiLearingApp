@@ -233,7 +233,9 @@ export function useAlphabetLearningEngine(lessonId?: string) {
       if (!letter) continue;
 
       const quality = classifyLetterQuality(letter.alphabetId);
-      await submitResult(userId, quality);
+      // submitResult 期望 boolean 类型：true = 正确(KNOW), false = 错误(FORGET/FUZZY)
+      const isCorrect = quality === QualityButton.KNOW;
+      await submitResult(userId, isCorrect);
     }
   }, [todayList, reviewQueueYesterday, classifyLetterQuality, submitResult, userId]);
 
@@ -412,6 +414,10 @@ export function useAlphabetLearningEngine(lessonId?: string) {
   // =========================
   // 返回状态数据（不包含 JSX）
   // =========================
+  const skipYesterdayReview = useCallback(() => {
+    setPhase('today-learning');
+  }, []);
+
   return {
     phase,
     currentRound,
@@ -420,6 +426,7 @@ export function useAlphabetLearningEngine(lessonId?: string) {
     currentQuestionType,
     onAnswer,
     next: nextStep,
+    letterPool: reviewQueueYesterday.map((item) => item.letter),
+    skipYesterdayReview,
   };
 }
-

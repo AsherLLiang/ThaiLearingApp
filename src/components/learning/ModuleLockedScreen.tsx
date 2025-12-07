@@ -30,13 +30,13 @@ interface ModuleLockedScreenProps {
  * 获取模块的显示名称
  */
 const getModuleName = (moduleType: ModuleType, t: any): string => {
-    const moduleNames = {
-        alphabet: t('modules.alphabet'),
+    const moduleNames: Record<ModuleType, string> = {
+        letter: t('modules.alphabet'),
         word: t('modules.word'),
         sentence: t('modules.sentence'),
         article: t('modules.article'),
     };
-    return moduleNames[moduleType] || moduleType;
+    return moduleNames[moduleType];
 };
 
 /**
@@ -59,8 +59,9 @@ const getUnlockRequirement = (
         case 'word':
             return {
                 prerequisite: t('moduleAccess.prerequisite.word'),
-                currentProgress: userProgress.letterProgress || 0,
-                requiredProgress: 95,
+                // 后端 letterProgress 为 0-1，展示时转为 0-100
+                currentProgress: (userProgress.letterProgress || 0) * 100,
+                requiredProgress: 80,
             };
         case 'sentence':
             return {

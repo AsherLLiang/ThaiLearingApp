@@ -48,7 +48,7 @@ export default function ModuleGuard({ moduleType, children }: ModuleGuardProps) 
             } catch (error) {
                 console.error('❌ ModuleGuard: 权限检查失败', error);
                 // 如果检查失败，默认不允许访问（除了字母模块）
-                setHasAccess(moduleType === 'alphabet');
+                setHasAccess(moduleType === 'letter');
             } finally {
                 setIsChecking(false);
             }

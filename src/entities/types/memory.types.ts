@@ -19,5 +19,5 @@ export interface UnlockInfo {
   unlocked: boolean;
   stage?: 'word' | 'sentence' | 'article';
   message: string;
-  letterProgress: number;
+  letterProgress: number; // 0-1 比例值
 }

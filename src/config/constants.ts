@@ -11,6 +11,7 @@ export const COLLECTIONS = {
   LESSONS: 'lessons',
   EXERCISES: 'exercises',
   ALPHABETS: 'alphabets',
+  USER_ALPHABET_PROGRESS: 'user_alphabet_progress',
   VOCABULARY: 'vocabulary',
   SENTENCES: 'sentences',
   ARTICLES: 'articles',

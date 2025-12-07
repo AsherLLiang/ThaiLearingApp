@@ -11,6 +11,7 @@
 
 import { create } from 'zustand';
 import { callCloudFunction } from '@/src/utils/apiClient';
+import { API_ENDPOINTS } from '@/src/config/api.endpoints';
 import { useUserStore } from './userStore';
 import { SEQUENCE_LESSONS } from '@/src/config/alphabet/lettersSequence';
 
@@ -18,15 +19,18 @@ import { SEQUENCE_LESSONS } from '@/src/config/alphabet/lettersSequence';
 
 /**
  * 模块类型
+ * 
+ * 注意：
+ * - 与后端 memory-engine.checkModuleAccess 保持一致，字母模块使用 'letter'
  */
-export type ModuleType = 'alphabet' | 'word' | 'sentence' | 'article';
+export type ModuleType = 'letter' | 'word' | 'sentence' | 'article';
 
 /**
  * 用户进度数据
  */
 export interface UserProgress {
     // 字母学习进度
-    letterProgress: number;           // 0-100
+    letterProgress: number;           // 0-1 (后端存储为比例值)
     letterCompleted: boolean;         // Added: Whether letter learning is completed
     letterMasteredCount: number;      // 已掌握字母数
     letterTotalCount: number;         // 总字母数
@@ -162,6 +166,9 @@ export const useModuleAccessStore = create<ModuleAccessStore>()((set, get) => ({
                 {
                     userId,
                     moduleType,
+                },
+                {
+                    endpoint: API_ENDPOINTS.MEMORY.GET_TODAY_MEMORIES.cloudbase,
                 }
             );
 
@@ -221,18 +228,18 @@ export const useModuleAccessStore = create<ModuleAccessStore>()((set, get) => ({
 
         if (!userProgress) {
             // 如果没有进度数据，允许访问字母模块，其他模块不允许
-            return moduleType === 'alphabet';
+            return moduleType === 'letter';
         }
 
-        // 与后端 memory-engine.checkModuleAccess 的意图保持一致，并增加本地阈值：
+        // 与后端 memory-engine.checkModuleAccess 的意图保持一致：
         // - 字母模块始终可访问
-        // - 只要 letterCompleted 为 true，或 letterProgress ≥ 85%，所有非字母模块统一解锁
-        if (moduleType === 'alphabet') {
+        // - 只要 letterCompleted 为 true，或 letterProgress ≥ 0.8，所有非字母模块统一解锁
+        if (moduleType === 'letter') {
             return true;
         }
 
         const finishedByTest = !!userProgress.letterCompleted;
-        const finishedByProgress = (userProgress.letterProgress ?? 0) >= 80;
+        const finishedByProgress = (userProgress.letterProgress ?? 0) >= 0.8;
 
         return finishedByTest || finishedByProgress;
     },
@@ -255,7 +262,10 @@ export const useModuleAccessStore = create<ModuleAccessStore>()((set, get) => ({
 
             const result = await callCloudFunction<UserProgressResponse>(
                 'getUserProgress',
-                { userId }
+                { userId },
+                {
+                    endpoint: API_ENDPOINTS.MEMORY.GET_TODAY_MEMORIES.cloudbase,
+                }
             );
 
             if (result.success && result.data) {
@@ -323,13 +333,13 @@ export const useModuleAccessStore = create<ModuleAccessStore>()((set, get) => ({
             const completedCount = completedAlphabetLessons.length;
             const allLessonsDone = completedCount >= totalLessons;
 
-            // 进度：完成 lesson1-4 即视为 80%，全部 5 课完成视为 100%
+            // 进度：完成 lesson1-4 即视为 0.8，全部 5 课完成视为 1.0
             let nextLetterProgress = prev.letterProgress;
-            if (completedCount >= 4 && nextLetterProgress < 80) {
-                nextLetterProgress = 80;
+            if (completedCount >= 4 && nextLetterProgress < 0.8) {
+                nextLetterProgress = 0.8;
             }
-            if (completedCount >= totalLessons && nextLetterProgress < 100) {
-                nextLetterProgress = 100;
+            if (completedCount >= totalLessons && nextLetterProgress < 1) {
+                nextLetterProgress = 1;
             }
 
             // 只有全部课程完成时，才在前端标记 letterCompleted，
