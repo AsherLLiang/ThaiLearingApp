@@ -127,7 +127,7 @@ export function useAlphabetLearningEngine(lessonId?: string) {
     }
 
     // 初始化后端今日记忆队列（字母复习 + 新字母）
-    initializeSession(userId, 50).then(() => {
+    initializeSession(userId).then(() => {
       setPhase('yesterday-review'); // 第 1 轮从昨日复习开始
       setInitialized(true);
     });

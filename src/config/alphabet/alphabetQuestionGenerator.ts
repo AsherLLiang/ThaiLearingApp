@@ -119,13 +119,14 @@ export function generateAlphabetQuestion(
     idPrefix = 'qa',
     optionCount = 4,
   } = options || {};
-
   const type = decideQuestionType(preferredType);
 
   // 为了避免拿不到字段时崩掉，做一些兜底
   const mainChar = current.thaiChar ?? '';
   const example = current.example ?? '';
+  // 统一优先使用 AlphabetLearningState 中已经解析好的 audioUrl
   const audioUrl =
+    current.audioUrl ||
     current.syllableSoundUrl ||
     current.letterPronunciationUrl ||
     current.audioPath;

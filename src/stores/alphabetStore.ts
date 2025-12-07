@@ -16,6 +16,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Audio } from 'expo-av';
 
 import { callCloudFunction } from '@/src/utils/apiClient';
 import { API_ENDPOINTS } from '@/src/config/api.endpoints';
@@ -100,6 +101,9 @@ interface AlphabetStoreState {
   isLoading: boolean;
   error: string | null;
 
+  // 已缓存的音频 URL（用于避免重复预下载）
+  cachedAudioKeys: string[];
+
   // Actions
   initializeSession: (userId: string, limit?: number) => Promise<void>;
   /**
@@ -113,6 +117,21 @@ interface AlphabetStoreState {
 
   reset: () => void;
   clearError: () => void;
+}
+
+// ==================== 音频 URL 解析 ====================
+
+// TODO: 如果以后切换域名，只需改这里
+const LETTER_AUDIO_BASE =
+  'https://636c-cloud1-1gjcyrdd7ab927c6-1387301748.tcb.qcloud.la/alphabet/';
+
+function resolveLetterAudioUrl(key?: string | null): string {
+  if (!key) return '';
+  if (key.startsWith('http://') || key.startsWith('https://')) {
+    return key;
+  }
+  // 默认按 "consonant-*.mp3" 等命名规则拼接
+  return `${LETTER_AUDIO_BASE}${key}.mp3`;
 }
 
 // ==================== 辅助：Letter → AlphabetLearningState ====================
@@ -132,12 +151,14 @@ function mapLetterToState(
       ? `${letter.exampleWord}（${letter.exampleMeaning}）`
       : letter.exampleWord || '';
 
-  const audioUrl =
+  const rawAudioKey =
     letter.fullSoundUrl ||
     letter.letterPronunciationUrl ||
     letter.syllableSoundUrl ||
     letter.audioPath ||
     '';
+
+  const audioUrl = resolveLetterAudioUrl(rawAudioKey);
 
   return {
     alphabetId: letter._id,
@@ -179,9 +200,10 @@ export const useAlphabetStore = create<AlphabetStoreState>()(
       totalCount: 0,
       isLoading: false,
       error: null,
+      cachedAudioKeys: [],
 
       // 获取今日字母学习/复习队列
-      initializeSession: async (userId: string, limit: number = 20) => {
+      initializeSession: async (userId: string, limit: number = 5) => {
         set({ isLoading: true, error: null });
 
         try {
@@ -230,6 +252,34 @@ export const useAlphabetStore = create<AlphabetStoreState>()(
             totalCount: queue.length,
             isLoading: false,
           });
+
+          // 预下载今日所有字母音频（只对本地未缓存的 URL 执行一次）
+          (async () => {
+            const { cachedAudioKeys } = get();
+            const cachedSet = new Set(cachedAudioKeys);
+
+            const newUrls = queue
+              .map((item) => item.audioUrl)
+              .filter(
+                (url) => !!url && !cachedSet.has(url as string),
+              ) as string[];
+
+            for (const url of newUrls) {
+              try {
+                const sound = new Audio.Sound();
+                await sound.loadAsync({ uri: url }, { shouldPlay: false });
+                await sound.unloadAsync();
+              } catch (err) {
+                console.warn('⚠️ 预下载字母音频失败:', url, err);
+              }
+            }
+
+            if (newUrls.length > 0) {
+              set({
+                cachedAudioKeys: [...cachedAudioKeys, ...newUrls],
+              });
+            }
+          })();
         } catch (e: any) {
           console.error('❌ initializeSession error:', e);
           set({
@@ -341,6 +391,7 @@ export const useAlphabetStore = create<AlphabetStoreState>()(
           totalCount: 0,
           isLoading: false,
           error: null,
+          cachedAudioKeys: [],
         }),
 
       clearError: () => set({ error: null }),
@@ -352,6 +403,7 @@ export const useAlphabetStore = create<AlphabetStoreState>()(
       partialize: (state) => ({
         completedCount: state.completedCount,
         totalCount: state.totalCount,
+        cachedAudioKeys: state.cachedAudioKeys,
       }),
     }
   )

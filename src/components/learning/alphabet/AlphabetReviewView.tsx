@@ -1,23 +1,24 @@
 // src/components/learning/alphabet/AlphabetReviewView.tsx
 
 import React, {
-    memo,
-    useMemo,
-    useCallback,
-    useState,
-    useEffect,
-  } from 'react';
-  import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-  import { ArrowLeft } from 'lucide-react-native';
-  
-  import type { AlphabetLearningState } from '@/src/stores/alphabetStore';
-  import type { Letter } from '@/src/entities/types/letter.types';
-  import type { QuestionType } from '@/src/hooks/useAlphabetLearningEngine';
-  
-  import {
-    generateAlphabetQuestion,
-    type AlphabetQuestion,
-  } from '@/src/utils/lettersQuestionGenerator';
+  memo,
+  useCallback,
+  useState,
+  useEffect,
+  useRef,
+} from 'react';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { ArrowLeft } from 'lucide-react-native';
+import { Audio } from 'expo-av';
+
+import type { AlphabetLearningState } from '@/src/stores/alphabetStore';
+import type { Letter } from '@/src/entities/types/letter.types';
+import type { QuestionType } from '@/src/hooks/useAlphabetLearningEngine';
+
+import {
+  generateAlphabetQuestion,
+  type AlphabetQuestion,
+} from '@/src/utils/lettersQuestionGenerator';
   
   interface AlphabetReviewViewProps {
     alphabet: AlphabetLearningState;
@@ -36,139 +37,169 @@ import React, {
     onBack?: () => void;
   }
   
-  export const AlphabetReviewView = memo(function AlphabetReviewView({
-    alphabet,
+export const AlphabetReviewView = memo(function AlphabetReviewView({
+  alphabet,
+  letterPool,
+  preferredType,
+  onAnswer,
+  onNext,
+  onBack,
+}: AlphabetReviewViewProps) {
+  const [answered, setAnswered] = useState(false);
+  const [selected, setSelected] = useState<string | null>(null);
+
+  // 当前题目（AlphabetQuestion）
+  const [question, setQuestion] = useState<AlphabetQuestion | null>(null);
+
+  const soundRef = useRef<Audio.Sound | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (soundRef.current) {
+        soundRef.current.unloadAsync().catch(() => {});
+        soundRef.current = null;
+      }
+    };
+  }, []);
+
+  // 每当 alphabet 变化时，重新生成一题
+  useEffect(() => {
+    const letter = alphabet.letter;
+
+    if (!letter) {
+      // 降级策略：只用当前字母做一个简单的 letter-to-sound 题
+      const simpleQuestion: AlphabetQuestion = {
+        type: 'letter-to-sound',
+        stem: alphabet.thaiChar,
+        options: [alphabet.pronunciation],
+        correct: alphabet.pronunciation,
+      };
+      setQuestion(simpleQuestion);
+      setAnswered(false);
+      setSelected(null);
+      return;
+    }
+
+    const pool = letterPool || [];
+    const q = generateAlphabetQuestion(letter, pool, preferredType);
+    setQuestion(q);
+    setAnswered(false);
+    setSelected(null);
+  }, [
+    alphabet.alphabetId,
+    alphabet.letter,
+    alphabet.thaiChar,
+    alphabet.pronunciation,
     letterPool,
     preferredType,
-    onAnswer,
-    onNext,
-    onBack,
-  }: AlphabetReviewViewProps) {
-    const [answered, setAnswered] = useState(false);
-    const [selected, setSelected] = useState<string | null>(null);
+  ]);
   
-    // 当前题目（AlphabetQuestion）
-    const [question, setQuestion] = useState<AlphabetQuestion | null>(null);
-  
-    // 每当 alphabet 变化时，重新生成一题
-    useEffect(() => {
-      const letter = alphabet.letter;
+  const handlePlay = useCallback(async () => {
+    if (!alphabet.audioUrl) return;
 
-      if (!letter) {
-        // 降级策略：只用当前字母做一个简单的 letter-to-sound 题
-        const simpleQuestion: AlphabetQuestion = {
-          type: 'letter-to-sound',
-          stem: alphabet.thaiChar,
-          options: [alphabet.pronunciation],
-          correct: alphabet.pronunciation,
-        };
-        setQuestion(simpleQuestion);
-        setAnswered(false);
-        setSelected(null);
+    try {
+      if (soundRef.current) {
+        await soundRef.current.replayAsync();
         return;
       }
-  
-      const pool = letterPool || [];
-      const q = generateAlphabetQuestion(
-        letter,
-        pool,
-        preferredType,
+      const { sound } = await Audio.Sound.createAsync(
+        { uri: alphabet.audioUrl },
+        { shouldPlay: true },
       );
-      setQuestion(q);
-      setAnswered(false);
-      setSelected(null);
-    }, [
-      alphabet.alphabetId,
-      alphabet.letter,
-      alphabet.thaiChar,
-      alphabet.pronunciation,
-      letterPool,
-      preferredType,
-    ]);
-  
-    const handleSelect = useCallback(
-      (option: string) => {
-        if (!question || answered) return;
-  
-        setSelected(option);
-        setAnswered(true);
-  
-        const isCorrect = option === question.correct;
-  
-        // 通知引擎：这一题是否正确，属于哪一种题型
-        onAnswer(isCorrect, question.type);
-      },
-      [answered, onAnswer, question],
-    );
-  
-    const handleNext = useCallback(() => {
-      setSelected(null);
-      setAnswered(false);
-      onNext();
-    }, [onNext]);
-  
-    if (!question) {
-      return (
-        <View style={styles.container}>
-          <Text style={styles.title}>加载题目中...</Text>
-        </View>
-      );
+      soundRef.current = sound;
+    } catch (e) {
+      console.warn('播放字母音频失败:', e);
     }
-  
+  }, [alphabet.audioUrl]);
+
+  const handleSelect = useCallback(
+    (option: string) => {
+      if (!question || answered) return;
+
+      setSelected(option);
+      setAnswered(true);
+
+      const isCorrect = option === question.correct;
+
+      // 通知引擎：这一题是否正确，属于哪一种题型
+      onAnswer(isCorrect, question.type);
+    },
+    [answered, onAnswer, question],
+  );
+
+  const handleNext = useCallback(() => {
+    setSelected(null);
+    setAnswered(false);
+    onNext();
+  }, [onNext]);
+
+  if (!question) {
     return (
       <View style={styles.container}>
-        {/* 返回按钮 */}
-        {onBack && (
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={onBack}
-          >
-            <ArrowLeft size={24} color="#333" />
-          </TouchableOpacity>
-        )}
-
-        {/* 题型标题 */}
-        <Text style={styles.title}>
-          {renderQuestionTitle(question.type)}
-        </Text>
-  
-        {/* 题干 */}
-        <Text style={styles.stem}>{question.stem}</Text>
-  
-        {/* 选项 */}
-        <View style={styles.optionsContainer}>
-          {question.options.map((op) => {
-            const isSelected = selected === op;
-            const isCorrect = answered && op === question.correct;
-            const isWrong = answered && op === selected && op !== question.correct;
-  
-            return (
-              <TouchableOpacity
-                key={op}
-                style={[
-                  styles.optionButton,
-                  isSelected && styles.optionSelected,
-                  isCorrect && styles.optionCorrect,
-                  isWrong && styles.optionWrong,
-                ]}
-                onPress={() => handleSelect(op)}
-                disabled={answered}
-              >
-                <Text style={styles.optionText}>{op}</Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-  
-        {/* 下一题按钮 */}
-        {answered && (
-          <TouchableOpacity style={styles.nextButton} onPress={handleNext}>
-            <Text style={styles.nextText}>下一题</Text>
-          </TouchableOpacity>
-        )}
+        <Text style={styles.title}>加载题目中...</Text>
       </View>
     );
-  });
+  }
+
+  return (
+    <View style={styles.container}>
+      {/* 返回按钮 */}
+      {onBack && (
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={onBack}
+        >
+          <ArrowLeft size={24} color="#333" />
+        </TouchableOpacity>
+      )}
+
+      {/* 题型标题 */}
+      <Text style={styles.title}>
+        {renderQuestionTitle(question.type)}
+      </Text>
+
+      {/* 题干 + 听音按钮（仅 sound-to-letter 时显示） */}
+      <Text style={styles.stem}>{question.stem}</Text>
+      {question.type === 'sound-to-letter' && !!alphabet.audioUrl && (
+        <TouchableOpacity style={styles.audioButton} onPress={handlePlay}>
+          <Text style={styles.audioText}>🔊 播放发音</Text>
+        </TouchableOpacity>
+      )}
+
+      {/* 选项 */}
+      <View style={styles.optionsContainer}>
+        {question.options.map((op) => {
+          const isSelected = selected === op;
+          const isCorrect = answered && op === question.correct;
+          const isWrong = answered && op === selected && op !== question.correct;
+
+          return (
+            <TouchableOpacity
+              key={op}
+              style={[
+                styles.optionButton,
+                isSelected && styles.optionSelected,
+                isCorrect && styles.optionCorrect,
+                isWrong && styles.optionWrong,
+              ]}
+              onPress={() => handleSelect(op)}
+              disabled={answered}
+            >
+              <Text style={styles.optionText}>{op}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      {/* 下一题按钮 */}
+      {answered && (
+        <TouchableOpacity style={styles.nextButton} onPress={handleNext}>
+          <Text style={styles.nextText}>下一题</Text>
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+});
   
   // --------- UI 文案辅助 ---------
   
@@ -227,6 +258,18 @@ import React, {
     optionsContainer: {
       width: '100%',
       marginTop: 12,
+    },
+    audioButton: {
+      marginTop: 8,
+      marginBottom: 4,
+      paddingVertical: 8,
+      paddingHorizontal: 18,
+      borderRadius: 999,
+      backgroundColor: '#333',
+    },
+    audioText: {
+      color: '#fff',
+      fontSize: 14,
     },
     optionButton: {
       paddingVertical: 14,
