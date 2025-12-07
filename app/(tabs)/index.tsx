@@ -47,7 +47,7 @@ export default function HomeScreen() {
         level: t('alphabet.level'),
         progress: 0,
         route: '/learning' as const,
-        module: 'alphabet' as const,
+        module: 'letter' as const,
         thaiText: 'กขฃค',
         translation: t('alphabet.description'),
       };
@@ -56,13 +56,14 @@ export default function HomeScreen() {
     const { letterProgress, wordProgress, sentenceProgress } = userProgress;
 
     // 1. Alphabet Phase
-    if (letterProgress < 95) {
+    // 后端 letterProgress 为 0-1，这里用 80% 作为阶段切换阈值
+    if (letterProgress < 0.8) {
       return {
         name: t('modules.alphabet'),
         level: t('alphabet.level'),
-        progress: letterProgress,
+        progress: Math.round(letterProgress * 100),
         route: '/learning' as const,
-        module: 'alphabet' as const,
+        module: 'letter' as const,
         thaiText: 'ก ข ฃ ค',
         translation: t('alphabet.description'),
       };

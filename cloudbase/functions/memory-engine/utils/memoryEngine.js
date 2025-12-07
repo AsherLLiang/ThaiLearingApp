@@ -357,45 +357,91 @@ async function initUserProgress(db, userId) {
  * 修复：使用 get() + data[0]
  */
 async function checkModuleAccess(db, userId, moduleType) {
+    const forceUnlock = process.env.FORCE_UNLOCK === 'true';
 
-    // FORCE_UNLOCK logic removed for CloudBase compatibility
-
+    // 1. 获取用户进度记录
     const progressResult = await db.collection('user_progress')
         .where({ userId })
+        .limit(1)
         .get();
 
     if (!progressResult.data || progressResult.data.length === 0) {
+        // 没有进度记录时，如果开启 FORCE_UNLOCK，仍然放行并返回一个默认进度对象
+        if (forceUnlock) {
+            console.warn('⚠️ FORCE_UNLOCK 已开启, 但未找到 user_progress 记录, 使用默认进度:', moduleType);
+            const progress = {
+                userId,
+                letterCompleted: true,
+                letterProgress: 1,
+                wordUnlocked: true,
+                wordProgress: 1,
+                sentenceUnlocked: true,
+                sentenceProgress: 1,
+                articleUnlocked: true,
+                articleProgress: 1,
+                currentStage: moduleType,
+            };
+            return {
+                allowed: true,
+                progress,
+            };
+        }
+
         return {
             allowed: false,
             errorCode: 'USER_PROGRESS_NOT_FOUND',
-            message: '用户学习进度不存在,请联系管理员'
+            message: '用户学习进度不存在,请联系管理员',
         };
     }
 
     const progress = progressResult.data[0];
+    const letterProgress = typeof progress.letterProgress === 'number'
+        ? progress.letterProgress
+        : 0;
 
-    // ✅ 字母模块永远允许访问
+    // 2. 调试总开关：一键解锁所有模块
+    if (forceUnlock) {
+        console.warn('⚠️ FORCE_UNLOCK 已开启, 强制放行模块:', moduleType);
+        return {
+            allowed: true,
+            progress: {
+                ...progress,
+                letterCompleted: true,
+                letterProgress: 1,
+                wordUnlocked: true,
+                sentenceUnlocked: true,
+                articleUnlocked: true,
+                currentStage: moduleType,
+            },
+        };
+    }
+
+    // 3. 字母模块永远允许访问
     if (moduleType === 'letter') {
         return {
             allowed: true,
-            progress
+            progress,
         };
     }
 
-    // ✅ 其他所有模块只依赖 letterCompleted
-    if (!progress.letterCompleted) {
+    // 4. 其他模块：统一使用「二选一」规则
+    // - letterCompleted === true
+    // - 或 letterProgress >= 0.8 (即 80%)
+    const finishedByTest = !!progress.letterCompleted;
+    const finishedByProgress = letterProgress >= 0.8;
+
+    if (!finishedByTest && !finishedByProgress) {
         return {
             allowed: false,
             errorCode: 'MODULE_LOCKED',
-            message: `请先完成字母学习（当前进度：${Math.round(progress.letterProgress * 100)}%）`,
-            progress
+            message: `请先完成字母学习（当前进度：${Math.round(letterProgress * 100)}%）`,
+            progress,
         };
     }
 
-    // ✅ 字母完成 → 全部模块放行
     return {
         allowed: true,
-        progress
+        progress,
     };
 }
 

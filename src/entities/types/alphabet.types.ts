@@ -58,7 +58,7 @@ export interface MemoryStatus {
  * 用于统一记忆引擎的解锁系统
  */
 export interface UnlockInfo {
-    letterProgress: number;         // 字母学习进度 (0-100)
+    letterProgress: number;         // 字母学习进度 (0-1 比例值)
     wordUnlocked: boolean;          // 是否解锁单词学习
     unlocked?: boolean;             // 是否刚刚解锁 (用于弹窗提示)
 }
@@ -83,7 +83,7 @@ export interface TodayLettersResponse {
  */
 export interface SubmitLetterResultRequest {
     userId: string;
-    entityType: 'alphabet' | 'letter';
+    entityType: 'letter';
     entityId: string;
     quality: number;                // 1-5的质量评分
 }

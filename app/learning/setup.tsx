@@ -16,7 +16,7 @@ export default function DailyLimitSetupScreen() {
     const router = useRouter();
     const params = useLocalSearchParams();
     const moduleParam = typeof params.module === 'string' ? params.module : 'word';
-    const moduleType: ModuleType = moduleParam === 'alphabet' ? 'alphabet' : 'word';
+    const moduleType: ModuleType = moduleParam === 'letter' ? 'letter' : 'word';
     const courseSource = typeof params.source === 'string' ? params.source : undefined;
 
     const { dailyLimits, setDailyLimit } = useLearningPreferenceStore();
@@ -49,7 +49,7 @@ export default function DailyLimitSetupScreen() {
             <View style={styles.header}>
                 <Text style={styles.title}>{t('learning.setupTitle', '今日学习计划')}</Text>
                 <Text style={styles.subtitle}>
-                    {moduleType === 'alphabet'
+                    {moduleType === 'letter'
                         ? t('learning.setupSubtitle', '选择今天要学习/复习的字母数量')
                         : t('learning.setupSubtitleWords', '选择今天要学习/复习的单词数量')}
                 </Text>

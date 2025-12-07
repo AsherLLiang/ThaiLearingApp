@@ -229,7 +229,8 @@ const MOCK_NEW_WORDS: WordData[] = [
 // --- Types ---
 
 type SessionMode = 'REVIEW' | 'LEARN_NEW';
-type ModuleVariant = 'alphabet' | 'word';
+// 与后端保持一致，字母模块使用 'letter'
+type ModuleVariant = 'letter' | 'word';
 
 interface QueueItem {
     word: WordData;
@@ -240,7 +241,7 @@ interface QueueItem {
 export default function LearningSession() {
     const params = useLocalSearchParams();
     const moduleParam = typeof params.module === 'string' ? params.module : 'word';
-    const moduleType: ModuleVariant = moduleParam === 'alphabet' ? 'alphabet' : 'word';
+    const moduleType: ModuleVariant = moduleParam === 'letter' ? 'letter' : 'word';
     const courseSource = typeof params.source === 'string' ? params.source : undefined;
     const { startCourse, currentCourseSource } = useVocabularyStore();
 
@@ -248,7 +249,7 @@ export default function LearningSession() {
         if (!courseSource) return;
 
         // ⭐ 1. 字母模块：不在这里自动 startCourse
-        if (moduleType === 'alphabet') {
+        if (moduleType === 'letter') {
             return;
         }
 
@@ -258,7 +259,7 @@ export default function LearningSession() {
         }
     }, [moduleType, courseSource, currentCourseSource, startCourse]);
 
-    if (moduleType === 'alphabet') {
+    if (moduleType === 'letter') {
         return <AlphabetSession />;
     }
 
@@ -439,13 +440,13 @@ function AlphabetSession() {
         isLoading,
         initializeSession,
         submitResult,
-        resetSession,
+        reset,
         completedCount,
         totalCount,
-        queue,
         currentItem,
-        currentIndex,
     } = useAlphabetStore();
+
+    const currentAlphabet = currentItem;
 
     useEffect(() => {
         setHasViewedIntro(false);
@@ -455,12 +456,12 @@ function AlphabetSession() {
         const start = async () => {
             if (sessionStarted || isLoading) return;
             const userId = currentUser?.userId || 'user_123';
-            await initSession(userId, dailyLimits.alphabet || 20);
+            await initializeSession(userId, dailyLimits.letter || 20);
             setSessionStarted(true);
         };
 
         start();
-    }, [sessionStarted, isLoading, initSession, currentUser?.userId, dailyLimits.alphabet]);
+    }, [sessionStarted, isLoading, initializeSession, currentUser?.userId, dailyLimits.letter]);
 
     const handleClose = () => {
         Alert.alert(
@@ -472,7 +473,7 @@ function AlphabetSession() {
                     text: t('learning.quit', '退出'),
                     style: "destructive",
                     onPress: () => {
-                        resetSession();
+                        reset();
                         router.back();
                     }
                 }

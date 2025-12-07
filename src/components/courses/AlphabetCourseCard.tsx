@@ -21,10 +21,9 @@ interface AlphabetCourseCardProps {
     completed: number;
     total: number;
   };
-  onStart: () => void; // Start Learning 完全交给父组件控制
 }
 
-export function AlphabetCourseCard({ course, isCurrent, progress, onStart }: AlphabetCourseCardProps) {
+export function AlphabetCourseCard({ course, isCurrent, progress }: AlphabetCourseCardProps) {
   const router = useRouter();
   const { t } = useTranslation();
 
@@ -67,7 +66,7 @@ export function AlphabetCourseCard({ course, isCurrent, progress, onStart }: Alp
               )}
             </View>
 
-            {/* Start Learning 按钮，只调用 onStart，并阻止冒泡 */}
+            {/* Start Learning 按钮 */}
             <Pressable
               style={[styles.startBtn, isCurrent && styles.activeStartBtn]}
               onPress={() => router.push('/alphabet')}

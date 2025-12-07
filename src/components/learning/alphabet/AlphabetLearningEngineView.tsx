@@ -1,20 +1,26 @@
 // src/components/learning/alphabet/AlphabetLearningEngineView.tsx
 
 import React from 'react';
-import { View, ActivityIndicator } from 'react-native';
+import { View, ActivityIndicator, TouchableOpacity, Text, SafeAreaView } from 'react-native';
 
 import { AlphabetLearningView } from '@/src/components/learning/alphabet/AlphabetLearningView';
 import { AlphabetReviewView } from '@/src/components/learning/alphabet/AlphabetReviewView';
 import type { AlphabetLearningState } from '@/src/stores/alphabetStore';
 import type { QuestionType, Phase } from '@/src/hooks/useAlphabetLearningEngine';
+import type { Letter } from '@/src/entities/types/letter.types';
+import { Colors } from '@/src/constants/colors';
+import { Typography } from '@/src/constants/typography';
 
 interface AlphabetLearningEngineViewProps {
   phase: Phase;
   initialized: boolean;
   currentItem: AlphabetLearningState | null;
   currentQuestionType: QuestionType | null;
+  letterPool?: Letter[];
   onAnswer: (isCorrect: boolean, questionType: QuestionType) => void;
   onNext: () => void;
+  onSkipYesterdayReview?: () => void;
+  onBack?: () => void;
 }
 
 export function AlphabetLearningEngineView({
@@ -22,15 +28,18 @@ export function AlphabetLearningEngineView({
   initialized,
   currentItem,
   currentQuestionType,
+  letterPool,
   onAnswer,
   onNext,
+  onSkipYesterdayReview,
+  onBack,
 }: AlphabetLearningEngineViewProps) {
   // 加载状态
   if (!initialized || !currentItem) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center' }}>
+      <SafeAreaView style={{ flex: 1, justifyContent: 'center' }}>
         <ActivityIndicator size="large" />
-      </View>
+      </SafeAreaView>
     );
   }
 
@@ -43,39 +52,68 @@ export function AlphabetLearningEngineView({
     phase === 'today-remedy'
   ) {
     return (
-      <AlphabetReviewView
-        alphabet={currentItem}
-        preferredType={currentQuestionType ?? undefined}
-        onAnswer={onAnswer}
-        onNext={onNext}
-      />
+      <SafeAreaView style={{ flex: 1 }}>
+        {phase === 'yesterday-review' && onSkipYesterdayReview && (
+          <View
+            style={{
+              paddingHorizontal: 16,
+              paddingTop: 12,
+              paddingBottom: 4,
+              alignItems: 'flex-end',
+            }}
+          >
+            <TouchableOpacity onPress={onSkipYesterdayReview}>
+              <Text
+                style={{
+                  fontFamily: Typography.notoSerifRegular,
+                  fontSize: 13,
+                  color: Colors.taupe,
+                }}
+              >
+                跳过昨日复习 →
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        <AlphabetReviewView
+          alphabet={currentItem}
+          letterPool={letterPool}
+          preferredType={currentQuestionType ?? undefined}
+          onAnswer={onAnswer}
+          onNext={onNext}
+          onBack={onBack}
+        />
+      </SafeAreaView>
     );
   }
 
   // 今日学习阶段
   if (phase === 'today-learning') {
     return (
-      <AlphabetLearningView
-        alphabet={currentItem}
-        onNext={onNext}
-      />
+      <SafeAreaView style={{ flex: 1 }}>
+        <AlphabetLearningView
+          alphabet={currentItem}
+          onNext={onNext}
+          onBack={onBack}
+        />
+      </SafeAreaView>
     );
   }
 
   // 完成阶段
   if (phase === 'finished') {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+      <SafeAreaView style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
         <ActivityIndicator size="small" />
-      </View>
+      </SafeAreaView>
     );
   }
 
   // 默认加载状态
   return (
-    <View style={{ flex: 1, justifyContent: 'center' }}>
+    <SafeAreaView style={{ flex: 1, justifyContent: 'center' }}>
       <ActivityIndicator size="large" />
-    </View>
+    </SafeAreaView>
   );
 }
-

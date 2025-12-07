@@ -8,6 +8,7 @@ import React, {
     useEffect,
   } from 'react';
   import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+  import { ArrowLeft } from 'lucide-react-native';
   
   import type { AlphabetLearningState } from '@/src/stores/alphabetStore';
   import type { Letter } from '@/src/entities/types/letter.types';
@@ -32,6 +33,7 @@ import React, {
     preferredType?: QuestionType;
     onAnswer: (isCorrect: boolean, type: QuestionType) => void;
     onNext: () => void;
+    onBack?: () => void;
   }
   
   export const AlphabetReviewView = memo(function AlphabetReviewView({
@@ -40,6 +42,7 @@ import React, {
     preferredType,
     onAnswer,
     onNext,
+    onBack,
   }: AlphabetReviewViewProps) {
     const [answered, setAnswered] = useState(false);
     const [selected, setSelected] = useState<string | null>(null);
@@ -49,7 +52,9 @@ import React, {
   
     // 每当 alphabet 变化时，重新生成一题
     useEffect(() => {
-      if (!alphabet.letterData) {
+      const letter = alphabet.letter;
+
+      if (!letter) {
         // 降级策略：只用当前字母做一个简单的 letter-to-sound 题
         const simpleQuestion: AlphabetQuestion = {
           type: 'letter-to-sound',
@@ -65,7 +70,7 @@ import React, {
   
       const pool = letterPool || [];
       const q = generateAlphabetQuestion(
-        alphabet.letterData,
+        letter,
         pool,
         preferredType,
       );
@@ -74,7 +79,7 @@ import React, {
       setSelected(null);
     }, [
       alphabet.alphabetId,
-      alphabet.letterData,
+      alphabet.letter,
       alphabet.thaiChar,
       alphabet.pronunciation,
       letterPool,
@@ -112,6 +117,16 @@ import React, {
   
     return (
       <View style={styles.container}>
+        {/* 返回按钮 */}
+        {onBack && (
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={onBack}
+          >
+            <ArrowLeft size={24} color="#333" />
+          </TouchableOpacity>
+        )}
+
         {/* 题型标题 */}
         <Text style={styles.title}>
           {renderQuestionTitle(question.type)}
@@ -192,6 +207,13 @@ import React, {
       padding: 24,
       justifyContent: 'flex-start',
       alignItems: 'center',
+    },
+    backButton: {
+      position: 'absolute',
+      top: 24,
+      left: 24,
+      zIndex: 10,
+      padding: 8,
     },
     title: {
       fontSize: 24,

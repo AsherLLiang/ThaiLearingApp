@@ -79,7 +79,7 @@ export default function CoursesScreen() {
   const getModuleType = (course: CourseWithImage): ModuleType => {
     switch (course.category) {
       case 'letter':
-        return 'alphabet';
+        return 'letter';
       case 'sentence':
         return 'sentence';
       case 'article':
@@ -92,7 +92,7 @@ export default function CoursesScreen() {
   const getCourseProgress = (course: CourseWithImage) => {
     if (!userProgress) return undefined;
     const moduleType = getModuleType(course);
-    if (moduleType === 'alphabet') {
+    if (moduleType === 'letter') {
       return {
         completed: userProgress.letterMasteredCount,
         total: userProgress.letterTotalCount || course.lessons,
@@ -217,19 +217,18 @@ export default function CoursesScreen() {
       >
         {/* 所有课程（包括AlphabetCourseCard和单词课程） */}
         {filteredCourses.map((course) => {
-          const isCurrent = currentCourseSource === course.source;
-          const moduleType = getModuleType(course);
-          const progress = getCourseProgress(course);
+      const isCurrent = currentCourseSource === course.source;
+      const moduleType = getModuleType(course);
+      const progress = getCourseProgress(course);
 
-          // 字母课程：使用 AlphabetCourseCard（保持原有逻辑）
-          if (moduleType === 'alphabet') {
+          // 字母课程：使用 AlphabetCourseCard，直接进入 /alphabet 流程
+          if (course.category === 'letter') {
             return (
               <AlphabetCourseCard
                 key={course.id}
                 course={course}
                 isCurrent={isCurrent}
                 progress={progress}
-                onStart={handleStartLearning(course)}
               />
             );
           }
