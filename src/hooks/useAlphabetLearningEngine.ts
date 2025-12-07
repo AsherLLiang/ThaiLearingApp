@@ -1,16 +1,12 @@
 // src/engines/useAlphabetLearningEngine.ts
 
 import { useState, useEffect, useCallback } from 'react';
-import { View, ActivityIndicator } from 'react-native';
 
 import { useAlphabetStore } from '@/src/stores/alphabetStore';
 import { useUserStore } from '@/src/stores/userStore';
 import { useModuleAccessStore } from '@/src/stores/moduleAccessStore';
 import { SEQUENCE_LESSONS } from '@/src/config/alphabet/lettersSequence';
 import { QualityButton } from '@/src/entities/enums/QualityScore.enum';
-
-import { AlphabetLearningView } from '@/src/components/learning/alphabet/AlphabetLearningView';
-import { AlphabetReviewView } from '@/src/components/learning/alphabet/AlphabetReviewView';
 
 // 题型类型（预留给后续扩展）
 export type QuestionType =
@@ -24,6 +20,15 @@ export type QuestionType =
   | 'class-choice'
   | 'keyboard-key'
   | 'letter-name';
+
+export type Phase =
+  | 'yesterday-review'
+  | 'yesterday-remedy'
+  | 'today-learning'
+  | 'today-mini-review'
+  | 'today-final-review'
+  | 'today-remedy'
+  | 'finished';
 
 type QuestionTypeWeightMap = Record<QuestionType, number>;
 
@@ -60,17 +65,8 @@ interface WrongItem {
   questionType: QuestionType;
 }
 
-type Phase =
-  | 'yesterday-review'
-  | 'yesterday-remedy'
-  | 'today-learning'
-  | 'today-mini-review'
-  | 'today-final-review'
-  | 'today-remedy'
-  | 'finished';
-
 const MAX_ROUNDS = 3;
-// 假设 final review 阶段为“每个字母 3 道题”（听音/看字母/拼读）
+// 假设 final review 阶段为"每个字母 3 道题"（听音/看字母/拼读）
 // 如果你之后改成 4/5 题，只要改这个常量即可
 const QUESTIONS_PER_LETTER_IN_FINAL = 3;
 
@@ -253,7 +249,7 @@ export function useAlphabetLearningEngine(lessonId?: string) {
     // 清空本轮学习计数
     setTodayLearnedCount(0);
 
-    // 不重置后端 queue，只是让阶段从“今日学习”开始
+    // 不重置后端 queue，只是让阶段从"今日学习"开始
     setPhase('today-learning');
   }, []);
 
@@ -295,7 +291,7 @@ export function useAlphabetLearningEngine(lessonId?: string) {
     // 2. 昨日错题补救
     if (phase === 'yesterday-remedy') {
       if (wrongYesterday.length > 0) {
-        // 这里你可以之后做“从错题池中出题”的逻辑，目前只做统计
+        // 这里你可以之后做"从错题池中出题"的逻辑，目前只做统计
         return;
       }
       setPhase('today-learning');
@@ -326,7 +322,7 @@ export function useAlphabetLearningEngine(lessonId?: string) {
     // 4. mini review
     if (phase === 'today-mini-review') {
       if (wrongTodayMini.length > 0) {
-        // 之后可以做“错题优先”的逻辑，目前只统计
+        // 之后可以做"错题优先"的逻辑，目前只统计
         return;
       }
       setPhase('today-learning');
@@ -414,52 +410,16 @@ export function useAlphabetLearningEngine(lessonId?: string) {
   ]);
 
   // =========================
-  // UI 输出
+  // 返回状态数据（不包含 JSX）
   // =========================
-  let view = (
-    <View style={{ flex: 1, justifyContent: 'center' }}>
-      <ActivityIndicator size="large" />
-    </View>
-  );
-
-  if (initialized && currentItem) {
-    if (
-      phase === 'yesterday-review' ||
-      phase === 'yesterday-remedy' ||
-      phase === 'today-mini-review' ||
-      phase === 'today-final-review' ||
-      phase === 'today-remedy'
-    ) {
-      view = (
-        <AlphabetReviewView
-          alphabet={currentItem}
-          preferredType={currentQuestionType ?? undefined}
-          onAnswer={onAnswer}
-          onNext={nextStep}
-        />
-      );
-    } else if (phase === 'today-learning') {
-      view = (
-        <AlphabetLearningView
-          alphabet={currentItem}
-          onNext={nextStep}
-        />
-      );
-    } else if (phase === 'finished') {
-      // 这里可以换成一个“课程完成”组件 / 提示
-      view = (
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-          <ActivityIndicator size="small" />
-        </View>
-      );
-    }
-  }
-
   return {
     phase,
     currentRound,
-    view,
+    initialized,
+    currentItem,
+    currentQuestionType,
     onAnswer,
     next: nextStep,
   };
 }
+
