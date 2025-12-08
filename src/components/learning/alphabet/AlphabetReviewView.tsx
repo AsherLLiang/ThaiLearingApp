@@ -221,8 +221,6 @@ export const AlphabetReviewView = memo(function AlphabetReviewView({
         return '声调选择';
       case 'class-choice':
         return '辅音分类';
-      case 'keyboard-key':
-        return '键盘位置题';
       case 'letter-name':
         return '字母名称识别';
       default:
