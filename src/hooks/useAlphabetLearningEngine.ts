@@ -18,7 +18,6 @@ export type QuestionType =
   | 'final-consonant'
   | 'tone-choice'
   | 'class-choice'
-  | 'keyboard-key'
   | 'letter-name';
 
 export type Phase =
@@ -41,7 +40,6 @@ const DEFAULT_QUESTION_TYPE_WEIGHTS: QuestionTypeWeightMap = {
   'final-consonant': 1,
   'tone-choice': 1,
   'class-choice': 1,
-  'keyboard-key': 1,
   'letter-name': 1,
 };
 
