@@ -16,7 +16,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Audio } from 'expo-av';
+import * as FileSystem from 'expo-file-system';
 
 import { callCloudFunction } from '@/src/utils/apiClient';
 import { API_ENDPOINTS } from '@/src/config/api.endpoints';
@@ -29,6 +29,7 @@ import {
   QUALITY_SCORE_MAP,
   ATTEMPTS_INCREMENT_MAP,
 } from '@/src/entities/enums/QualityScore.enum';
+
 
 // ==================== 后端记忆状态 ====================
 
@@ -146,18 +147,6 @@ interface AlphabetStoreState {
 
 // ==================== 音频 URL 解析 ====================
 
-// TODO: 如果以后切换域名，只需改这里
-const LETTER_AUDIO_BASE =
-  'https://636c-cloud1-1gjcyrdd7ab927c6-1387301748.tcb.qcloud.la/alphabet/';
-
-function resolveLetterAudioUrl(key?: string | null): string {
-  if (!key) return '';
-  if (key.startsWith('http://') || key.startsWith('https://')) {
-    return key;
-  }
-  // 默认按 "consonant-*.mp3" 等命名规则拼接
-  return `${LETTER_AUDIO_BASE}${key}.mp3`;
-}
 
 // ==================== 辅助：Letter → AlphabetLearningState ====================
 
@@ -177,13 +166,19 @@ function mapLetterToState(
       : letter.exampleWord || '';
 
   const rawAudioKey =
+    letter.fullSoundLocalPath ||
     letter.fullSoundUrl ||
+    letter.letterPronunciationLocalPath ||
     letter.letterPronunciationUrl ||
+    letter.syllableSoundLocalPath ||
     letter.syllableSoundUrl ||
     letter.audioPath ||
     '';
 
-  const audioUrl = resolveLetterAudioUrl(rawAudioKey);
+  // 为满足「播放只从本地读取」的目标，audioUrl 仅在预下载阶段被设置为 file:// 路径。
+  // 这里如果已经有本地路径（*_LocalPath），就使用；否则先置空，等待预下载任务填充。
+  const initialAudioUrl =
+    (rawAudioKey.startsWith('file://') ? rawAudioKey : '');
 
   return {
     alphabetId: letter._id,
@@ -192,7 +187,7 @@ function mapLetterToState(
     thaiChar: letter.thaiChar,
     pronunciation,
     example,
-    audioUrl,
+    audioUrl: initialAudioUrl,
     category: letter.category,
 
     // 发音相关字段
@@ -217,7 +212,7 @@ function mapLetterToState(
 export const useAlphabetStore = create<AlphabetStoreState>()(
   persist(
     (set, get) => ({
-      phase: LearningPhase.REVIEW,
+      phase: LearningPhase.IDLE,
       queue: [],
       currentIndex: 0,
       currentItem: null,
@@ -280,7 +275,7 @@ export const useAlphabetStore = create<AlphabetStoreState>()(
           );
 
           set({
-            phase: LearningPhase.REVIEW,
+            phase: LearningPhase.IDLE,
             queue,
             currentItem: queue[0],
             currentIndex: 0,
@@ -291,31 +286,171 @@ export const useAlphabetStore = create<AlphabetStoreState>()(
             phonicsRule: phonicsRule ?? null,
           });
 
-          // 预下载今日所有字母音频（只对本地未缓存的 URL 执行一次）
+          // 预下载本课所有字母音频到本地文件系统（首次进入该课时）
           (async () => {
-            const { cachedAudioKeys } = get();
-            const cachedSet = new Set(cachedAudioKeys);
-
-            const newUrls = queue
-              .map((item) => item.audioUrl)
-              .filter(
-                (url) => !!url && !cachedSet.has(url as string),
-              ) as string[];
-
-            for (const url of newUrls) {
-              try {
-                const sound = new Audio.Sound();
-                await sound.loadAsync({ uri: url }, { shouldPlay: false });
-                await sound.unloadAsync();
-              } catch (err) {
-                console.warn('⚠️ 预下载字母音频失败:', url, err);
+            try {
+              const cacheDir = `${FileSystem.documentDirectory}alphabet-audio/`;
+              const dirInfo = await FileSystem.getInfoAsync(cacheDir);
+              if (!dirInfo.exists) {
+                await FileSystem.makeDirectoryAsync(cacheDir, {
+                  intermediates: true,
+                });
               }
-            }
 
-            if (newUrls.length > 0) {
-              set({
-                cachedAudioKeys: [...cachedAudioKeys, ...newUrls],
+              const updatedQueue = [...queue];
+              const urlToLocalPath = new Map<string, string>();
+
+              const toHttpUrl = (path?: string | null): string => {
+                if (!path) return '';
+                if (path.startsWith('http://') || path.startsWith('https://')) {
+                  return path;
+                }
+                let finalPath = path;
+                if (!/\.mp3($|\?)/.test(finalPath)) {
+                  finalPath = `${finalPath}.mp3`;
+                }
+                return `https://636c-cloud1-1gjcyrdd7ab927c6-1387301748.tcb.qcloud.la/alphabet/${finalPath}`;
+              };
+
+              // eslint-disable-next-line no-console
+              console.log(
+                '🎧 开始预下载本课字母音频, 队列长度:',
+                updatedQueue.length,
+              );
+
+              for (let index = 0; index < updatedQueue.length; index += 1) {
+                const current = updatedQueue[index];
+                const letter = { ...current.letter };
+
+                const fieldEntries: Array<{
+                  key: 'full' | 'syllable' | 'end' | 'letter';
+                  raw?: string;
+                }> = [
+                  { key: 'full', raw: letter.fullSoundUrl },
+                  { key: 'syllable', raw: letter.syllableSoundUrl },
+                  { key: 'end', raw: letter.endSyllableSoundUrl },
+                  { key: 'letter', raw: letter.letterPronunciationUrl },
+                ];
+
+                for (const entry of fieldEntries) {
+                  if (!entry.raw) continue;
+                  const httpUrl = toHttpUrl(entry.raw);
+                  if (!httpUrl) continue;
+
+                  let localPath = urlToLocalPath.get(httpUrl);
+                  if (!localPath) {
+                    const fileName = encodeURIComponent(httpUrl);
+                    localPath = `${cacheDir}${fileName}`;
+
+                    let success = false;
+                    for (
+                      let attempt = 0;
+                      attempt < 3 && !success;
+                      attempt += 1
+                    ) {
+                      try {
+                        const info = await FileSystem.getInfoAsync(localPath);
+                        if (!info.exists) {
+                          // eslint-disable-next-line no-console
+                          console.log(
+                            `📥 下载音频(第 ${attempt + 1} 次):`,
+                            httpUrl,
+                            '→',
+                            localPath,
+                          );
+                          await FileSystem.downloadAsync(httpUrl, localPath);
+                        }
+                        success = true;
+                      } catch (err) {
+                        console.warn(
+                          `⚠️ 下载字母音频失败(第 ${attempt + 1} 次):`,
+                          httpUrl,
+                          err,
+                        );
+                        await new Promise((resolve) =>
+                          setTimeout(resolve, 500 * (attempt + 1)),
+                        );
+                      }
+                    }
+
+                    if (!success) {
+                      // eslint-disable-next-line no-console
+                      console.warn('❌ 多次下载失败,放弃该音频:', httpUrl);
+                      continue;
+                    }
+
+                    urlToLocalPath.set(httpUrl, localPath);
+                  }
+
+                  if (entry.key === 'full') {
+                    letter.fullSoundLocalPath = localPath;
+                  } else if (entry.key === 'syllable') {
+                    letter.syllableSoundLocalPath = localPath;
+                  } else if (entry.key === 'end') {
+                    letter.endSyllableSoundLocalPath = localPath;
+                  } else if (entry.key === 'letter') {
+                    letter.letterPronunciationLocalPath = localPath;
+                  }
+                }
+
+                const primaryAudio =
+                  letter.fullSoundLocalPath ||
+                  letter.letterPronunciationLocalPath ||
+                  letter.syllableSoundLocalPath ||
+                  letter.endSyllableSoundLocalPath ||
+                  current.audioUrl;
+
+                // eslint-disable-next-line no-console
+                console.log('✅ 预下载结果(letter):', {
+                  id: letter._id,
+                  thaiChar: letter.thaiChar,
+                  fullSoundLocalPath: letter.fullSoundLocalPath,
+                  syllableSoundLocalPath: letter.syllableSoundLocalPath,
+                  endSyllableSoundLocalPath: letter.endSyllableSoundLocalPath,
+                  letterPronunciationLocalPath:
+                    letter.letterPronunciationLocalPath,
+                  primaryAudio,
+                });
+
+                updatedQueue[index] = {
+                  ...current,
+                  letter,
+                  audioUrl: primaryAudio && primaryAudio.startsWith('file://')
+                    ? primaryAudio
+                    : primaryAudio,
+                };
+              }
+
+              set((state) => {
+                const { currentIndex } = state;
+                const currentItem = updatedQueue[currentIndex] ?? state.currentItem;
+
+                // 调试：当前项在预下载后的音频情况
+                if (currentItem) {
+                  // eslint-disable-next-line no-console
+                  console.log('🎯 预下载后当前字母状态:', {
+                    id: currentItem.letter._id,
+                    thaiChar: currentItem.letter.thaiChar,
+                    fullSoundLocalPath: currentItem.letter.fullSoundLocalPath,
+                    syllableSoundLocalPath:
+                      currentItem.letter.syllableSoundLocalPath,
+                    endSyllableSoundLocalPath:
+                      currentItem.letter.endSyllableSoundLocalPath,
+                    letterPronunciationLocalPath:
+                      currentItem.letter.letterPronunciationLocalPath,
+                    audioUrl: currentItem.audioUrl,
+                  });
+                }
+
+                return {
+                  queue: updatedQueue,
+                  currentItem,
+                };
               });
+              // eslint-disable-next-line no-console
+              console.log('🎧 预下载全部完成, 队列更新成功');
+            } catch (err) {
+              console.warn('⚠️ 预下载字母音频任务失败:', err);
             }
           })();
         } catch (e: any) {
@@ -452,7 +587,7 @@ export const useAlphabetStore = create<AlphabetStoreState>()(
       // 重置（例如切换用户）
       reset: () =>
         set({
-          phase: LearningPhase.REVIEW,
+          phase: LearningPhase.IDLE,
           queue: [],
           currentIndex: 0,
           currentItem: null,

@@ -19,8 +19,8 @@ export default function AlphabetLessonFlow() {
     currentQuestionType,
     letterPool,
     onAnswer,
-    next,
-    skipYesterdayReview,
+    onNext,
+    onSkipYesterdayReview,
     phonicsRule,
     showPhonicsRuleCard,
     onCompletePhonicsRule,
@@ -43,8 +43,8 @@ export default function AlphabetLessonFlow() {
       currentQuestionType={currentQuestionType}
       letterPool={letterPool}
       onAnswer={onAnswer}
-      onNext={next}
-      onSkipYesterdayReview={skipYesterdayReview}
+      onNext={onNext}
+      onSkipYesterdayReview={onSkipYesterdayReview}
       onBack={handleBack}
       phonicsRule={phonicsRule}
       showPhonicsRuleCard={showPhonicsRuleCard}

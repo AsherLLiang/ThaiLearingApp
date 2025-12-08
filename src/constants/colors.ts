@@ -13,4 +13,5 @@ export const Colors = {
       50: '#FEF2F2',
       600: '#DC2626',
     },
+     success: '#2A9D8F',
   } as const;

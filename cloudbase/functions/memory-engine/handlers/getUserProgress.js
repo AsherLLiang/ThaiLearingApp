@@ -74,7 +74,8 @@ async function getUserProgress(db, params) {
       }
     };
 
-    return createResponse(true, result, '获取用户进度成功');
+    // 与前端约定：data.progress 为进度对象
+    return createResponse(true, { progress: result }, '获取用户进度成功');
 
   } catch (error) {
     console.error('getUserProgress error:', error);

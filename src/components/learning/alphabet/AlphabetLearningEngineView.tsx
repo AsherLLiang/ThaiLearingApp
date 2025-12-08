@@ -8,7 +8,8 @@ import { AlphabetReviewView } from '@/src/components/learning/alphabet/AlphabetR
 import { PhonicsRuleCard } from '@/src/components/learning/alphabet/PhonicsRuleCard';
 import { MiniReviewQuestion as MiniReviewQuestionComponent } from '@/src/components/learning/alphabet/MiniReviewQuestion';
 import type { AlphabetLearningState } from '@/src/stores/alphabetStore';
-import type { QuestionType, Phase } from '@/src/hooks/useAlphabetLearningEngine';
+import type { Phase } from '@/src/hooks/useAlphabetLearningEngine';
+import type { QuestionType } from '@/src/entities/enums/QuestionType.enum';
 import type { Letter } from '@/src/entities/types/letter.types';
 import type {
   PhonicsRule,
