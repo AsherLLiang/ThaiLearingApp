@@ -13,7 +13,7 @@ import { create } from 'zustand';
 import { callCloudFunction } from '@/src/utils/apiClient';
 import { API_ENDPOINTS } from '@/src/config/api.endpoints';
 import { useUserStore } from './userStore';
-import { SEQUENCE_LESSONS } from '@/src/config/alphabet/lettersSequence';
+import { LESSON_METADATA } from '@/src/config/alphabet/lessonMetadata.config';
 
 // ==================== 类型定义 ====================
 
@@ -321,7 +321,8 @@ export const useModuleAccessStore = create<ModuleAccessStore>()((set, get) => ({
 
     // ===== 标记字母课程完成（前端本地）=====
     markAlphabetLessonCompleted: (lessonId: string) => {
-        const totalLessons = Object.keys(SEQUENCE_LESSONS).length;
+        const totalLessons = Object.keys(LESSON_METADATA).length;
+        const coreLessons = 6; // 完成前 6 课视为“核心字母已学完”
 
         set((state) => {
             const prev = state.userProgress || { ...defaultProgress };
@@ -333,19 +334,26 @@ export const useModuleAccessStore = create<ModuleAccessStore>()((set, get) => ({
             const completedCount = completedAlphabetLessons.length;
             const allLessonsDone = completedCount >= totalLessons;
 
-            // 进度：完成 lesson1-4 即视为 0.8，全部 5 课完成视为 1.0
+            // 进度：
+            // - 完成 lesson1-4 视为 0.8
+            // - 完成 lesson1-6 视为 0.9（核心字母全部完成）
+            // - 完成全部 7 课视为 1.0（含罕用/古体字母）
             let nextLetterProgress = prev.letterProgress;
             if (completedCount >= 4 && nextLetterProgress < 0.8) {
                 nextLetterProgress = 0.8;
+            }
+            if (completedCount >= coreLessons && nextLetterProgress < 0.9) {
+                nextLetterProgress = 0.9;
             }
             if (completedCount >= totalLessons && nextLetterProgress < 1) {
                 nextLetterProgress = 1;
             }
 
-            // 只有全部课程完成时，才在前端标记 letterCompleted，
-            // 或保留后端已有的 true 状态（例如通过测试题）
+            // 完成前 6 课即视为核心字母学习完成，
+            // lesson7 作为补充课程不影响其他模块解锁
+            const coreLessonsDone = completedCount >= coreLessons;
             const nextLetterCompleted =
-                prev.letterCompleted || allLessonsDone;
+                prev.letterCompleted || coreLessonsDone;
 
             const updated: UserProgress = {
                 ...prev,

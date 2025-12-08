@@ -7,6 +7,10 @@
 // 假设 memoryEngine 内部没有严重的全局副作用，如果有问题，可能需要检查 memoryEngine
 const { getTodayReviewEntities, getOrCreateMemory, checkModuleAccess } = require('../utils/memoryEngine');
 const { createResponse } = require('../utils/response');
+const {
+  getLessonMetadataFromDb,
+  getPhonicsRuleByLessonFromDb,
+} = require('../config/alphabetLessonConfig');
 
 /**
  * 懒初始化：字母进度表
@@ -75,7 +79,7 @@ async function ensureUserVocabularyProgress(db, userId) {
  * @param {Object} params - 请求参数
  */
 async function getTodayMemories(db, params) {
-  const { userId, entityType, limit = 20, includeNew = true } = params;
+  const { userId, entityType, limit = 30, includeNew = true } = params;
 
   if (!userId || !entityType) {
     return createResponse(false, null, 'Missing userId or entityType', 'INVALID_PARAMS');
@@ -97,24 +101,32 @@ async function getTodayMemories(db, params) {
     }
 
     // 1.5 获取/更新用户每日学习量设置
-    // "设置的今日学习的字母数量应该传入userProgress 中被getTodayMemory获取"
+    // 注意：
+    // - 字母模块（entityType === 'letter'）不再允许前端通过 limit 动态调整每日新字母数量，
+    //   只使用服务器端存储的 dailyLimit（如果有），否则退回默认值；
+    // - 其他实体类型仍沿用原有逻辑。
     let effectiveLimit = limit;
     const userProgress = accessCheck.progress; // checkModuleAccess returns progress
 
     if (userProgress) {
-      // 如果请求中明确传入了 limit (且不是默认值/空)，则更新到 user_progress
-      // 注意：这里假设前端传来的 limit 是用户意图的设置
-      if (params.limit && params.limit !== userProgress.dailyLimit) {
-        await db.collection('user_progress').where({ userId }).update({
-          data: {
-            dailyLimit: params.limit,
-            updatedAt: new Date().toISOString()
-          }
-        });
-        effectiveLimit = params.limit;
-      } else if (!params.limit && userProgress.dailyLimit) {
-        // 如果请求没传 limit，但数据库有存，则使用存储的值
-        effectiveLimit = userProgress.dailyLimit;
+      if (entityType === 'letter') {
+        // 字母模块：忽略前端传入的 limit，只使用存储的 dailyLimit（如果有）
+        if (userProgress.dailyLimit) {
+          effectiveLimit = userProgress.dailyLimit;
+        }
+      } else {
+        // 其他模块：保留原有行为
+        if (params.limit && params.limit !== userProgress.dailyLimit) {
+          await db.collection('user_progress').where({ userId }).update({
+            data: {
+              dailyLimit: params.limit,
+              updatedAt: new Date().toISOString()
+            }
+          });
+          effectiveLimit = params.limit;
+        } else if (!params.limit && userProgress.dailyLimit) {
+          effectiveLimit = userProgress.dailyLimit;
+        }
       }
     }
 
@@ -137,28 +149,51 @@ async function getTodayMemories(db, params) {
         return createResponse(false, null, `不支持的实体类型: ${entityType}`, 'INVALID_ENTITY_TYPE');
       }
 
-      // 优化：使用 nin 过滤已存在的实体，并按课程顺序排序
       const query = db.collection(collectionName);
-      let queryRef = query;
+      let newEntities = [];
 
       // 获取已存在的实体ID (包括复习队列中的)
       const existingEntityIds = reviewMemories.map(m => m.entityId);
 
-      if (existingEntityIds.length > 0) {
-        queryRef = queryRef.where({
-          _id: db.command.nin(existingEntityIds)
-        });
+      if (entityType === 'letter' && params.lessonId) {
+        // 字母模块：根据课程一次性取出该课需要的全部字母（不受 limit 限制）
+        const { lessonId } = params;
+        const cmd = db.command;
+
+        const whereCondition = {
+          curriculumLessonIds: cmd.in([lessonId]),
+        };
+
+        if (existingEntityIds.length > 0) {
+          whereCondition._id = cmd.nin(existingEntityIds);
+        }
+
+        const newEntitiesResult = await query
+          .where(whereCondition)
+          // 为了安全起见，仍加一个较大的上限（远大于实际字母总数）
+          .limit(200)
+          .get();
+
+        newEntities = newEntitiesResult.data;
+      } else {
+        // 其他模块或未指定 lessonId：沿用原逻辑，按剩余名额和 lessonNumber 顺序获取
+        let queryRef = query;
+        const cmd = db.command;
+
+        if (existingEntityIds.length > 0) {
+          queryRef = queryRef.where({
+            _id: cmd.nin(existingEntityIds)
+          });
+        }
+
+        const newEntitiesResult = await queryRef
+          .orderBy('lessonNumber', 'asc')
+          .orderBy('_id', 'asc')
+          .limit(remainingSlots)
+          .get();
+
+        newEntities = newEntitiesResult.data;
       }
-
-      // 按课程顺序和ID排序 (确保符合课程表顺序)
-      // "按固定的方式顺序获取字母，保证用户按难度学习字母"
-      const newEntitiesResult = await queryRef
-        .orderBy('lessonNumber', 'asc')
-        .orderBy('_id', 'asc')
-        .limit(remainingSlots)
-        .get();
-
-      const newEntities = newEntitiesResult.data;
 
       for (const entity of newEntities) {
         const memory = await getOrCreateMemory(
@@ -236,13 +271,46 @@ async function getTodayMemories(db, params) {
       total: data.length,
       reviewCount: reviewMemories.length,
       newCount: newMemories.length,
-      entityType
+      entityType,
     };
 
-    return createResponse(true, {
-      items: data,
-      summary
-    }, '获取今日学习内容成功');
+    // 8. 附加课程元数据 & 拼读规则（真实配置）
+    let lessonMetadata = null;
+    let phonicsRule = null;
+
+    if (entityType === 'letter' && data.length > 0) {
+      // 优先使用前端传入的 lessonId，其次尝试从实体字段推导
+      const firstEntity = data[0];
+      const lessonIdFromParam = params.lessonId;
+      const lessonIdFromCurriculum =
+        (firstEntity.curriculumLessonIds &&
+          firstEntity.curriculumLessonIds[0]) ||
+        null;
+      const lessonIdFromLegacy =
+        typeof firstEntity.lessonNumber === 'number' &&
+        firstEntity.lessonNumber > 0
+          ? `lesson${firstEntity.lessonNumber}`
+          : null;
+
+      const resolvedLessonId =
+        lessonIdFromParam || lessonIdFromCurriculum || lessonIdFromLegacy;
+
+      if (resolvedLessonId) {
+        lessonMetadata = await getLessonMetadataFromDb(db, resolvedLessonId);
+        phonicsRule = await getPhonicsRuleByLessonFromDb(db, resolvedLessonId);
+      }
+    }
+
+    return createResponse(
+      true,
+      {
+        items: data,
+        summary,
+        lessonMetadata,
+        phonicsRule,
+      },
+      '获取今日学习内容成功',
+    );
 
   } catch (error) {
     console.error('getTodayMemories error:', error);

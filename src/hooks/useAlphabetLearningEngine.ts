@@ -5,10 +5,18 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAlphabetStore } from '@/src/stores/alphabetStore';
 import { useUserStore } from '@/src/stores/userStore';
 import { useModuleAccessStore } from '@/src/stores/moduleAccessStore';
-import { SEQUENCE_LESSONS } from '@/src/config/alphabet/lettersSequence';
 import { QualityButton } from '@/src/entities/enums/QualityScore.enum';
+import type {
+  PhonicsRule,
+  MiniReviewQuestion as MiniReviewQuestionType,
+} from '@/src/entities/types/phonicsRule.types';
+import { QuestionType as QuestionTypeEnum } from '@/src/entities/enums/QuestionType.enum';
+import { getLetterAudioUrl } from '@/src/utils/alphabet/audioHelper';
+import type { Letter } from '@/src/entities/types/letter.types';
+import type { RoundEvaluationState } from '@/src/entities/types/phonicsRule.types';
 
-// 题型类型（预留给后续扩展）
+// 题型类型（保持与早期实现兼容，使用字符串字面量）
+// 注意：与 QuestionTypeEnum 的枚举值一一对应（枚举的值是相同的字符串）
 export type QuestionType =
   | 'sound-to-letter'
   | 'letter-to-sound'
@@ -68,6 +76,92 @@ const MAX_ROUNDS = 3;
 // 如果你之后改成 4/5 题，只要改这个常量即可
 const QUESTIONS_PER_LETTER_IN_FINAL = 3;
 
+// 每学多少个字母触发一次 Mini Review
+const MINI_REVIEW_INTERVAL = 3;
+
+function shuffleArray<T>(items: T[]): T[] {
+  return [...items].sort(() => Math.random() - 0.5);
+}
+
+function buildMiniReviewQuestionsFromLetters(
+  letters: Letter[],
+  maxQuestions: number = 3,
+): MiniReviewQuestionType[] {
+  if (!letters.length) return [];
+
+  const pool = shuffleArray(letters).slice(0, maxQuestions);
+  const questions: MiniReviewQuestionType[] = [];
+
+  // 1) 基础：sound-to-letter（听音选字母）
+  pool.forEach((letter, index) => {
+    const correctChar = letter.thaiChar;
+    const otherLetters = shuffleArray(
+      letters.filter((l) => l._id !== letter._id),
+    ).slice(0, 3);
+
+    const optionChars = shuffleArray([
+      correctChar,
+      ...otherLetters.map((l) => l.thaiChar),
+    ]);
+
+    questions.push({
+      id: `mini-s2l-${letter._id}-${index}`,
+      type: QuestionTypeEnum.SOUND_TO_LETTER,
+      question: '🔊 听音，选择刚才学过的字母',
+      subtitle: undefined,
+      options: optionChars.map((ch) => ({
+        label: ch,
+        value: ch,
+        example: undefined,
+      })),
+      correct: correctChar,
+      explanation: `巩固刚才学过的字母「${correctChar}」`,
+      audioUrl: getLetterAudioUrl(letter, 'letter'),
+      acousticHint: undefined,
+      pitchVisualization: undefined,
+    });
+  });
+
+  // 2) 轻量扩展：letter-to-sound（看字母选发音）
+  const base = pool[0];
+  if (base?.initialSound) {
+    const distractors = shuffleArray(
+      letters.filter(
+        (l) =>
+          l._id !== base._id &&
+          !!l.initialSound &&
+          l.initialSound !== base.initialSound,
+      ),
+    ).slice(0, 3);
+
+    if (distractors.length >= 2) {
+      const optionSounds = shuffleArray([
+        base.initialSound,
+        ...distractors.map((l) => l.initialSound),
+      ]);
+
+      questions.push({
+        id: `mini-l2s-${base._id}`,
+        type: QuestionTypeEnum.LETTER_TO_SOUND,
+        question: `字母「${base.thaiChar}」的首音是？`,
+        subtitle: '选择最接近你听到的发音',
+        options: optionSounds.map((sound) => ({
+          label: sound,
+          value: sound,
+          example: undefined,
+        })),
+        correct: base.initialSound,
+        explanation: `「${base.thaiChar}」的首音是 ${base.initialSound}`,
+        audioUrl: getLetterAudioUrl(base, 'letter'),
+        acousticHint: undefined,
+        pitchVisualization: undefined,
+      });
+    }
+  }
+
+  return questions.slice(0, maxQuestions);
+}
+
 // -------------------------
 // Hook 主体（课程引擎）
 // -------------------------
@@ -80,7 +174,10 @@ export function useAlphabetLearningEngine(lessonId?: string) {
     currentItem,
     currentIndex,
     initializeSession,
+    lessonMetadata,
+    phonicsRule: storePhonicsRule,
     submitResult,
+    submitRoundEvaluation,
     next,
     isLoading,
   } = useAlphabetStore();
@@ -113,23 +210,46 @@ export function useAlphabetLearningEngine(lessonId?: string) {
   const [hasViewedIntro, setHasViewedIntro] = useState(false);
   const [currentQuestionType, setCurrentQuestionType] = useState<QuestionType | null>(null);
 
+  // 拼读规则相关
+  const [phonicsRule, setPhonicsRule] = useState<PhonicsRule | null>(null);
+  const [phonicsRuleShown, setPhonicsRuleShown] = useState(false);
+  const [showPhonicsRuleCard, setShowPhonicsRuleCard] = useState(false);
+
+  // Mini Review 队列
+  const [miniReviewQuestions, setMiniReviewQuestions] = useState<MiniReviewQuestionType[]>([]);
+  const [miniReviewIndex, setMiniReviewIndex] = useState(0);
+
+  // 三轮评估状态
+  const [roundEvaluation, setRoundEvaluation] = useState<RoundEvaluationState>({
+    currentRound: 1,
+    rounds: [],
+    allRoundsPassed: false,
+  });
+
   // =========================
   // 初始化课程（只在首次进入本 lesson 时执行）
   // =========================
   useEffect(() => {
     if (!lessonId) return;
 
-    const letters = SEQUENCE_LESSONS[lessonId as keyof typeof SEQUENCE_LESSONS];
-    if (letters) {
-      setTodayList(letters);
-    }
-
     // 初始化后端今日记忆队列（字母复习 + 新字母）
-    initializeSession(userId).then(() => {
+    initializeSession(userId, { lessonId }).then(() => {
+      // 根据后端返回的课程元数据确定今日课程字母数（仅用于统计）
+      if (lessonMetadata?.lessonId === lessonId) {
+        const allLetters = [
+          ...(lessonMetadata.consonants || []),
+          ...(lessonMetadata.vowels || []),
+          ...(lessonMetadata.tones || []),
+        ];
+        setTodayList(allLetters);
+      }
+      if (storePhonicsRule && storePhonicsRule.lessonId === lessonId) {
+        setPhonicsRule(storePhonicsRule);
+      }
       setPhase('yesterday-review'); // 第 1 轮从昨日复习开始
       setInitialized(true);
     });
-  }, [lessonId, userId, initializeSession]);
+  }, [lessonId, userId, initializeSession, lessonMetadata, storePhonicsRule]);
 
   // =========================
   // 错题池加入工具函数
@@ -295,6 +415,9 @@ export function useAlphabetLearningEngine(lessonId?: string) {
         return;
       }
       setPhase('today-learning');
+      if (!phonicsRuleShown && phonicsRule) {
+        setShowPhonicsRuleCard(true);
+      }
       return;
     }
 
@@ -304,9 +427,23 @@ export function useAlphabetLearningEngine(lessonId?: string) {
       setTodayLearnedCount(nextLearnedCount);
 
       // 学完 3 个 → mini review
-      if (nextLearnedCount % 3 === 0 && nextLearnedCount < todayList.length) {
-        setPhase('today-mini-review');
-        return;
+      if (
+        nextLearnedCount % MINI_REVIEW_INTERVAL === 0 &&
+        nextLearnedCount < todayList.length
+      ) {
+        const allLetters: Letter[] = reviewQueueYesterday
+          .map((item) => item.letter)
+          .filter((l): l is Letter => !!l);
+
+        const questions = buildMiniReviewQuestionsFromLetters(allLetters);
+        if (questions.length > 0) {
+          setMiniReviewQuestions(questions);
+          setMiniReviewIndex(0);
+          setPhase('today-mini-review');
+          return;
+        }
+
+        // 若未能生成题目，则直接继续正常学习
       }
 
       // 今日全部学完 → final review
@@ -321,10 +458,7 @@ export function useAlphabetLearningEngine(lessonId?: string) {
 
     // 4. mini review
     if (phase === 'today-mini-review') {
-      if (wrongTodayMini.length > 0) {
-        // 之后可以做"错题优先"的逻辑，目前只统计
-        return;
-      }
+      // mini review 的题目由前端队列控制，这里只在队列结束后被调用一次
       setPhase('today-learning');
       next();
       return;
@@ -356,20 +490,60 @@ export function useAlphabetLearningEngine(lessonId?: string) {
 
       if (finalCorrectRate >= 0.9) {
         // ✅ 一轮达标
-        if (currentRound < MAX_ROUNDS) {
-          // 进入下一轮：先提交本轮成绩，再重置前端轮次状态
-          (async () => {
-            await submitRoundResults();
+        const totalQuestions =
+          todayList.length * QUESTIONS_PER_LETTER_IN_FINAL;
+        const wrongTotal = wrongTodayMini.length + wrongTodayFinal.length;
+        const correctCount = Math.max(totalQuestions - wrongTotal, 0);
+
+        // 进入下一轮或结束课程前，先提交本轮结果 + round 统计
+        (async () => {
+          await submitRoundResults();
+
+          // 记录本轮评估状态（前端）
+          setRoundEvaluation((prev) => {
+            const roundEntry = {
+              roundNumber: currentRound,
+              totalQuestions,
+              correctCount,
+              accuracy: finalCorrectRate,
+              passed: true,
+            };
+            const rounds = prev.rounds.filter(
+              (r) => r.roundNumber !== currentRound,
+            );
+            rounds.push(roundEntry);
+            const allRoundsPassed =
+              currentRound === MAX_ROUNDS
+                ? true
+                : prev.allRoundsPassed;
+            return {
+              currentRound,
+              rounds,
+              allRoundsPassed,
+            };
+          });
+
+          // 上传本轮评估分数到后端（仅统计用）
+          if (lessonId) {
+            await submitRoundEvaluation({
+              userId,
+              lessonId,
+              roundNumber: currentRound,
+              totalQuestions,
+              correctCount,
+              accuracy: finalCorrectRate,
+            });
+          }
+
+          if (currentRound < MAX_ROUNDS) {
+            // 进入下一轮：重置前端轮次状态
             setCurrentRound((prev) => prev + 1);
             resetRoundState();
             resetLearningState();
-          })();
-          return;
-        }
+            return;
+          }
 
-        // 第三轮也完成 → 提交最后一轮并结束课程
-        (async () => {
-          await submitRoundResults();
+          // 第三轮也完成 → 结束课程并标记解锁
 
           // 标记当前字母课程已完成（仅适用于字母模块）
           if (lessonId) {
@@ -414,17 +588,58 @@ export function useAlphabetLearningEngine(lessonId?: string) {
   // =========================
   const skipYesterdayReview = useCallback(() => {
     setPhase('today-learning');
+    if (!phonicsRuleShown && phonicsRule) {
+      setShowPhonicsRuleCard(true);
+    }
+  }, [phonicsRule, phonicsRuleShown]);
+
+  const handlePhonicsRuleComplete = useCallback(() => {
+    setPhonicsRuleShown(true);
+    setShowPhonicsRuleCard(false);
   }, []);
+
+  const currentMiniReviewQuestion =
+    miniReviewQuestions.length > 0
+      ? miniReviewQuestions[miniReviewIndex]
+      : null;
+
+  const handleMiniReviewAnswer = useCallback(
+    (isCorrect: boolean, type: QuestionTypeEnum) => {
+      // 将枚举值映射回本 Hook 使用的字符串题型
+      const questionType = type as unknown as QuestionType;
+      onAnswer(isCorrect, questionType);
+    },
+    [onAnswer],
+  );
+
+  const handleMiniReviewNext = useCallback(() => {
+    if (miniReviewIndex < miniReviewQuestions.length - 1) {
+      setMiniReviewIndex((prev) => prev + 1);
+      return;
+    }
+
+    // 队列结束，清空并让引擎推进到下一阶段
+    setMiniReviewIndex(0);
+    setMiniReviewQuestions([]);
+    nextStep();
+  }, [miniReviewIndex, miniReviewQuestions.length, nextStep]);
 
   return {
     phase,
     currentRound,
     initialized,
+    roundEvaluation,
     currentItem,
     currentQuestionType,
     onAnswer,
     next: nextStep,
     letterPool: reviewQueueYesterday.map((item) => item.letter),
     skipYesterdayReview,
+    phonicsRule,
+    showPhonicsRuleCard,
+    onCompletePhonicsRule: handlePhonicsRuleComplete,
+    miniReviewQuestion: currentMiniReviewQuestion,
+    onMiniReviewAnswer: handleMiniReviewAnswer,
+    onMiniReviewNext: handleMiniReviewNext,
   };
 }

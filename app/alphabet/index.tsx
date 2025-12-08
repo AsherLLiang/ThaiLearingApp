@@ -1,8 +1,8 @@
 // app/alphabet/index.tsx
 // 字母课程总览页（课程入口 → Lesson 1~5）
 
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ArrowLeft } from 'lucide-react-native';
@@ -11,9 +11,11 @@ import { Colors } from '@/src/constants/colors';
 import { Typography } from '@/src/constants/typography';
 
 import { useAlphabetStore } from '@/src/stores/alphabetStore';
-import { SEQUENCE_LESSONS } from '@/src/config/alphabet/lettersSequence';
 import { ThaiPatternBackground } from '@/src/components/common/ThaiPatternBackground';
-
+import { getAllLessons } from '@/src/config/alphabet/lessonMetadata.config';
+import type { LessonMetadata } from '@/src/entities/types/phonicsRule.types';
+import { callCloudFunction } from '@/src/utils/apiClient';
+import { API_ENDPOINTS } from '@/src/config/api.endpoints';
 
 interface LessonCardProps {
   id: string;
@@ -27,75 +29,76 @@ interface LessonCardProps {
   };
 }
 
-const LESSONS: LessonCardProps[] = [
-  {
-    id: 'lesson1',
-    title: '第一课：基础辅音 + 基础元音',
-    description: '掌握最基础的中辅音和常见元音，是所有泰语拼读的核心。',
-    letterKeys: SEQUENCE_LESSONS.lesson1,
-    isCurrent: false,
-    progress: {
-      completed: 0,
-      total: 16,
-    },
-  },
-  {
-    id: 'lesson2',
-    title: '第二课：前置元音 + 高频辅音',
-    description: '学习前置元音和更多高频辅音，扩展拼读能力。',
-    letterKeys: SEQUENCE_LESSONS.lesson2,
-    isCurrent: false,
-    progress: {
-      completed: 0,
-      total: SEQUENCE_LESSONS.lesson2.length,
-    },
-  },
-  {
-    id: 'lesson3',
-    title: '第三课：送气辅音 + 特殊元音',
-    description: '掌握送气辅音与特殊元音，是语音区分的关键。',
-    letterKeys: SEQUENCE_LESSONS.lesson3,
-    isCurrent: false,
-    progress: {
-      completed: 0,
-      total: SEQUENCE_LESSONS.lesson3.length,
-    },
-  },
-  {
-    id: 'lesson4',
-    title: '第四课：高频辅音 + 尾音规则',
-    description: '理解尾音规则与高频辅音，用于真实阅读与会话。',
-    letterKeys: SEQUENCE_LESSONS.lesson4,
-    isCurrent: false,
-    progress: {
-      completed: 0,
-      total: SEQUENCE_LESSONS.lesson4.length,
-    },
-  },
-  {
-    id: 'lesson5',
-    title: '第五课：复合元音 + 难辅音组合',
-    description: '掌握高级元音组合，是自然阅读泰语段落的关键能力。',
-    letterKeys: SEQUENCE_LESSONS.lesson5,
-    isCurrent: false,
-    progress: {
-      completed: 0,
-      total: SEQUENCE_LESSONS.lesson5.length,
-    },
-  },
-];
-
-export default function AlphabetCoursesScreen({ }) {
+export default function AlphabetCoursesScreen() {
   const router = useRouter();
+
+  const [lessons, setLessons] = useState<LessonCardProps[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const mapLessons = (list: LessonMetadata[]): LessonCardProps[] =>
+      list.map((lesson) => {
+        const letterKeys = [
+          ...lesson.consonants,
+          ...lesson.vowels,
+          ...lesson.tones,
+        ];
+
+        return {
+          id: lesson.lessonId,
+          title: lesson.title,
+          description: lesson.description,
+          letterKeys,
+          isCurrent: false,
+          progress: {
+            completed: 0,
+            total: lesson.totalCount,
+          },
+        };
+      });
+
+    (async () => {
+      try {
+        const res = await callCloudFunction<{ lessons: LessonMetadata[] }>(
+          'getAlphabetLessons',
+          {},
+          {
+            endpoint: API_ENDPOINTS.MEMORY.GET_TODAY_MEMORIES.cloudbase,
+          },
+        );
+
+        const list: LessonMetadata[] =
+          (res.success && res.data?.lessons) || getAllLessons();
+
+        if (!mounted) return;
+        setLessons(mapLessons(list));
+      } catch {
+        if (!mounted) return;
+        // 回退到本地配置
+        setLessons(mapLessons(getAllLessons()));
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const { completedCount, totalCount } = useAlphabetStore();
   const overallProgressPercent =
-    totalCount > 0 ? Math.min(100, Math.round((completedCount / totalCount) * 100)) : 0;
+    totalCount > 0
+      ? Math.min(100, Math.round((completedCount / totalCount) * 100))
+      : 0;
 
   // 按课程累积字母数量，用于解锁和当前课程判断
-  const cumulativeCounts = LESSONS.reduce<number[]>((acc, lesson, index) => {
+  const cumulativeCounts = lessons.reduce<number[]>((acc, lesson, index) => {
     const prev = index === 0 ? 0 : acc[index - 1];
-    acc.push(prev + lesson.letterKeys.length);
+    const total = lesson.progress?.total ?? lesson.letterKeys.length;
+    acc.push(prev + total);
     return acc;
   }, []);
 
@@ -112,16 +115,19 @@ export default function AlphabetCoursesScreen({ }) {
         <View style={styles.headerContainer}>
         <Text style={styles.headerTitle}>泰语字母课程</Text>
         <Text style={styles.headerSubtitle}>
-          共 5 个课程 · {overallProgressPercent}% 完成
+          共 {lessons.length} 个课程 · {overallProgressPercent}% 完成
         </Text>
       </View>
+      {loading ? (
+        <View style={{ flex: 1, justifyContent: 'center' }}>
+          <ActivityIndicator size="large" />
+        </View>
+      ) : (
       <ScrollView style={styles.scroll} contentContainerStyle={styles.inner}>
         <ThaiPatternBackground opacity={0.12} />
-        {/* Back Button Row */}
-
 
         {/* Lesson Cards */}
-        {LESSONS.map((lesson, index) => {
+        {lessons.map((lesson, index) => {
           const unlocked =
             index === 0 || completedCount >= cumulativeCounts[index - 1];
 
@@ -197,6 +203,7 @@ export default function AlphabetCoursesScreen({ }) {
         {/* ========================================解锁全部课程 =============================================*/}
 
       </ScrollView>
+      )}
       <View style={styles.unlockALLBtnContainer}>
         <Pressable
           style={styles.unlockAllBtn}

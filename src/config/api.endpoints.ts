@@ -2,8 +2,22 @@
 
 /*
  * API 端点配置
- * 
- * 作用：统一管理所有 API 路径，支持多后端切换
+ *
+ * 作用：
+ * 1. 统一管理所有 API 路径，支持多后端切换
+ * 2. 显式标记“CloudBase 实际存在的云函数”和“仅占位/仅 Java 后端可用”的端点
+ *
+ * 当前 CloudBase 已部署的函数（来自 cloudbase/cloudbaserc.json）：
+ * - user-register
+ * - user-login
+ * - user-reset-password
+ * - user-update-profile
+ * - learn-vocab          （多 action：词汇学习 / 模块解锁 等）
+ * - memory-engine        （多 action：getTodayMemories / submitMemoryResult / submitRoundEvaluation 等）
+ * - alphabet             （字母测试等单独功能）
+ *
+ * 除上述云函数名以外的 cloudbase 字段，均视为“未实现的云函数名称占位”，
+ * 目前前端代码不应调用这些占位端点。
  */
 
 // ==================== 后端类型定义 ====================
@@ -18,6 +32,7 @@ export interface EndpointMap {
 // ==================== 认证 API ====================
 export const AUTH_ENDPOINTS = {
   // 用户登录
+  // ✅ CloudBase: 已实现 user-login 云函数
   LOGIN: {
     cloudbase: '/user-login',
     java: '/api/auth/login'
@@ -27,24 +42,28 @@ export const AUTH_ENDPOINTS = {
                     */
 
   // 用户注册
+  // ✅ CloudBase: 已实现 user-register 云函数
   REGISTER: {
     cloudbase: '/user-register',
     java: '/api/auth/register'
   } as EndpointMap,
 
   // 重置密码
+  // ✅ CloudBase: 已实现 user-reset-password 云函数
   RESET_PASSWORD: {
     cloudbase: '/user-reset-password',
     java: '/api/auth/reset-password'
   } as EndpointMap,
 
   // 更新个人资料
+  // ✅ CloudBase: 已实现 user-update-profile 云函数
   UPDATE_PROFILE: {
     cloudbase: '/user-update-profile',
     java: '/api/user/profile'
   } as EndpointMap,
 
   // 登出
+  // ⚠️ CloudBase: 目前没有 user-logout 云函数，前端仅本地登出，不会调用该 cloudbase 端点
   LOGOUT: {
     cloudbase: '/user-logout',
     java: '/api/auth/logout'
@@ -52,6 +71,9 @@ export const AUTH_ENDPOINTS = {
 };
 
 // ==================== 课程管理 API ====================
+// ⚠️ 说明：
+// - 下列 cloudbase 字段（/course-get-*）目前没有对应的云函数，仅作为未来扩展的占位。
+// - 如需在 CloudBase 上实现课程管理，请新增对应云函数后，再正式启用这些端点。
 export const COURSE_ENDPOINTS = {
   // 获取所有课程
   GET_ALL: {
@@ -73,6 +95,9 @@ export const COURSE_ENDPOINTS = {
 };
 
 // ==================== 学习功能 API ====================
+// ⚠️ 说明：
+// - 下列 cloudbase 字段（/learning-*）目前没有对应的云函数，仅作为占位；
+// - 当前实际的字母 / 单词学习统一走 memory-engine / learn-vocab 多 action 云函数。
 export const LEARNING_ENDPOINTS = {
   // 获取字母表
   GET_ALPHABETS: {
@@ -106,6 +131,8 @@ export const LEARNING_ENDPOINTS = {
 };
 
 // ==================== 发音评估 API ====================
+// ⚠️ 说明：
+// - 下列 cloudbase 字段（/pronunciation-*）目前没有对应云函数，仅 Java 端或未来扩展使用。
 export const PRONUNCIATION_ENDPOINTS = {
   // 发音评估
   ASSESS: {
@@ -121,6 +148,9 @@ export const PRONUNCIATION_ENDPOINTS = {
 };
 
 // ==================== 进度管理 API ====================
+// ⚠️ 说明：
+// - 下列 cloudbase 字段（/progress-*）目前没有对应云函数；
+// - 进度相关逻辑暂由 memory-engine / learn-vocab 内部更新 user_progress。
 export const PROGRESS_ENDPOINTS = {
   // 获取进度
   GET: {
@@ -142,6 +172,8 @@ export const PROGRESS_ENDPOINTS = {
 };
 
 // ==================== 复习系统 API ====================
+// ⚠️ 说明：
+// - 下列 cloudbase 字段（/review-*）目前没有对应云函数，仅作为未来复习中心化服务的占位。
 export const REVIEW_ENDPOINTS = {
   // 获取到期复习
   GET_DUE: {
@@ -196,6 +228,10 @@ export function replacePathParams(
 }
 // === 字母学习 API ===
 // ==================== 字母学习 API ====================
+// ⚠️ 说明：
+// - 当前字母学习主流程走 memory-engine + getTodayMemories。
+// - 这里的 /vocabulary-get-* 云函数名在 CloudBase 中并不存在，仅为最早版本设计的占位。
+// - 与字母测试相关的实际云函数为 `alphabet`（多 action），后续如需对接可在此重新映射。
 export const ALPHABET_ENDPOINTS = {
   GET_TODAY: {
     cloudbase: '/vocabulary-get-today-alphabets',
@@ -220,6 +256,7 @@ export const ALPHABET_ENDPOINTS = {
 
 // ==================== 模块权限 API ====================
 export const MODULE_ENDPOINTS = {
+  // ✅ CloudBase: 使用 learn-vocab 多 action 云函数（CHECK_ACCESS / GET_USER_PROGRESS 等）
   CHECK_ACCESS: {
     cloudbase: '/learn-vocab',
     java: '/api/modules/access'
@@ -232,6 +269,7 @@ export const MODULE_ENDPOINTS = {
 
 // ==================== 单词学习 API ====================
 export const VOCABULARY_ENDPOINTS = {
+  // ✅ CloudBase: 使用 learn-vocab 多 action 云函数（getTodayWords / updateMastery / getVocabularyList 等）
   GET_TODAY_WORDS: {
     cloudbase: '/learn-vocab',
     java: '/api/vocabulary/today'
@@ -264,6 +302,7 @@ export const VOCABULARY_ENDPOINTS = {
 
 // ==================== 统一记忆引擎 API ====================
 export const MEMORY_ENDPOINTS = {
+  // ✅ CloudBase: 使用 memory-engine 多 action 云函数
   GET_TODAY_MEMORIES: {
     cloudbase: '/memory-engine',  // 云函数名
     java: '/api/memory/today'
@@ -271,6 +310,10 @@ export const MEMORY_ENDPOINTS = {
   SUBMIT_MEMORY_RESULT: {
     cloudbase: '/memory-engine',
     java: '/api/memory/result'
+  } as EndpointMap,
+  SUBMIT_ROUND_EVALUATION: {
+    cloudbase: '/memory-engine',
+    java: '/api/memory/round-evaluation'
   } as EndpointMap,
 };
 

@@ -22,7 +22,7 @@ export interface CloudFunctionOptions {
    * 云函数的 HTTP 触发路径，默认值为 '/learn-vocab'。
    * 若项目中存在其他云函数（如 '/memory-engine'），请在调用时显式传入。
    */
-  endpoint?: string;
+  endpoint?: string | EndpointMap;
 }
 
 class ApiClient {

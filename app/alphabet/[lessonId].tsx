@@ -13,12 +13,20 @@ export default function AlphabetLessonFlow() {
   const {
     phase,
     initialized,
+    currentRound,
+    roundEvaluation,
     currentItem,
     currentQuestionType,
     letterPool,
     onAnswer,
     next,
     skipYesterdayReview,
+    phonicsRule,
+    showPhonicsRuleCard,
+    onCompletePhonicsRule,
+    miniReviewQuestion,
+    onMiniReviewAnswer,
+    onMiniReviewNext,
   } = useAlphabetLearningEngine(lessonId);
 
   const handleBack = () => {
@@ -29,6 +37,8 @@ export default function AlphabetLessonFlow() {
     <AlphabetLearningEngineView
       phase={phase}
       initialized={initialized}
+      currentRound={currentRound}
+      roundEvaluation={roundEvaluation}
       currentItem={currentItem}
       currentQuestionType={currentQuestionType}
       letterPool={letterPool}
@@ -36,6 +46,12 @@ export default function AlphabetLessonFlow() {
       onNext={next}
       onSkipYesterdayReview={skipYesterdayReview}
       onBack={handleBack}
+      phonicsRule={phonicsRule}
+      showPhonicsRuleCard={showPhonicsRuleCard}
+      onCompletePhonicsRule={onCompletePhonicsRule}
+      miniReviewQuestion={miniReviewQuestion}
+      onMiniReviewAnswer={onMiniReviewAnswer}
+      onMiniReviewNext={onMiniReviewNext}
     />
   );
 }
