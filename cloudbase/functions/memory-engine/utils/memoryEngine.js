@@ -359,6 +359,32 @@ async function initUserProgress(db, userId) {
 async function checkModuleAccess(db, userId, moduleType) {
     const forceUnlock = process.env.FORCE_UNLOCK === 'true';
 
+    // 特殊处理：开发阶段的本地测试用户
+    // 前端在未登录情况下会使用 userId = 'test-user' 进入字母模块，
+    // 此时 CloudBase 中并不存在对应的 user / user_progress 记录，
+    // 如果直接访问数据库会触发各种约束错误（例如唯一索引）。
+    //
+    // 这里直接放行该用户，并返回一个最小化的进度对象，仅用于本地调试。
+    if (userId === 'test-user') {
+        console.warn('ℹ️ checkModuleAccess: 使用开发测试用户 test-user, 直接放行模块:', moduleType);
+        const progress = {
+            userId,
+            letterCompleted: false,
+            letterProgress: 0,
+            wordUnlocked: false,
+            wordProgress: 0,
+            sentenceUnlocked: false,
+            sentenceProgress: 0,
+            articleUnlocked: false,
+            articleProgress: 0,
+            currentStage: moduleType,
+        };
+        return {
+            allowed: true,
+            progress,
+        };
+    }
+
     // 1. 获取用户进度记录
     const progressResult = await db.collection('user_progress')
         .where({ userId })
@@ -366,7 +392,10 @@ async function checkModuleAccess(db, userId, moduleType) {
         .get();
 
     if (!progressResult.data || progressResult.data.length === 0) {
-        // 没有进度记录时，如果开启 FORCE_UNLOCK，仍然放行并返回一个默认进度对象
+        // 没有进度记录：
+        // - 如果开启 FORCE_UNLOCK，仍然放行并返回一个默认进度对象；
+        // - 如果是字母模块，则自动初始化 user_progress 后放行；
+        // - 其他模块保持原有行为（拒绝访问）。
         if (forceUnlock) {
             console.warn('⚠️ FORCE_UNLOCK 已开启, 但未找到 user_progress 记录, 使用默认进度:', moduleType);
             const progress = {
@@ -387,6 +416,17 @@ async function checkModuleAccess(db, userId, moduleType) {
             };
         }
 
+        // 字母模块：自动初始化进度记录，避免第一次进入字母模块就被拒绝
+        if (moduleType === 'letter') {
+            console.warn('ℹ️ 未找到 user_progress 记录, 为字母模块自动初始化进度:', userId);
+            const progress = await initUserProgress(db, userId);
+            return {
+                allowed: true,
+                progress,
+            };
+        }
+
+        // 非字母模块：仍然要求先有进度记录
         return {
             allowed: false,
             errorCode: 'USER_PROGRESS_NOT_FOUND',

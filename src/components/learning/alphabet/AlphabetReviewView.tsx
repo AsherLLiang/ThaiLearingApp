@@ -1,43 +1,32 @@
 // src/components/learning/alphabet/AlphabetReviewView.tsx
 
-import React, {
-  memo,
-  useCallback,
-  useState,
-  useEffect,
-  useRef,
-} from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { ArrowLeft } from 'lucide-react-native';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  ActivityIndicator,
+} from 'react-native';
 import { Audio } from 'expo-av';
 
 import type { AlphabetLearningState } from '@/src/stores/alphabetStore';
 import type { Letter } from '@/src/entities/types/letter.types';
-import type { QuestionType } from '@/src/hooks/useAlphabetLearningEngine';
+import { QuestionType } from '@/src/entities/enums/QuestionType.enum'; // ✅ 统一导入
+import { generateAlphabetQuestion } from '@/src/utils/lettersQuestionGenerator';
+import { Colors } from '@/src/constants/colors';
+import { Typography } from '@/src/constants/typography';
 
-import {
-  generateAlphabetQuestion,
-  type AlphabetQuestion,
-} from '@/src/utils/lettersQuestionGenerator';
-  
-  interface AlphabetReviewViewProps {
-    alphabet: AlphabetLearningState;
-    /**
-     * 可选：全部字母池，用于生成干扰项
-     * 如果不传，组件会自动降级为简单题目（选项较少）
-     */
-    letterPool?: Letter[];
-    /**
-     * 可选：由引擎传入的优先题型（带权重）
-     * 如果不传，则退化为 questionGenerator 内部的随机题型
-     */
-    preferredType?: QuestionType;
-    onAnswer: (isCorrect: boolean, type: QuestionType) => void;
-    onNext: () => void;
-    onBack?: () => void;
-  }
-  
-export const AlphabetReviewView = memo(function AlphabetReviewView({
+interface AlphabetReviewViewProps {
+  alphabet: AlphabetLearningState;
+  letterPool?: Letter[];
+  preferredType?: QuestionType;
+  onAnswer: (isCorrect: boolean, questionType: QuestionType) => void;
+  onNext: () => void;
+  onBack?: () => void;
+}
+
+export function AlphabetReviewView({
   alphabet,
   letterPool,
   preferredType,
@@ -46,13 +35,21 @@ export const AlphabetReviewView = memo(function AlphabetReviewView({
   onBack,
 }: AlphabetReviewViewProps) {
   const [answered, setAnswered] = useState(false);
-  const [selected, setSelected] = useState<string | null>(null);
-
-  // 当前题目（AlphabetQuestion）
-  const [question, setQuestion] = useState<AlphabetQuestion | null>(null);
-
+  const [selectedOption, setSelectedOption] = useState<string | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
   const soundRef = useRef<Audio.Sound | null>(null);
 
+  // ✅ 生成题目
+  const question = generateAlphabetQuestion(
+    alphabet.letter,
+    letterPool || [],
+    preferredType
+  );
+
+  // ✅ 修复: 获取音频URL
+  const audioUrl = question.audioUrl || alphabet.audioUrl;
+
+  // ✅ 清理音频
   useEffect(() => {
     return () => {
       if (soundRef.current) {
@@ -62,130 +59,125 @@ export const AlphabetReviewView = memo(function AlphabetReviewView({
     };
   }, []);
 
-  // 每当 alphabet 变化时，重新生成一题
-  useEffect(() => {
-    const letter = alphabet.letter;
-
-    if (!letter) {
-      // 降级策略：只用当前字母做一个简单的 letter-to-sound 题
-      const simpleQuestion: AlphabetQuestion = {
-        type: 'letter-to-sound',
-        stem: alphabet.thaiChar,
-        options: [alphabet.pronunciation],
-        correct: alphabet.pronunciation,
-      };
-      setQuestion(simpleQuestion);
-      setAnswered(false);
-      setSelected(null);
-      return;
-    }
-
-    const pool = letterPool || [];
-    const q = generateAlphabetQuestion(letter, pool, preferredType);
-    setQuestion(q);
-    setAnswered(false);
-    setSelected(null);
-  }, [
-    alphabet.alphabetId,
-    alphabet.letter,
-    alphabet.thaiChar,
-    alphabet.pronunciation,
-    letterPool,
-    preferredType,
-  ]);
-  
-  const handlePlay = useCallback(async () => {
-    if (!alphabet.audioUrl) return;
+  // ✅ 播放音频
+  const handlePlayAudio = useCallback(async () => {
+    if (!audioUrl) return;
 
     try {
+      setIsPlaying(true);
+
       if (soundRef.current) {
         await soundRef.current.replayAsync();
+        setIsPlaying(false);
         return;
       }
+
       const { sound } = await Audio.Sound.createAsync(
-        { uri: alphabet.audioUrl },
-        { shouldPlay: true },
+        { uri: audioUrl },
+        { shouldPlay: true }
       );
+
       soundRef.current = sound;
-    } catch (e) {
-      console.warn('播放字母音频失败:', e);
+
+      sound.setOnPlaybackStatusUpdate((status) => {
+        if (status.isLoaded && status.didJustFinish) {
+          setIsPlaying(false);
+        }
+      });
+    } catch (error) {
+      console.warn('[AlphabetReview] 播放失败:', error);
+      setIsPlaying(false);
     }
-  }, [alphabet.audioUrl]);
+  }, [audioUrl]);
 
-  const handleSelect = useCallback(
+  // ✅ 选择答案
+  const handleSelectOption = useCallback(
     (option: string) => {
-      if (!question || answered) return;
+      if (answered) return;
 
-      setSelected(option);
+      setSelectedOption(option);
       setAnswered(true);
 
       const isCorrect = option === question.correct;
-
-      // 通知引擎：这一题是否正确，属于哪一种题型
       onAnswer(isCorrect, question.type);
     },
-    [answered, onAnswer, question],
+    [answered, question.correct, question.type, onAnswer]
   );
 
-  const handleNext = useCallback(() => {
-    setSelected(null);
-    setAnswered(false);
-    onNext();
-  }, [onNext]);
+  // ✅ 渲染题目标题
+  const renderQuestionTitle = (type: QuestionType) => {
+    const titles: Record<QuestionType, string> = {
+      [QuestionType.SOUND_TO_LETTER]: '🔊 听音选字母',
+      [QuestionType.LETTER_TO_SOUND]: '👁️ 看字母选发音',
+      [QuestionType.SYLLABLE]: '🔤 拼读组合',
+      [QuestionType.REVERSE_SYLLABLE]: '🔄 音素分离',
+      [QuestionType.MISSING_LETTER]: '❓ 缺字填空',
+      [QuestionType.ASPIRATED_CONTRAST]: '💨 送气音对比',
+      [QuestionType.VOWEL_LENGTH_CONTRAST]: '⏱️ 元音长短对比',
+      [QuestionType.FINAL_CONSONANT]: '🔚 尾音规则',
+      [QuestionType.TONE_PERCEPTION]: '🎵 声调听辨',
+      [QuestionType.CLASS_CHOICE]: '📊 辅音分类',
+      [QuestionType.LETTER_NAME]: '📝 字母名称',
+    };
 
-  if (!question) {
-    return (
-      <View style={styles.container}>
-        <Text style={styles.title}>加载题目中...</Text>
-      </View>
-    );
-  }
+    return titles[type] || '❓ 题目';
+  };
+
+  // ✅ 判断是否需要音频
+  const needsAudio = [
+    QuestionType.SOUND_TO_LETTER,
+    QuestionType.LETTER_TO_SOUND,
+    QuestionType.SYLLABLE,
+  ].includes(question.type);
 
   return (
     <View style={styles.container}>
-      {/* 返回按钮 */}
-      {onBack && (
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={onBack}
-        >
-          <ArrowLeft size={24} color="#333" />
-        </TouchableOpacity>
-      )}
-
       {/* 题型标题 */}
-      <Text style={styles.title}>
-        {renderQuestionTitle(question.type)}
-      </Text>
+      <Text style={styles.typeLabel}>{renderQuestionTitle(question.type)}</Text>
 
-      {/* 题干 + 听音按钮（仅 sound-to-letter 时显示） */}
-      <Text style={styles.stem}>{question.stem}</Text>
-      {question.type === 'sound-to-letter' && !!alphabet.audioUrl && (
-        <TouchableOpacity style={styles.audioButton} onPress={handlePlay}>
-          <Text style={styles.audioText}>🔊 播放发音</Text>
+      {/* 题干 */}
+      <Text style={styles.question}>{question.stem}</Text>
+
+      {/* 音频按钮 */}
+      {needsAudio && audioUrl && (
+        <TouchableOpacity
+          style={styles.audioButton}
+          onPress={handlePlayAudio}
+          disabled={isPlaying}
+        >
+          {isPlaying ? (
+            <ActivityIndicator size="small" color={Colors.white} />
+          ) : (
+            <Text style={styles.audioButtonText}>🔊 播放发音</Text>
+          )}
         </TouchableOpacity>
       )}
 
       {/* 选项 */}
       <View style={styles.optionsContainer}>
-        {question.options.map((op) => {
-          const isSelected = selected === op;
-          const isCorrect = answered && op === question.correct;
-          const isWrong = answered && op === selected && op !== question.correct;
+        {question.options.map((option, index) => {
+          const isSelected = selectedOption === option;
+          const isCorrect = answered && option === question.correct;
+          const isWrong = answered && isSelected && option !== question.correct;
 
           return (
             <TouchableOpacity
-              key={op}
+              key={index}
               style={[
                 styles.optionButton,
                 isSelected && styles.optionSelected,
                 isCorrect && styles.optionCorrect,
                 isWrong && styles.optionWrong,
               ]}
-              onPress={() => handleSelect(op)}
+              onPress={() => handleSelectOption(option)}
               disabled={answered}
             >
-              <Text style={styles.optionText}>{op}</Text>
+              <Text style={styles.optionText}>{option}</Text>
+              {answered && (
+                <Text style={styles.feedbackIcon}>
+                  {isCorrect ? '✓' : isWrong ? '✗' : ''}
+                </Text>
+              )}
             </TouchableOpacity>
           );
         })}
@@ -193,112 +185,89 @@ export const AlphabetReviewView = memo(function AlphabetReviewView({
 
       {/* 下一题按钮 */}
       {answered && (
-        <TouchableOpacity style={styles.nextButton} onPress={handleNext}>
-          <Text style={styles.nextText}>下一题</Text>
+        <TouchableOpacity style={styles.nextButton} onPress={onNext}>
+          <Text style={styles.nextButtonText}>下一题 →</Text>
         </TouchableOpacity>
       )}
     </View>
   );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    padding: 24,
+    backgroundColor: Colors.paper,
+  },
+  typeLabel: {
+    fontFamily: Typography.notoSerifBold,
+    fontSize: 16,
+    color: Colors.taupe,
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  question: {
+    fontFamily: Typography.playfairBold,
+    fontSize: 24,
+    color: Colors.ink,
+    marginBottom: 24,
+    textAlign: 'center',
+  },
+  audioButton: {
+    backgroundColor: Colors.thaiGold,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 24,
+    alignItems: 'center',
+  },
+  audioButtonText: {
+    fontFamily: Typography.notoSerifBold,
+    fontSize: 16,
+    color: Colors.white,
+  },
+  optionsContainer: {
+    gap: 12,
+    marginBottom: 20,
+  },
+  optionButton: {
+    backgroundColor: Colors.white,
+    borderWidth: 2,
+    borderColor: Colors.sand,
+    borderRadius: 12,
+    padding: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  optionSelected: {
+    borderColor: Colors.thaiGold,
+    backgroundColor: '#FFF9E6',
+  },
+  optionCorrect: {
+    borderColor: '#2A9D8F',
+    backgroundColor: '#E8F5F3',
+  },
+  optionWrong: {
+    borderColor: '#E63946',
+    backgroundColor: '#FFE8EA',
+  },
+  optionText: {
+    fontFamily: Typography.notoSerifBold,
+    fontSize: 18,
+    color: Colors.ink,
+  },
+  feedbackIcon: {
+    fontSize: 24,
+  },
+  nextButton: {
+    backgroundColor: Colors.thaiGold,
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+  },
+  nextButtonText: {
+    fontFamily: Typography.notoSerifBold,
+    fontSize: 16,
+    color: Colors.white,
+  },
 });
-  
-  // --------- UI 文案辅助 ---------
-  
-  function renderQuestionTitle(type: QuestionType): string {
-    switch (type) {
-      case 'sound-to-letter':
-        return '听音选字母';
-      case 'letter-to-sound':
-        return '看字母选发音';
-      case 'syllable':
-        return '拼读题';
-      case 'reverse-syllable':
-        return '反向拼读题';
-      case 'missing-letter':
-        return '缺字填空';
-      case 'final-consonant':
-        return '尾辅音规则';
-      case 'tone-choice':
-        return '声调选择';
-      case 'class-choice':
-        return '辅音分类';
-      case 'letter-name':
-        return '字母名称识别';
-      default:
-        return '复习题';
-    }
-  }
-  
-  // --------- 样式 ---------
-  
-  const styles = StyleSheet.create({
-    container: {
-      flex: 1,
-      padding: 24,
-      justifyContent: 'flex-start',
-      alignItems: 'center',
-    },
-    backButton: {
-      position: 'absolute',
-      top: 24,
-      left: 24,
-      zIndex: 10,
-      padding: 8,
-    },
-    title: {
-      fontSize: 24,
-      marginBottom: 12,
-    },
-    stem: {
-      fontSize: 22,
-      marginBottom: 20,
-      textAlign: 'center',
-    },
-    optionsContainer: {
-      width: '100%',
-      marginTop: 12,
-    },
-    audioButton: {
-      marginTop: 8,
-      marginBottom: 4,
-      paddingVertical: 8,
-      paddingHorizontal: 18,
-      borderRadius: 999,
-      backgroundColor: '#333',
-    },
-    audioText: {
-      color: '#fff',
-      fontSize: 14,
-    },
-    optionButton: {
-      paddingVertical: 14,
-      paddingHorizontal: 20,
-      backgroundColor: '#eee',
-      borderRadius: 8,
-      marginBottom: 12,
-    },
-    optionSelected: {
-      borderWidth: 1,
-      borderColor: '#4A90E2',
-    },
-    optionCorrect: {
-      backgroundColor: '#4CAF50',
-    },
-    optionWrong: {
-      backgroundColor: '#E53935',
-    },
-    optionText: {
-      fontSize: 20,
-    },
-    nextButton: {
-      marginTop: 24,
-      paddingVertical: 14,
-      paddingHorizontal: 28,
-      backgroundColor: '#333',
-      borderRadius: 8,
-    },
-    nextText: {
-      color: '#fff',
-      fontSize: 20,
-    },
-  });
-  

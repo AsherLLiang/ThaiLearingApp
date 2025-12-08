@@ -10,11 +10,22 @@ const LETTER_AUDIO_BASE =
   'https://636c-cloud1-1gjcyrdd7ab927c6-1387301748.tcb.qcloud.la/alphabet/';
 
 /**
+ * 将可能是「完整 URL」或「相对路径 / key」的音频字段规范化为完整 URL。
+ */
+function normalizeAudioSource(path?: string | null): string {
+  if (!path) return '';
+  if (path.startsWith('http://') || path.startsWith('https://')) {
+    return path;
+  }
+  return resolveAudioPath(path);
+}
+
+/**
  * 音频优先级策略
  * 
  * @param letter - 字母对象
  * @param type - 音频需求类型
- * @returns 音频URL
+ * @returns 音频URL（始终为完整 HTTP URL 或空字符串）
  */
 export function getLetterAudioUrl(
   letter: Letter,
@@ -22,40 +33,41 @@ export function getLetterAudioUrl(
 ): string {
   switch (type) {
     case 'letter':
-      // 优先级: fullSoundUrl > letterPronunciationUrl > audioPath
+      // 默认使用完整读音:
+      // fullSoundUrl > letterPronunciationUrl > audioPath
       return (
-        letter.fullSoundUrl ||
-        letter.letterPronunciationUrl ||
+        normalizeAudioSource(letter.fullSoundUrl) ||
+        normalizeAudioSource(letter.letterPronunciationUrl) ||
         resolveAudioPath(letter.audioPath)
       );
-      
+
     case 'syllable':
       // 音节发音
       return (
-        letter.syllableSoundUrl ||
-        letter.fullSoundUrl ||
+        normalizeAudioSource(letter.syllableSoundUrl) ||
+        normalizeAudioSource(letter.fullSoundUrl) ||
         resolveAudioPath(letter.audioPath)
       );
-      
+
     case 'minimal-pair':
       // 最小对立组(使用letter类型,由调用方处理对比)
       return (
-        letter.fullSoundUrl ||
-        letter.letterPronunciationUrl ||
+        normalizeAudioSource(letter.fullSoundUrl) ||
+        normalizeAudioSource(letter.letterPronunciationUrl) ||
         resolveAudioPath(letter.audioPath)
       );
-      
+
     case 'tone-set':
       // 声调变体(需TTS生成,返回基础音频)
       return (
-        letter.syllableSoundUrl ||
-        letter.fullSoundUrl ||
+        normalizeAudioSource(letter.syllableSoundUrl) ||
+        normalizeAudioSource(letter.fullSoundUrl) ||
         resolveAudioPath(letter.audioPath)
       );
-      
+
     default:
       return (
-        letter.fullSoundUrl ||
+        normalizeAudioSource(letter.fullSoundUrl) ||
         resolveAudioPath(letter.audioPath)
       );
   }
@@ -74,9 +86,15 @@ function resolveAudioPath(path?: string | null): string {
   if (path.startsWith('http://') || path.startsWith('https://')) {
     return path;
   }
-  
+
+  // 对类似 "word-kai" / "sound-k" 这类 key 自动补全 .mp3 后缀
+  let finalPath = path;
+  if (!/\.mp3($|\?)/.test(finalPath)) {
+    finalPath = `${finalPath}.mp3`;
+  }
+
   // 拼接Base URL
-  return `${LETTER_AUDIO_BASE}${path}`;
+  return `${LETTER_AUDIO_BASE}${finalPath}`;
 }
 
 /**
@@ -117,6 +135,35 @@ export function getToneVariantAudioUrls(
   
   // 🔮 未来实现(需后端TTS服务):
   // return await ttsService.generateToneVariants(letter, vowel);
+}
+
+/**
+ * 获取某个字母相关的所有音频 URL（去重后）。
+ *
+ * 设计目的：
+ * - 用于课程初始化时，一次性预缓存该字母所有可能会用到的音频；
+ * - 包含：
+ *   - letterPronunciationUrl（字母标准读音）
+ *   - fullSoundUrl（完整读音）
+ *   - syllableSoundUrl（音节发音）
+ *   - endSyllableSoundUrl（尾音节发音）
+ *   - audioPath（旧版路径）
+ */
+export function getAllLetterAudioUrls(letter: Letter): string[] {
+  const rawSources: Array<string | null | undefined> = [
+    // 以实际存在的音频为主：fullSoundUrl 与各类 *SoundUrl
+    letter.fullSoundUrl,
+    letter.syllableSoundUrl,
+    letter.endSyllableSoundUrl,
+    letter.audioPath,
+  ];
+
+  const urls = rawSources
+    .map((src) => normalizeAudioSource(src ?? undefined))
+    .filter((u): u is string => !!u);
+
+  // 去重
+  return Array.from(new Set(urls));
 }
 
 /**

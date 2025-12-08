@@ -317,6 +317,18 @@ export const MEMORY_ENDPOINTS = {
   } as EndpointMap,
 };
 
+// ==================== 下载云存储 API ====================
+export const STORAGE_ENDPOINTS = {
+  GET_DOWNLOAD_URL: {
+    cloudbase: '/storage-download',
+    java: '/api/storage/get-download-url', // 预留
+  } as EndpointMap,
+  BATCH_GET_DOWNLOAD_URLS: {
+    cloudbase: '/storage-download',
+    java: '/api/storage/batch-get-download-urls',
+  } as EndpointMap,
+};
+
 // ==================== 汇总所有端点 ====================
 export const API_ENDPOINTS = {
   AUTH: AUTH_ENDPOINTS,
@@ -329,4 +341,5 @@ export const API_ENDPOINTS = {
   VOCABULARY: VOCABULARY_ENDPOINTS,
   MODULE: MODULE_ENDPOINTS,
   MEMORY: MEMORY_ENDPOINTS,
+  STORAGE: STORAGE_ENDPOINTS,
 };

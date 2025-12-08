@@ -63,7 +63,7 @@ export const useVocabularyStore = create<VocabularyStore>()(
     persist(
         (set, get) => ({
             // ===== 初始状态 =====
-            phase: LearningPhase.REVIEW,
+            phase: LearningPhase.IDLE,
             reviewQueue: [],
             currentVocabulary: null,
             currentCourseSource: null, // Initial state
@@ -107,7 +107,7 @@ export const useVocabularyStore = create<VocabularyStore>()(
                         );
 
                         set({
-                            phase: LearningPhase.REVIEW,
+                            phase: LearningPhase.IDLE,
                             reviewQueue,
                             currentVocabulary: reviewQueue[0] || null,
                         });
@@ -126,7 +126,7 @@ export const useVocabularyStore = create<VocabularyStore>()(
                     console.error('❌ initSession error:', error);
                     // 降级处理：显示错误状态
                     set({
-                        phase: LearningPhase.REVIEW,
+                        phase: LearningPhase.IDLE,
                         reviewQueue: [],
                         currentVocabulary: null,
                     });
@@ -154,7 +154,7 @@ export const useVocabularyStore = create<VocabularyStore>()(
                         progress: cachedProgress || defaultProgress,
                         reviewQueue: [],
                         currentVocabulary: null,
-                        phase: LearningPhase.REVIEW // Or START?
+                        phase: LearningPhase.IDLE // Or START?
                     });
 
                     // 2. Reset remote progress (if applicable)

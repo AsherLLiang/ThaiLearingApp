@@ -69,20 +69,39 @@ export interface Letter {
     // 发音系统 (多层级音频)
     fullSound?: string;             // 完整发音标识 (如: "consonant-ko-kai")
     fullSoundUrl?: string;          // ⭐ 完整发音URL (优先使用)
+    fullSoundFileId?: string;       // CloudBase 完整发音 fileId (cloud://...)
+    fullSoundLocalPath?: string;    // 本地缓存路径（file://）
+
     syllableSoundName?: string;     // 音节发音名称 (如: "k")
     syllableSound?: string;         // 音节发音标识
     syllableSoundUrl?: string;      // 音节发音URL (用于音节练习)
+    syllableSoundFileId?: string;   // CloudBase 音节发音 fileId
+    syllableSoundLocalPath?: string;// 本地缓存路径
+
     endSyllableSoundName?: string;  // 尾音节名称
     endSyllableSound?: string;      // 尾音节发音标识
     endSyllableSoundUrl?: string;   // 尾音节发音URL (用于辅音尾音练习)
+    endSyllableSoundFileId?: string;// CloudBase 尾音节发音 fileId
+    endSyllableSoundLocalPath?: string;// 本地缓存路径
+
     letterNamePronunciation?: string; // ⭐ 字母名称发音 (如: "kay`")
     letterPronunciationUrl?: string;  // 字母发音URL
+    letterPronunciationFileId?: string; // CloudBase 字母发音 fileId
+    letterPronunciationLocalPath?: string; // 本地缓存路径
     
     // 多媒体资源
     letterImageUrl?: string;        // 字母图片URL (预留)
     
     // 描述信息
     description?: string;           // 额外描述信息 (可选)
+
+    // 课程编排（来自 letters_final.enriched.json）
+    usageTag?: string;                     // 使用标签: core / rare / supplement 等
+    lessonGroup?: string;                  // 课程组别: core / supplement 等
+    curriculumLessonIds?: string[];        // 所属课程 ID 列表，例如 ['lesson1', 'lesson3']
+    curriculumLessonOrders?: number[];     // 各课程内排序序号
+    primaryCurriculumLessonId?: string;    // 主课程 ID，例如 'lesson1'
+    primaryCurriculumLessonOrder?: number; // 主课程中的排序
 }
 
 /**
