@@ -101,26 +101,48 @@ export const LESSON_METADATA: Record<string, LessonMetadata> = {
    */
   lesson6: {
     lessonId: 'lesson6',
-    title: '第六课:完整覆盖',
-    description: '补充所有剩余字母,掌握特殊规则(ฤ ฦ ฃ ฅ等)',
+    title: '第六课:完整覆盖(常用进阶)',
+    description: '补充常用进阶辅音与复合元音,掌握特殊规则(如 ห นำ 等)',
     consonants: [
-      // 低辅音清音(梵文借词)
+      // 低辅音清音(梵文借词) + 常用进阶辅音
       'ฑ', 'ฒ', 'ณ', 'ภ', 'ธ', 'ฌ', 'ญ', 'ฬ', 'ฎ', 'ฏ', 'ฐ',
-      // 已弃用
-      'ฃ', 'ฅ',
     ],
     vowels: [
-      // 短元音组
-      'เอะ', 'แอะ', 'โอะ', 'เอียะ', 'เอือะ', 'อัวะ',
-      // 复合元音尾
-      'อาย', 'อุย', 'เอย', 'โอย', 'ออย', 'เอาะ',
+      // 复合元音尾（仍较常见）
+      'อาย', 'อุย', 'เอย', 'โอย', 'ออย',
     ],
     tones: [],
     phonicsRuleId: 'rule_6_special_cases',
-    totalCount: 26,
-    minPassRate: 0.80,
+    totalCount: 19,
+    minPassRate: 0.90,
     miniReviewInterval: 4,
     order: 6,
+  },
+
+  /**
+   * Lesson 7: 罕用/古体字母与复杂元音
+   * 仅作为补充课程,不参与其他模块解锁
+   */
+  lesson7: {
+    lessonId: 'lesson7',
+    title: '第七课:罕用字母与特殊元音',
+    description: '集中学习现代泰语中较少使用的辅音与复杂元音,用于阅读古文与特殊专有名词',
+    consonants: [
+      // 已弃用或极少使用的辅音
+      'ฃ', 'ฅ',
+    ],
+    vowels: [
+      // 梵文/巴利借词中的特殊元音
+      'ฤ', 'ฤๅ', 'ฦ', 'ฦๅ',
+      // 复杂或较少教学的短元音形式
+      'แอะ', 'โอะ', 'เอะ', 'เอาะ',
+    ],
+    tones: [],
+    phonicsRuleId: 'rule_6_special_cases',
+    totalCount: 10,
+    minPassRate: 0.80,
+    miniReviewInterval: 4,
+    order: 7,
   },
 };
 

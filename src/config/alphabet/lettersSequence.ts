@@ -1,4 +1,4 @@
-// optimalLetterSequence.ts
+// LetterSequence.ts
 // 混合式最优泰语字母学习序列（辅音 + 元音 + 声调）
 // ✅ 覆盖：44 个辅音 + 32 个元音 + 4 个声调（共 80 个）
 // ✅ 已对照 letters_final.json，确认无遗漏、无多余、无重复

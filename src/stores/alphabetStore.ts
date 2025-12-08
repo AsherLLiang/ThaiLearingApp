@@ -75,6 +75,11 @@ export interface AlphabetLearningState {
 
 // ==================== 后端返回结构 ====================
 
+import type {
+  LessonMetadata,
+  PhonicsRule,
+} from '@/src/entities/types/phonicsRule.types';
+
 interface TodayLettersResponse {
   items: Array<Letter & { memoryState?: MemoryStatus }>;
   summary: {
@@ -84,6 +89,8 @@ interface TodayLettersResponse {
     entityType: string;
   };
   unlockInfo?: Record<string, any>;
+  lessonMetadata?: LessonMetadata | null;
+  phonicsRule?: PhonicsRule | null;
 }
 
 // ==================== Store 状态定义 ====================
@@ -104,13 +111,31 @@ interface AlphabetStoreState {
   // 已缓存的音频 URL（用于避免重复预下载）
   cachedAudioKeys: string[];
 
+  // 当前课程元数据 / 拼读规则（由后端返回）
+  lessonMetadata: LessonMetadata | null;
+  phonicsRule: PhonicsRule | null;
+
   // Actions
-  initializeSession: (userId: string, limit?: number) => Promise<void>;
+  initializeSession: (
+    userId: string,
+    options?: {
+      limit?: number;
+      lessonId?: string;
+    }
+  ) => Promise<void>;
   /**
    * 前端组件只告诉我这题「对/错」
    * 这里自动映射为 QualityButton 并调用 submitMemoryResult
    */
   submitResult: (userId: string, isCorrect: boolean) => Promise<void>;
+  submitRoundEvaluation: (params: {
+    userId: string;
+    lessonId: string;
+    roundNumber: number;
+    totalQuestions: number;
+    correctCount: number;
+    accuracy: number;
+  }) => Promise<void>;
 
   next: () => void;
   previous: () => void;
@@ -201,10 +226,18 @@ export const useAlphabetStore = create<AlphabetStoreState>()(
       isLoading: false,
       error: null,
       cachedAudioKeys: [],
+      lessonMetadata: null,
+      phonicsRule: null,
 
       // 获取今日字母学习/复习队列
-      initializeSession: async (userId: string, limit: number = 5) => {
+      initializeSession: async (
+        userId: string,
+        options?: { limit?: number; lessonId?: string }
+      ) => {
         set({ isLoading: true, error: null });
+
+        const limit = options?.limit ?? 30;
+        const lessonId = options?.lessonId;
 
         try {
           const response = await callCloudFunction<TodayLettersResponse>(
@@ -214,6 +247,7 @@ export const useAlphabetStore = create<AlphabetStoreState>()(
               entityType: 'letter',
               limit,
               includeNew: true,
+              lessonId,
             },
             {
               endpoint: API_ENDPOINTS.MEMORY.GET_TODAY_MEMORIES.cloudbase,
@@ -224,7 +258,7 @@ export const useAlphabetStore = create<AlphabetStoreState>()(
             throw new Error(response.error ?? '获取今日字母失败');
           }
 
-          const { items } = response.data;
+          const { items, lessonMetadata, phonicsRule } = response.data;
 
           if (!items || items.length === 0) {
             set({
@@ -233,11 +267,13 @@ export const useAlphabetStore = create<AlphabetStoreState>()(
               currentItem: null,
               currentIndex: 0,
               completedCount: 0,
-              totalCount: 0,
-              isLoading: false,
-            });
-            return;
-          }
+            totalCount: 0,
+            isLoading: false,
+            lessonMetadata: lessonMetadata ?? null,
+            phonicsRule: phonicsRule ?? null,
+          });
+          return;
+        }
 
           const queue = items.map((item) =>
             mapLetterToState(item, item.memoryState)
@@ -251,6 +287,8 @@ export const useAlphabetStore = create<AlphabetStoreState>()(
             completedCount: 0,
             totalCount: queue.length,
             isLoading: false,
+            lessonMetadata: lessonMetadata ?? null,
+            phonicsRule: phonicsRule ?? null,
           });
 
           // 预下载今日所有字母音频（只对本地未缓存的 URL 执行一次）
@@ -348,6 +386,37 @@ export const useAlphabetStore = create<AlphabetStoreState>()(
           set({
             error: e?.message ?? '提交失败',
           });
+        }
+      },
+
+      // 提交字母模块三轮评估结果（仅记录统计信息，不影响记忆算法）
+      submitRoundEvaluation: async ({
+        userId,
+        lessonId,
+        roundNumber,
+        totalQuestions,
+        correctCount,
+        accuracy,
+      }) => {
+        try {
+          await callCloudFunction(
+            'submitRoundEvaluation',
+            {
+              userId,
+              entityType: 'letter',
+              lessonId,
+              roundNumber,
+              totalQuestions,
+              correctCount,
+              accuracy,
+            },
+            {
+              endpoint: API_ENDPOINTS.MEMORY.SUBMIT_ROUND_EVALUATION.cloudbase,
+            },
+          );
+        } catch (e: any) {
+          console.error('❌ submitRoundEvaluation error:', e);
+          // 不影响前端流程，出错时只记录日志
         }
       },
 

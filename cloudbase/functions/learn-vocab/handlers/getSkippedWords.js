@@ -72,9 +72,8 @@ async function getSkippedWords(db, params) {
     // 5. 获取对应的词汇详情
     const vocabIds = skippedProgress.map(p => p.vocabularyId);
 
-    // 注意：这里假设 vocabularies 表的主键是 _id 或者 vocabularyId
-    // 如果你的词汇表主键是 _id，请使用 db.command.in(vocabIds) 查询 _id
-    const vocabResult = await db.collection('vocabularies')
+    // 注意：这里使用实际存在的 vocabulary 集合（主键为 _id）
+    const vocabResult = await db.collection('vocabulary')
       .where({
         // 假设 vocabularyId 字段存储的是词汇的 _id
         _id: db.command.in(vocabIds)

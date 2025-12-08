@@ -13,8 +13,10 @@ const db = cloud.database();
 // ===== Handlers =====
 const getTodayMemories = require('./handlers/getTodayMemories');
 const submitMemoryResult = require('./handlers/submitMemoryResult');
+const submitRoundEvaluation = require('./handlers/submitRoundEvaluation');
 const checkModuleAccessHandler = require('./handlers/checkModuleAccess');
 const getUserProgress = require('./handlers/getUserProgress');
+const getAlphabetLessons = require('./handlers/getAlphabetLessons');
 
 // ===== Utils =====
 const { createResponse } = require('./utils/response');
@@ -70,6 +72,13 @@ exports.main = async (event, context) => {
         }
 
         /**
+         * 提交三轮评估结果（字母模块）
+         */
+        if (action === 'submitRoundEvaluation') {
+            return await submitRoundEvaluation(db, data);
+        }
+
+        /**
          * 检查模块访问权限
          */
         if (action === 'checkModuleAccess') {
@@ -83,12 +92,21 @@ exports.main = async (event, context) => {
             return await getUserProgress(db, data);
         }
 
+        /**
+         * 获取字母课程列表（用于前端课程总览）
+         */
+        if (action === 'getAlphabetLessons') {
+            return await getAlphabetLessons(db, data);
+        }
+
         // ===== 未知Action =====
         const supportedActions = [
             'getTodayMemories',
             'submitMemoryResult',
+            'submitRoundEvaluation',
             'checkModuleAccess',
-            'getUserProgress'
+            'getUserProgress',
+            'getAlphabetLessons',
         ];
 
         return createResponse(

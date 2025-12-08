@@ -95,8 +95,10 @@ const SUPPORTED_ACTIONS = Object.freeze([
   'passLetterTest',
   'getTodayMemories',
   'submitMemoryResult',
+  'submitRoundEvaluation',
   'checkModuleAccess',
-  'getUserProgress'
+  'getUserProgress',
+  'getAlphabetLessons',
 ]);
 
 module.exports = {
