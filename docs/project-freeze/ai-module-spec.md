@@ -122,7 +122,7 @@ interface PronunciationFeedback {
 ### 2.3 Action: generateWeaknessVocabulary（弱项词汇强化）
 
 **用途：**  
-基于用户在 `memory_status` / `learningStatus` 中的错误统计，为词汇模块生成**额外练习建议**（例句、记忆提示等），但不直接修改记忆队列。
+基于用户在 `memory_status` / `user_vocabulary_progress` 中的错误统计，**结合前端传入的本地错题本（如有）**，为词汇模块生成额外练习建议（例句、记忆提示等），但不直接修改记忆队列。
 
 请求体：
 
@@ -130,6 +130,10 @@ interface PronunciationFeedback {
 interface GenerateWeaknessVocabularyRequest {
   userId: string;
   topN?: number;                     // 默认 5
+
+  // 可选：前端本地错题本（当日会话内的错词）
+  focusVocabularyIds?: string[];     // 来自 VocabularySessionState.wrongWordIds
+  source?: string;                   // 课程来源，用于限定教材范围
 }
 
 interface WeakVocabularySuggestion {
@@ -154,8 +158,9 @@ type GenerateWeaknessVocabularyResponse = WeakVocabularySuggestion[];
 
 前端呈现方式（建议）：
 
-- 在词汇模块完成页或“AI 推荐”页展示“你的薄弱词汇 TOP5”；  
-- 用户可点击某个词直接进入 NewWordView / 复习题模式。
+- 在词汇模块完成页或“AI 推荐”页展示“你的薄弱词汇 TopN”；  
+- 用户可点击某个词直接进入 NewWordView / 复习题模式；  
+- 若传入了 `focusVocabularyIds`，UI 可标记“来自本次错题”的词汇。
 
 ### 2.4 Action: generateMicroReading（微阅读材料）
 
@@ -168,8 +173,12 @@ type GenerateWeaknessVocabularyResponse = WeakVocabularySuggestion[];
 interface GenerateMicroReadingRequest {
   userId: string;
   focusType: 'letter' | 'word' | 'mixed';
-  focusIds?: string[];          // letterId / vocabularyId
+  focusIds?: string[];          // letterId / vocabularyId（可与错题列表一致）
   length?: 'short' | 'medium';  // 1 句或 2 句，默认 short
+
+  // 可选：本地错题信息，便于 LLM 精准针对弱项生成内容
+  wrongLetters?: string[];      // 今日错误字母 ID
+  wrongVocabularyIds?: string[];// 今日错误单词 ID
 }
 
 interface MicroReading {

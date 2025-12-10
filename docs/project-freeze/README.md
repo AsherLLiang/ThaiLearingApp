@@ -8,6 +8,9 @@
 - `PROJECT_OVERVIEW_SPEC.md`  
   - 项目总纲：模块划分、阶段任务、里程碑、代码快照与数据库文档约定。
 
+- `frontend-shell-module-spec.md`  
+  - 前端壳层与导航模块：Tab 导航、首页展示、用户中心与基础设置。
+
 - `alphabet-module-spec.md`  
   - 字母模块（Alphabet Module）完整规格：路由、Hook、Store、memory-engine、数据结构与流程。
 

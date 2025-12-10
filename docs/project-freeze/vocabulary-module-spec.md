@@ -183,6 +183,10 @@ export interface VocabularySessionState {
 
   perWordStats: Record<string, VocabularyPerWordStats>;
 
+   // 简单本地错题本（供会话内复习与 AI 使用）
+   wrongWordIds: string[];        // 当日曾经答错过的单词 ID（按首次出错顺序去重）
+   wrongRecords: VocabularyQuestionRecord[]; // 详细错题记录，可选传给 AI
+
   // 是否已提交到后端
   submitted: boolean;
 }
@@ -242,6 +246,45 @@ function computeMasteryFromStats(stats: VocabularyPerWordStats): MasteryLevel {
   return '陌生';
 }
 ```
+
+### 4.4 本地错题本与 AI 协同（MVP）
+
+> 目标：在不增加额外数据库集合的前提下，为 AI 模块提供“今日错词列表”，用于生成额外练习或微阅读内容。
+
+- 在 `VocabularySessionState` 中，使用 `wrongWordIds` 和 `wrongRecords` 保存**当日会话内的错题**：
+  - 每当 `answerQuestion` 收到 `isCorrect === false` 时：
+
+    ```ts
+    if (!state.wrongWordIds.includes(vocabularyId)) {
+      state.wrongWordIds.push(vocabularyId);
+    }
+    state.wrongRecords.push({ vocabularyId, questionType, isCorrect: false, usedHint });
+    ```
+
+  - 这些数据仅保存在前端 Store / AsyncStorage 中，用于：
+    - 会话内部的“错题再练”环节；  
+    - 在用户主动点击“AI 强化练习”时，作为参数传给 `ai-engine`。
+
+- 与 AI 模块的协同调用示例：
+
+  ```ts
+  const { wrongWordIds, courseSource } = useVocabularyStore.getState().session;
+
+  await callCloudFunction('ai-engine', {
+    action: 'generateWeaknessVocabulary',
+    data: {
+      userId,
+      topN: 5,
+      // 可选：将本地错题列表传入，AI 优先使用这些 ID 生成内容
+      focusVocabularyIds: wrongWordIds,
+      source: courseSource,
+    },
+  });
+  ```
+
+- 设计约束：
+  - 不在后端新增“错题本集合”，长期弱项由 `memory_status` / `user_vocabulary_progress` 管理；  
+  - 本地错题本只负责**当日临时错误**，用于 AI 生成更多例句 / 微阅读或额外选择题素材。
 
 ---
 
