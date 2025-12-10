@@ -2,11 +2,13 @@
 
 /**
  * 字母类型定义
- * 
- * 数据源: letters_final.json (包含80个泰语字母)
+ *
+ * 数据源: letters_final.enriched.json (80 个泰语字母/元音/声调)
  * 更新日期: 2025-12-06
- * 
- * 说明: 此接口包含数据库letters集合的所有字段
+ *
+ * 说明: 此接口尽量贴近数据库 letters 集合的实际结构。
+ * - 部分历史字段 (audioPath/learningLevel/strokeCount/createdAt/lessonNumber)
+ *   在最新版本中已从数据源中移除,因此在类型中保留为可选,仅用于兼容旧数据。
  */
 
 // ==================== 基础类型 ====================
@@ -49,17 +51,20 @@ export interface Letter {
     initialSound: string;           // 首音 (如: "k")
     finalSound: string;             // 尾音 (如: "k")
     class: ConsonantClass | null;   // 辅音类别 (仅辅音有效,元音/声调为null)
-    audioPath: string;              // 旧版音频路径 (可能为空,建议使用fullSoundUrl)
     exampleWord: string;            // 例词 (如: "ไก่")
     exampleMeaning: string;         // 例词含义 (如: "鸡")
-    strokeCount: number;            // 笔画数 (预留字段,暂未使用)
-    learningLevel: LearningLevel;   // 学习级别
-    createdAt: string;              // 创建日期 (ISO格式)
+
+    // 以下为历史字段,目前数据源中已移除,保留为可选以兼容旧数据
+    audioPath?: string;             // 旧版音频路径 (可能为空,建议使用fullSoundUrl)
+    strokeCount?: number;           // 笔画数 (预留字段,暂未使用)
+    learningLevel?: LearningLevel;  // 学习级别
+    createdAt?: string;             // 创建日期 (ISO格式)
     
     // ===== 新增字段 (来自letters.json合并) =====
     
     // 课程与分类
-    lessonNumber: number;           // 课程编号 (1-7)
+    lessonId?: string;              // 主课程 ID (如: "lesson1")
+    lessonNumber?: number;          // 旧课程编号 (1-7), 已废弃
     category: LetterCategory;       // 主类别 (如: "mid_consonant", "high_consonant")
     subCategory: string;            // 子类别 (如: "lesson1_mid", "lesson4_high")
     
@@ -114,7 +119,7 @@ export interface LetterListItem {
     nameEnglish: string;
     type: LetterType;
     class: ConsonantClass | null;
-    lessonNumber: number;
+    lessonId?: string;
     category: LetterCategory;
     isMastered?: boolean;           // 前端添加: 是否已掌握
 }
@@ -158,7 +163,7 @@ export interface LetterStatistics {
  */
 export interface LetterFilter {
     type?: LetterType;
-    lessonNumber?: number;
+    lessonId?: string;
     class?: ConsonantClass;
     category?: LetterCategory;
     subCategory?: string;

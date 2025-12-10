@@ -282,6 +282,7 @@ async function getTodayMemories(db, params) {
       // 优先使用前端传入的 lessonId，其次尝试从实体字段推导
       const firstEntity = data[0];
       const lessonIdFromParam = params.lessonId;
+      const lessonIdFromField = firstEntity.lessonId || null;
       const lessonIdFromCurriculum =
         (firstEntity.curriculumLessonIds &&
           firstEntity.curriculumLessonIds[0]) ||
@@ -293,7 +294,10 @@ async function getTodayMemories(db, params) {
           : null;
 
       const resolvedLessonId =
-        lessonIdFromParam || lessonIdFromCurriculum || lessonIdFromLegacy;
+        lessonIdFromParam ||
+        lessonIdFromCurriculum ||
+        lessonIdFromField ||
+        lessonIdFromLegacy;
 
       if (resolvedLessonId) {
         lessonMetadata = await getLessonMetadataFromDb(db, resolvedLessonId);
