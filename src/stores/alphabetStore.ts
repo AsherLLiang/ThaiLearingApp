@@ -16,7 +16,9 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as FileSystem from 'expo-file-system';
+// 使用 expo-file-system 的 legacy API，避免 v54 新 File API
+// 抛出的 getInfoAsync 等方法废弃错误。
+import * as FileSystem from 'expo-file-system/legacy';
 
 import { callCloudFunction } from '@/src/utils/apiClient';
 import { API_ENDPOINTS } from '@/src/config/api.endpoints';
@@ -289,7 +291,13 @@ export const useAlphabetStore = create<AlphabetStoreState>()(
           // 预下载本课所有字母音频到本地文件系统（首次进入该课时）
           (async () => {
             try {
-              const cacheDir = `${FileSystem.documentDirectory}alphabet-audio/`;
+              const cacheDir = `${
+                // expo-file-system 在类型定义里没有暴露 cacheDirectory，
+                // 这里通过 any 访问以避免 TS 报错。
+                (FileSystem as any).cacheDirectory ??
+                (FileSystem as any).documentDirectory ??
+                ''
+              }alphabet-audio/`;
               const dirInfo = await FileSystem.getInfoAsync(cacheDir);
               if (!dirInfo.exists) {
                 await FileSystem.makeDirectoryAsync(cacheDir, {

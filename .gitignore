@@ -42,3 +42,7 @@ yarn-error.*
 
 # environment variables
 .env
+
+# Local reference data (do not commit)
+assets/courses/
+assets/data/

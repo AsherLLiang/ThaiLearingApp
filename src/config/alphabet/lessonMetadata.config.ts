@@ -17,9 +17,9 @@ export const LESSON_METADATA: Record<string, LessonMetadata> = {
   lesson1: {
     lessonId: 'lesson1',
     title: '第一课:基础拼读能力',
-    description: '掌握最基础的中辅音和常见元音,建立CV拼读概念',
+    description: '掌握最基础的中辅音和常见长元音,建立CV拼读概念',
     consonants: ['ก', 'ด', 'ต', 'น', 'ม'],
-    vowels: ['า', 'ะ', 'ิ'],
+    vowels: ['า', 'ี', 'ู'],
     tones: [],
     phonicsRuleId: 'rule_1_cv_structure',
     totalCount: 8,
@@ -53,7 +53,7 @@ export const LESSON_METADATA: Record<string, LessonMetadata> = {
     title: '第三课:声调入门',
     description: '掌握送气/不送气对比,引入基础声调系统',
     consonants: ['ข', 'ถ', 'ผ', 'ส', 'ห'],
-    vowels: ['ะ', 'ุ', 'ู'],
+    vowels: ['ะ', 'ุ', 'ึ'],
     tones: ['่', '้'],
     phonicsRuleId: 'rule_3_tone_basics',
     totalCount: 10,
@@ -87,7 +87,7 @@ export const LESSON_METADATA: Record<string, LessonMetadata> = {
     title: '第五课:复合元音系统',
     description: '掌握三合元音(เอีย เอือ อัว)等复杂元音组合',
     consonants: ['ซ', 'ฉ', 'ฝ', 'ฟ', 'ศ', 'ษ', 'ฮ', 'อ'],
-    vowels: ['เอีย', 'เอือ', 'อัว', 'เออ', 'ื', 'ึ'],
+    vowels: ['เอีย', 'เอือ', 'อัว', 'เออ', 'ื', 'อ'],
     tones: [],
     phonicsRuleId: 'rule_5_compound_vowels',
     totalCount: 14,
@@ -98,6 +98,10 @@ export const LESSON_METADATA: Record<string, LessonMetadata> = {
 
   /**
    * Lesson 6: 完整覆盖+特殊规则(14辅音+12元音)
+   * 说明:
+   * - 此课元音组用于训练「短元音变形」与 Dead Syllable 规则；
+   * - 其中 'อัว' 在这里代表实际拼写模式「ัวะ」(短 ua)，
+   *   由于 letters 数据集中不存在独立字形「ัวะ」，故用 'อัว' 作为代表符号。
    */
   lesson6: {
     lessonId: 'lesson6',
@@ -108,12 +112,12 @@ export const LESSON_METADATA: Record<string, LessonMetadata> = {
       'ฑ', 'ฒ', 'ณ', 'ภ', 'ธ', 'ฌ', 'ญ', 'ฬ', 'ฎ', 'ฏ', 'ฐ',
     ],
     vowels: [
-      // 复合元音尾（仍较常见）
-      'อาย', 'อุย', 'เอย', 'โอย', 'ออย',
+      // 核心变形短元音组
+      'โอะ', 'เอะ', 'แอะ', 'เอาะ', 'อัว',
     ],
     tones: [],
     phonicsRuleId: 'rule_6_special_cases',
-    totalCount: 19,
+    totalCount: 16,
     minPassRate: 0.90,
     miniReviewInterval: 4,
     order: 6,
@@ -134,12 +138,10 @@ export const LESSON_METADATA: Record<string, LessonMetadata> = {
     vowels: [
       // 梵文/巴利借词中的特殊元音
       'ฤ', 'ฤๅ', 'ฦ', 'ฦๅ',
-      // 复杂或较少教学的短元音形式
-      'แอะ', 'โอะ', 'เอะ', 'เอาะ',
     ],
     tones: [],
     phonicsRuleId: 'rule_6_special_cases',
-    totalCount: 10,
+    totalCount: 6,
     minPassRate: 0.80,
     miniReviewInterval: 4,
     order: 7,

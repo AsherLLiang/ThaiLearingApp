@@ -20,9 +20,12 @@ const getStoredLanguage = async (): Promise<string | null> => {
 
 // 【核心函数2】获取设备语言(如果用户没选过)
 const getDeviceLanguage = (): string => {
-  const locale = Localization.locale;  // 例如: "zh-CN" 或 "en-US"
-  const languageCode = locale.split('-')[0];  // 取前缀: "zh" 或 "en"
-  return languageCode === 'zh' ? 'zh' : 'en';  // 默认英文
+  const locales = Localization.getLocales();  // 获取区域设置数组
+  if (!locales || locales.length === 0) {
+    return 'zh'; // 默认中文
+  }
+  const languageCode = locales[0].languageCode;  // 例如: "zh" 或 "en"
+  return languageCode === 'zh' ? 'zh' : 'en';  // 默认中文
 };
 
 // 【核心函数3】初始化 i18n

@@ -1,6 +1,6 @@
 // src/components/learning/alphabet/AlphabetLearningView.tsx
 
-import React, { memo, useCallback, useRef, useEffect } from 'react';
+import  { memo, useCallback, useRef, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { ArrowLeft } from 'lucide-react-native';
 import { Audio } from 'expo-av';
