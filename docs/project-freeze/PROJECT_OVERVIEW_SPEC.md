@@ -31,11 +31,413 @@
 
 | 模块 | 说明 | 对应 Spec |
 |------|------|-----------|
+| Frontend Shell & Navigation | 首页、Tab 导航、用户中心、基础设置 | `frontend-shell-module-spec.md` |
 | Alphabet Module | 字母课程学习与三轮训练 | `alphabet-module-spec.md` |
 | Vocabulary Module | 单词精讲与 SRS 复习 | `vocabulary-module-spec.md` |
 | Courses + LearningStore | 课程入口、全局学习仪表盘 | `courses-and-learningstore-spec.md` |
 | Backend Memory Engine | 统一记忆引擎 + 模块解锁 | `backend-memory-engine-spec.md` |
 | AI Module (Lite) | 发音反馈、弱项强化、微阅读（设计级） | `ai-module-spec.md` |
+
+> 顶层组件和调用关系以第 2.1 节下方的 Mermaid 类图为唯一架构蓝图，后续迭代不得随意增删图中的组件，只能在其内部演化实现。
+
+### 2.1 顶层组件/类图（冻结版，全项目唯一架构）
+
+```mermaid
+classDiagram
+
+%% ===================================================================
+%% 1. Frontend Shell & Navigation
+%% ===================================================================
+class TabsLayout {
+  +tabs
+}
+
+class HomeScreen {
+  +render()
+  +handleBubbleClick()
+  +getCurrentCourse()
+}
+class CoursesScreen {
+  +render()
+  +handleStartAlphabet()
+  +handleStartWordCourse()
+}
+class ProfileScreen {
+  +render()
+  +updateDailyLimit()
+  +handleLogout()
+}
+class LanguageSwitcher {
+  +render()
+  +setLanguage()
+}
+class FloatingBubbles {
+  +render()
+  +onOpenReview()
+}
+class ThaiPatternBackground {
+  +render()
+}
+
+TabsLayout <|-- HomeScreen
+TabsLayout <|-- CoursesScreen
+TabsLayout <|-- ProfileScreen
+
+HomeScreen --> UserStore
+HomeScreen --> ModuleAccessStore
+HomeScreen --> LearningStore
+HomeScreen --> FloatingBubbles
+HomeScreen --> ThaiPatternBackground
+
+CoursesScreen --> VocabularyStore
+CoursesScreen --> ModuleAccessStore
+
+ProfileScreen --> UserStore
+ProfileScreen --> LearningStore
+ProfileScreen --> ModuleAccessStore
+ProfileScreen --> LanguageSwitcher
+ProfileScreen --> LearningPreferenceStore
+
+%% ===================================================================
+%% 2. Stores & Global State
+%% ===================================================================
+class UserStore {
+  +currentUser
+  +login()
+  +logout()
+}
+class ModuleAccessStore {
+  +userProgress
+  +fetchUserProgress()
+}
+class LearningStore {
+  +currentCourseId
+  +currentAlphabetProgramId
+  +streakDays
+  +totalStudyMinutes
+  +lastStudyAt
+  +setCurrentCourse()
+  +setCurrentAlphabetProgram()
+  +registerStudySession()
+}
+class LearningPreferenceStore {
+  +dailyLimitsWord
+  +dailyLimitsLetter
+  +setDailyLimit()
+}
+
+UserStore --> Users
+ModuleAccessStore --> ApiClient
+LearningStore --> ApiClient
+
+%% ===================================================================
+%% 3. Alphabet Module
+%% ===================================================================
+class AlphabetLessonListScreen {
+  +render()
+  +fetchLessons()
+  +handleStartLesson()
+}
+class AlphabetLessonScreen {
+  +render()
+  +lessonId
+}
+class AlphabetLearningEngineView {
+  +render()
+}
+class AlphabetLearningView {
+  +renderLetter()
+}
+class AlphabetReviewView {
+  +renderQuestion()
+}
+class GameContainer {
+  +queue
+  +currentIndex
+  +wrongPool
+  +next()
+}
+class StepRenderer {
+  +render()
+}
+
+class AlphabetQuestionEngine {
+  +generateQueueItems()
+}
+class LettersQuestionGenerator {
+  +generate()
+}
+
+class AlphabetSessionState {
+  +userId
+  +lessonId
+  +currentRound
+  +phase
+  +queue
+  +cursorIndex
+  +todayNewLetters
+  +todayReviewedLetters
+  +wrongLetterIds
+  +perLetterStats
+  +roundFinished
+  +updatedAt
+}
+
+class AlphabetStore {
+  +state
+  +initializeSession()
+  +loadSession()
+  +saveSession()
+  +clearSession()
+  +submitRoundResults()
+}
+
+class UseAlphabetLearningEngine {
+  +phase
+  +currentRound
+  +handleAnswer()
+  +handleNext()
+  +submitRoundResults()
+}
+
+AlphabetLessonListScreen --> AlphabetStore
+AlphabetLessonListScreen --> AlphabetLessonScreen
+AlphabetLessonScreen --> UseAlphabetLearningEngine
+UseAlphabetLearningEngine --> AlphabetStore
+UseAlphabetLearningEngine --> AlphabetLearningEngineView
+AlphabetLearningEngineView --> GameContainer
+GameContainer --> StepRenderer
+StepRenderer --> AlphabetLearningView
+StepRenderer --> AlphabetReviewView
+
+UseAlphabetLearningEngine --> AlphabetQuestionEngine
+AlphabetQuestionEngine --> LettersQuestionGenerator
+
+AlphabetStore --> AlphabetSessionState
+AlphabetStore --> ApiClient
+AlphabetStore --> AsyncStorage
+
+%% ===================================================================
+%% 4. Vocabulary Module
+%% ===================================================================
+class WordLearningScreen {
+  +render()
+}
+class NewWordView {
+  +renderRichCard()
+}
+class ReviewWordView {
+  +renderQuestion()
+}
+class VocabularyQuestionView {
+  +renderMCQ()
+  +renderSpelling()
+}
+
+class VocabularyQuestionEngine {
+  +pickQuestionTypes()
+  +buildQuestion()
+}
+
+class VocabularyQuestionRecord {
+  +vocabularyId
+  +questionType
+  +isCorrect
+  +usedHint
+}
+
+class VocabularyPerWordStats {
+  +attempts
+  +wrongCount
+  +usedHint
+  +questionTypes
+}
+
+class VocabularySessionState {
+  +userId
+  +courseSource
+  +dateKey
+  +reviewQueue
+  +newQueue
+  +currentIndex
+  +mode
+  +perWordStats
+  +wrongWordIds
+  +wrongRecords
+  +submitted
+}
+
+class VocabularyStore {
+  +state
+  +initializeSession()
+  +answerQuestion()
+  +skipReviewAndLearnNew()
+  +finishSession()
+  +resetCourseProgress()
+}
+
+WordLearningScreen --> VocabularyStore
+WordLearningScreen --> NewWordView
+WordLearningScreen --> VocabularyQuestionView
+VocabularyQuestionView --> ReviewWordView
+VocabularyQuestionView --> VocabularyQuestionEngine
+VocabularyStore --> VocabularyQuestionEngine
+
+VocabularyStore --> VocabularySessionState
+VocabularySessionState --> VocabularyPerWordStats
+VocabularySessionState --> VocabularyQuestionRecord
+
+VocabularyStore --> ApiClient
+VocabularyStore --> AsyncStorage
+
+%% ===================================================================
+%% 5. AI Module
+%% ===================================================================
+class AiPronunciationScreen {
+  +render()
+  +startRecording()
+  +submitRecording()
+}
+class AiWeaknessPracticeScreen {
+  +render()
+  +loadWeakVocab()
+}
+class AiMicroReadingScreen {
+  +render()
+  +generateReading()
+  +submitReadingRecording()
+}
+
+class AiEngineCF {
+  +analyzePronunciation()
+  +generateWeaknessVocabulary()
+  +generateMicroReading()
+}
+
+AiPronunciationScreen --> ApiClient
+AiWeaknessPracticeScreen --> ApiClient
+AiMicroReadingScreen --> ApiClient
+
+AiWeaknessPracticeScreen --> VocabularyStore
+AiMicroReadingScreen --> VocabularyStore
+AiPronunciationScreen --> AlphabetStore
+AiPronunciationScreen --> VocabularyStore
+
+%% ===================================================================
+%% 6. Courses & Access
+%% ===================================================================
+CoursesScreen --> LearningPreferenceStore
+CoursesScreen --> LearningStore
+HomeScreen --> LearningStore
+HomeScreen --> ModuleAccessStore
+ProfileScreen --> LearningPreferenceStore
+ProfileScreen --> LearningStore
+ProfileScreen --> ModuleAccessStore
+
+ModuleAccessStore --> MemoryEngineCF
+LearningStore --> MemoryEngineCF
+
+%% ===================================================================
+%% 7. Backend Cloud Functions
+%% ===================================================================
+class ApiClient {
+  +callCloudFunction()
+}
+
+class MemoryEngineCF {
+  +getTodayMemories()
+  +submitMemoryResult()
+  +submitRoundEvaluation()
+  +checkModuleAccess()
+  +getUserProgress()
+  +getAlphabetLessons()
+  +registerStudySession()
+}
+
+class LearnVocabCF {
+  +getTodayWords()
+  +updateMastery()
+  +getVocabularyDetail()
+  +getReviewStatistics()
+  +getVocabularyList()
+  +getSkippedWords()
+}
+
+ApiClient --> MemoryEngineCF
+ApiClient --> LearnVocabCF
+ApiClient --> AiEngineCF
+
+AlphabetStore --> MemoryEngineCF
+UseAlphabetLearningEngine --> MemoryEngineCF
+VocabularyStore --> LearnVocabCF
+VocabularyStore --> MemoryEngineCF
+ModuleAccessStore --> MemoryEngineCF
+LearningStore --> MemoryEngineCF
+
+%% ===================================================================
+%% 8. Database Collections（简略）
+%% ===================================================================
+class Users {
+  +userId
+  +nickname
+  +avatarUrl
+  +createdAt
+}
+class Letters {
+  +_id
+  +thaiChar
+  +type
+  +class
+  +curriculumLessonIds
+}
+class Vocabulary {
+  +_id
+  +source
+  +lessonNumber
+  +thaiWord
+  +meaning
+}
+class MemoryStatus {
+  +userId
+  +entityType
+  +entityId
+  +masteryLevel
+  +nextReviewAt
+}
+class UserProgress {
+  +userId
+  +letterCompleted
+  +letterProgress
+  +wordUnlocked
+  +wordProgress
+  +totalStudyDays
+  +streakDays
+  +lastStudyDate
+  +totalStudyMinutes
+}
+class UserAlphabetProgress {
+  +userId
+  +letterProgress
+  +letterCompleted
+}
+class UserVocabularyProgress {
+  +userId
+  +vocabularyId
+  +mastery
+  +nextReviewDate
+}
+
+MemoryEngineCF --> Letters
+MemoryEngineCF --> Vocabulary
+MemoryEngineCF --> MemoryStatus
+MemoryEngineCF --> UserProgress
+MemoryEngineCF --> UserAlphabetProgress
+LearnVocabCF --> Vocabulary
+LearnVocabCF --> UserVocabularyProgress
+AiEngineCF --> MemoryStatus
+AiEngineCF --> Vocabulary
+AiEngineCF --> Letters
+```
 
 > 旧版项目快照文档（`docs/Document/project-snapshot-*` 等）已删除，任何新需求必须基于以上 Spec 更新。
 

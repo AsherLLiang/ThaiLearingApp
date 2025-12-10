@@ -23,14 +23,17 @@
 }
 ```
 
-**主要 Action：**
+**主要 Action（现有 + 规划中的最小集合）：**
 
 - `getTodayMemories`：统一获取“今日学习内容”（字母/单词/句子）。  
 - `submitMemoryResult`：统一提交学习结果，**支持单条和批量**。  
 - `submitRoundEvaluation`：字母模块专用三轮评估写入 `user_alphabet_progress`。  
 - `checkModuleAccess`：检查模块访问权限（字母始终放行；其他模块需完成一定字母进度）。  
 - `getUserProgress`：返回 `user_progress` 中的全局进度。  
-- `getAlphabetLessons`：返回字母课程配置。
+- `getAlphabetLessons`：返回字母课程配置。  
+- `registerStudySession`（**建议新增，支持前端记录学习时长与打卡**）：  
+  - 由前端学习模块或壳层在一次学习结束时调用；  
+  - 用于更新 `user_progress.totalStudyDays / streakDays / lastStudyDate` 以及 `LearningStore` 需要的总学习分钟数（可新增 `totalStudyMinutes` 字段）。
 
 ### 1.2 learn-vocab 云函数
 
@@ -319,7 +322,73 @@ memoryState: {
 
 ---
 
-## 5. 模块解锁逻辑（checkModuleAccess）
+## 5. 学习会话登记（registerStudySession，规划中）
+
+> 为了让前端 `LearningStore` 拥有可靠的数据来源，同时不在各模块中重复计算“打卡天数 / 总学习时长”，建议在 `memory-engine` 中新增 `registerStudySession` Action。  
+> 该 Action 的逻辑足够简单，不涉及 SRS，只更新 `user_progress` 中的统计字段。
+
+### 5.1 Action 设计
+
+请求：
+
+```ts
+// action: 'registerStudySession'
+interface RegisterStudySessionRequest {
+  userId: string;
+  module: 'letter' | 'word' | 'sentence' | 'article';
+  minutes: number;              // 本次学习时长（向下取整的分钟数）
+  finishedLessonId?: string;    // 若本次完成了某课，可选传入 lessonId
+  date?: string;                // 可选，ISO 日期；缺省则使用服务器当天
+}
+```
+
+行为：
+
+- 按 `userId` 查找 `user_progress`；若不存在则先走 `initUserProgress`；  
+- 计算当天是否首次学习：
+  - 若 `lastStudyDate` 为 null 或早于当日，则 `totalStudyDays += 1`，`streakDays` 按天数是否连续递增或重置；  
+  - 更新 `lastStudyDate = today`。  
+- 增加新的字段（建议）：
+
+```ts
+user_progress.totalStudyMinutes += minutes;
+```
+
+- 若 `finishedLessonId` 存在，可选更新对应模块进度（例如字母课完成数），具体细节由各模块在前端处理。
+
+响应：
+
+```ts
+interface RegisterStudySessionResponse {
+  userId: string;
+  totalStudyDays: number;
+  streakDays: number;
+  lastStudyDate: string;
+  totalStudyMinutes?: number;
+}
+```
+
+前端使用方式：
+
+- 各学习模块在一次“正式学习结束”时调用：
+
+```ts
+await callCloudFunction('memory-engine', {
+  action: 'registerStudySession',
+  data: {
+    userId,
+    module: 'letter',        // 或 'word' ...
+    minutes: sessionMinutes,
+    finishedLessonId,
+  },
+});
+```
+
+- `LearningStore.registerStudySession` 可在内部调用此 Action，并同步更新本地仪表盘统计。
+
+---
+
+## 6. 模块解锁逻辑（checkModuleAccess）
 
 文件：`cloudbase/functions/memory-engine/utils/memoryEngine.js` 中的 `checkModuleAccess`
 

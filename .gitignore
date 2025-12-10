@@ -46,3 +46,7 @@ yarn-error.*
 # Local reference data (do not commit)
 assets/courses/
 assets/data/
+
+# docs
+docs/Document/
+docs/OLD/
