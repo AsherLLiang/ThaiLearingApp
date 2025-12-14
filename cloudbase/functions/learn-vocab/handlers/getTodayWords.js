@@ -17,6 +17,8 @@ const {
   DAILY_LEARNING_CONFIG
 } = require('../utils/constants');
 
+const MAX_DAILY_WORDS = 200; // 降配模式硬上限，防止 3s 超时
+
 /**
  * 格式化词汇为列表项 (精简版)
  */
@@ -44,7 +46,9 @@ function formatVocabularyForList(vocab) {
  * 5. 应用分页返回
  */
 async function getTodayWords(db, params) {
+  const start = Date.now();
   const { userId, limit = 30, offset = 0, level = null } = params;
+  const safeLimit = Math.max(1, Math.min(limit, MAX_DAILY_WORDS));
 
   // 验证参数
   if (!userId) {
@@ -113,10 +117,10 @@ async function getTodayWords(db, params) {
       newWordsQuery = newWordsQuery.where({ level });
     }
 
-    const newVocabsResult = await newWordsQuery
-      .orderBy('lessonNumber', 'asc')
-      .limit(maxNewWords)
-      .get();
+  const newVocabsResult = await newWordsQuery
+    .orderBy('lessonNumber', 'asc')
+    .limit(Math.min(maxNewWords, MAX_DAILY_WORDS))
+    .get();
 
     const newVocabularies = newVocabsResult.data || [];
 
@@ -183,11 +187,11 @@ async function getTodayWords(db, params) {
     // ===== Step 8: 应用分页 =====
     const totalCount = todayList.length;
     const validOffset = Math.max(0, offset);
-    const validLimit = Math.max(1, Math.min(limit, 100));
+    const validLimit = Math.max(1, Math.min(safeLimit, 100));
 
     const paginatedList = todayList.slice(validOffset, validOffset + validLimit);
 
-    return createResponse(true, {
+    const response = createResponse(true, {
       words: paginatedList,
       pagination: {
         total: totalCount,
@@ -201,9 +205,12 @@ async function getTodayWords(db, params) {
         totalToday: totalCount,
       },
     }, '获取今日单词成功');
+    console.log('[FunctionCost] getTodayWords', Date.now() - start, 'ms');
+    return response;
 
   } catch (error) {
     console.error('getTodayWords error:', error);
+    console.log('[FunctionCost] getTodayWords', Date.now() - start, 'ms');
     return createResponse(false, null, error.message || '服务器错误', 'SERVER_ERROR');
   }
 }
