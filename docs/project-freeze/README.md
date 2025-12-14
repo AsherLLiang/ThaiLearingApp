@@ -24,7 +24,7 @@
   - 词汇模块（Vocabulary Module）规格：题型、会话状态、与 learn-vocab/memory-engine 的对接。
 
 - `ai-module-spec.md`  
-  - 轻量 AI 模块设计：发音反馈、弱项词汇强化、微阅读生成。
+  - 轻量 AI 模块设计：发音反馈、弱项词汇强化、微阅读生成、词汇解析。
 
 - `database_schema.md`  
   - 数据库结构规范（V2.1.0）：以 local_cleaner 输出与当前云函数为准。

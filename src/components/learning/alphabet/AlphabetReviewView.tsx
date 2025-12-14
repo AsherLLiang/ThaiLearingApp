@@ -7,21 +7,34 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
+  Animated,
+  Vibration,
+  Platform,
 } from 'react-native';
 import { Audio } from 'expo-av';
+import { Volume2, Check, X, AudioLines } from 'lucide-react-native';
 
 import type { AlphabetLearningState } from '@/src/stores/alphabetStore';
 import type { Letter } from '@/src/entities/types/letter.types';
-import { QuestionType } from '@/src/entities/enums/QuestionType.enum'; // ✅ 统一导入
-import { generateAlphabetQuestion } from '@/src/utils/lettersQuestionGenerator';
+import type { AlphabetQueueItem, AlphabetQuestion } from '@/src/entities/types/alphabet.types';
+
+// Use strict new types
+import { AlphabetGameType, ALPHABET_GAME_TYPE_LABELS } from '@/src/entities/enum/alphabetGameTypes';
+import { generateQuestion } from '@/src/utils/lettersQuestionGenerator';
+import { getLetterAudioUrl } from '@/src/utils/alphabet/audioHelper';
+// Legacy type for prop compatibility (mapped internally)
+import { QuestionType } from '@/src/entities/enums/QuestionType.enum';
+
 import { Colors } from '@/src/constants/colors';
 import { Typography } from '@/src/constants/typography';
+
+type AnswerState = 'idle' | 'correct' | 'wrong' | 'locked';
 
 interface AlphabetReviewViewProps {
   alphabet: AlphabetLearningState;
   letterPool?: Letter[];
-  preferredType?: QuestionType;
-  onAnswer: (isCorrect: boolean, questionType: QuestionType) => void;
+  preferredType?: QuestionType; // Legacy prop
+  onAnswer: (isCorrect: boolean, questionType: any) => void;
   onNext: () => void;
   onBack?: () => void;
 }
@@ -34,161 +47,417 @@ export function AlphabetReviewView({
   onNext,
   onBack,
 }: AlphabetReviewViewProps) {
-  const [answered, setAnswered] = useState(false);
-  const [selectedOption, setSelectedOption] = useState<string | null>(null);
+  const [answerState, setAnswerState] = useState<AnswerState>('idle');
+  // use index to track selection to avoid duplicate value issues
+  const [selectedOptionIndex, setSelectedOptionIndex] = useState<number | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+
   const soundRef = useRef<Audio.Sound | null>(null);
+  const shakeX = useRef(new Animated.Value(0)).current;
+  const wrongResetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const correctLockTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // ✅ 生成题目
-  const question = generateAlphabetQuestion(
-    alphabet.letter,
-    letterPool || [],
-    preferredType
-  );
+  const pool = letterPool || [];
 
-  // ✅ 修复: 获取音频URL
-  const audioUrl = question.audioUrl || alphabet.audioUrl;
+  // --- 1. Question Generation & Type Mapping ---
 
-  // ✅ 清理音频
-  useEffect(() => {
-    return () => {
-      if (soundRef.current) {
-        soundRef.current.unloadAsync().catch(() => {});
-        soundRef.current = null;
-      }
+  const mapLegacyType = (legacyType?: QuestionType): AlphabetGameType => {
+    switch (legacyType) {
+      case QuestionType.SOUND_TO_LETTER: return AlphabetGameType.SOUND_TO_LETTER;
+      case QuestionType.LETTER_TO_SOUND: return AlphabetGameType.LETTER_TO_SOUND;
+      case QuestionType.CLASS_CHOICE: return AlphabetGameType.CONSONANT_CLASS;
+      case QuestionType.FINAL_CONSONANT: return AlphabetGameType.FINAL_SOUND;
+      case QuestionType.SYLLABLE: return AlphabetGameType.SOUND_TO_LETTER;
+      case QuestionType.ASPIRATED_CONTRAST: return AlphabetGameType.SOUND_TO_LETTER;
+      case QuestionType.TONE_PERCEPTION: return AlphabetGameType.TONE_CALCULATION;
+      case QuestionType.INITIAL_SOUND: return AlphabetGameType.INITIAL_SOUND;
+      default: return AlphabetGameType.SOUND_TO_LETTER;
+    }
+  };
+
+  const createQuestion = (): AlphabetQuestion => {
+    const queueItem: AlphabetQueueItem = {
+      letterId: alphabet.alphabetId,
+      letter: alphabet.letter,
+      gameType: mapLegacyType(preferredType),
     };
+    return generateQuestion(queueItem, pool);
+  };
+
+  const [question, setQuestion] = useState<AlphabetQuestion>(createQuestion);
+  const questionKey = question.id;
+
+  // Debug Log
+  useEffect(() => {
+    // CONSONANT_CLASS has 3 options. Others usually 4.
+    const minOptions = question.gameType === AlphabetGameType.CONSONANT_CLASS ? 3 : 4;
+    // TONE_CALCULATION / PHONICS_MATH placeholders might also have fewer?
+    // Let's safe guard.
+    if (!question?.options || question.options.length < minOptions) {
+      console.warn('⚠️ Options count low:', question?.options?.length || 0, 'Type:', question.gameType);
+    }
+  }, [question]);
+
+  useEffect(() => {
+    setQuestion(createQuestion());
+    resetForNewQuestion();
+  }, [alphabet.alphabetId, preferredType]);
+
+
+  // --- 2. Audio Logic ---
+
+  const stopAudio = useCallback(async () => {
+    if (!soundRef.current) return;
+    try {
+      await soundRef.current.stopAsync().catch(() => { });
+      await soundRef.current.unloadAsync().catch(() => { });
+    } finally {
+      soundRef.current = null;
+    }
   }, []);
 
-  // ✅ 播放音频
-  const handlePlayAudio = useCallback(async () => {
-    if (!audioUrl) return;
+  const playAudio = useCallback(
+    async (uri?: string | null) => {
+      if (!uri) return;
 
-    try {
-      setIsPlaying(true);
+      try {
+        setIsPlaying(true);
+        await stopAudio();
+        const { sound } = await Audio.Sound.createAsync(
+          { uri },
+          { shouldPlay: true }
+        );
 
-      if (soundRef.current) {
-        await soundRef.current.replayAsync();
+        soundRef.current = sound;
+        sound.setOnPlaybackStatusUpdate((status) => {
+          if (status.isLoaded && status.didJustFinish) {
+            setIsPlaying(false);
+          }
+        });
+      } catch (error) {
+        console.warn('[AlphabetReview] Playback failed:', error);
         setIsPlaying(false);
+      }
+    },
+    [stopAudio]
+  );
+
+  useEffect(() => {
+    resetForNewQuestion();
+
+    const shouldAutoPlay = [
+      AlphabetGameType.SOUND_TO_LETTER,
+      AlphabetGameType.INITIAL_SOUND,
+      AlphabetGameType.FINAL_SOUND
+    ].includes(question.gameType);
+
+    if (shouldAutoPlay && question.audioUrl) {
+      void playAudio(question.audioUrl);
+    }
+
+    return () => {
+      if (wrongResetTimer.current) clearTimeout(wrongResetTimer.current);
+      if (correctLockTimer.current) clearTimeout(correctLockTimer.current);
+      void stopAudio();
+    };
+  }, [questionKey]);
+
+
+  // --- 3. Interaction Logic ---
+
+  const resetForNewQuestion = useCallback(() => {
+    setAnswerState('idle');
+    setSelectedOptionIndex(null);
+    shakeX.setValue(0);
+    if (wrongResetTimer.current) clearTimeout(wrongResetTimer.current);
+    if (correctLockTimer.current) clearTimeout(correctLockTimer.current);
+  }, [shakeX]);
+
+  const runShake = useCallback(() => {
+    shakeX.setValue(0);
+    Animated.sequence([
+      Animated.timing(shakeX, { toValue: -10, duration: 40, useNativeDriver: true }),
+      Animated.timing(shakeX, { toValue: 10, duration: 40, useNativeDriver: true }),
+      Animated.timing(shakeX, { toValue: -6, duration: 40, useNativeDriver: true }),
+      Animated.timing(shakeX, { toValue: 6, duration: 40, useNativeDriver: true }),
+      Animated.timing(shakeX, { toValue: 0, duration: 40, useNativeDriver: true }),
+    ]).start();
+  }, [shakeX]);
+
+  // MOVED checkAnswer UP to resolve hoisting error
+  const checkAnswer = useCallback((optionValue: string, index: number) => {
+    const isCorrect = optionValue === question.correctAnswer;
+    setSelectedOptionIndex(index);
+
+    if (isCorrect) {
+      setAnswerState('correct');
+      onAnswer(true, question.gameType);
+
+      // Play success sound unless it's LetterToSound (where we already played)
+      if (question.audioUrl && (question.gameType !== AlphabetGameType.LETTER_TO_SOUND)) {
+        void playAudio(question.audioUrl);
+      }
+
+      correctLockTimer.current = setTimeout(() => {
+        setAnswerState('locked');
+      }, 500);
+    } else {
+      setAnswerState('wrong');
+      onAnswer(false, question.gameType);
+      runShake();
+      Vibration.vibrate(50);
+
+      wrongResetTimer.current = setTimeout(() => {
+        setAnswerState('idle');
+        setSelectedOptionIndex(null);
+      }, 800);
+    }
+  }, [question, onAnswer, runShake, playAudio]);
+
+  const handleOptionSelect = useCallback(
+    (optionValue: string, index: number) => {
+      if (answerState !== 'idle') return;
+
+      const isAudioQuestion = question.gameType === AlphabetGameType.LETTER_TO_SOUND;
+
+      if (isAudioQuestion) {
+        // Play First Logic
+        const targetLetter = question?.options?.[index];
+
+        if (targetLetter) {
+          const url = targetLetter.letterPronunciationUrl || targetLetter.fullSoundUrl || targetLetter.audioPath;
+          if (url) {
+            void playAudio(url);
+          }
+        }
+
+        setSelectedOptionIndex(index);
+        // Do NOT submit yet
         return;
       }
 
-      const { sound } = await Audio.Sound.createAsync(
-        { uri: audioUrl },
-        { shouldPlay: true }
-      );
-
-      soundRef.current = sound;
-
-      sound.setOnPlaybackStatusUpdate((status) => {
-        if (status.isLoaded && status.didJustFinish) {
-          setIsPlaying(false);
-        }
-      });
-    } catch (error) {
-      console.warn('[AlphabetReview] 播放失败:', error);
-      setIsPlaying(false);
-    }
-  }, [audioUrl]);
-
-  // ✅ 选择答案
-  const handleSelectOption = useCallback(
-    (option: string) => {
-      if (answered) return;
-
-      setSelectedOption(option);
-      setAnswered(true);
-
-      const isCorrect = option === question.correct;
-      onAnswer(isCorrect, question.type);
+      // Default Immediate Feedback
+      checkAnswer(optionValue, index);
     },
-    [answered, question.correct, question.type, onAnswer]
+    [answerState, question, checkAnswer, playAudio]
   );
 
-  // ✅ 渲染题目标题
-  const renderQuestionTitle = (type: QuestionType) => {
-    const titles: Record<QuestionType, string> = {
-      [QuestionType.SOUND_TO_LETTER]: '🔊 听音选字母',
-      [QuestionType.LETTER_TO_SOUND]: '👁️ 看字母选发音',
-      [QuestionType.SYLLABLE]: '🔤 拼读组合',
-      [QuestionType.REVERSE_SYLLABLE]: '🔄 音素分离',
-      [QuestionType.MISSING_LETTER]: '❓ 缺字填空',
-      [QuestionType.ASPIRATED_CONTRAST]: '💨 送气音对比',
-      [QuestionType.VOWEL_LENGTH_CONTRAST]: '⏱️ 元音长短对比',
-      [QuestionType.FINAL_CONSONANT]: '🔚 尾音规则',
-      [QuestionType.TONE_PERCEPTION]: '🎵 声调听辨',
-      [QuestionType.CLASS_CHOICE]: '📊 辅音分类',
-      [QuestionType.LETTER_NAME]: '📝 字母名称',
-    };
+  const handleConfirmAnswer = useCallback(() => {
+    if (selectedOptionIndex !== null && question.options) {
+      // Get value from index
+      const selectedItem = question.options[selectedOptionIndex];
+      let val: string | undefined;
 
-    return titles[type] || '❓ 题目';
+      switch (question.gameType) {
+        case AlphabetGameType.LETTER_TO_SOUND:
+          val = selectedItem.initialSound || selectedItem.fullSoundUrl || selectedItem._id;
+          break;
+        case AlphabetGameType.INITIAL_SOUND:
+          val = selectedItem.initialSound;
+          break;
+        case AlphabetGameType.FINAL_SOUND:
+          val = selectedItem.finalSound || selectedItem.initialSound;
+          break;
+        default:
+          val = selectedItem.thaiChar;
+      }
+
+      if (val) checkAnswer(val, selectedOptionIndex);
+    }
+  }, [selectedOptionIndex, question, checkAnswer]);
+
+  const handleNextQuestion = useCallback(() => {
+    if (answerState !== 'locked') return;
+    resetForNewQuestion();
+    void stopAudio();
+    onNext();
+  }, [answerState, resetForNewQuestion, stopAudio, onNext]);
+
+
+  // --- 4. Render Helpers ---
+
+  const renderQuestionHeader = () => {
+    const title = ALPHABET_GAME_TYPE_LABELS[question.gameType] || 'Review';
+    let instruction = 'Select the correct answer';
+
+    switch (question.gameType) {
+      case AlphabetGameType.SOUND_TO_LETTER: instruction = 'Listen and choose the letter'; break;
+      case AlphabetGameType.LETTER_TO_SOUND: instruction = 'Match the pronunciation'; break;
+      case AlphabetGameType.CONSONANT_CLASS: instruction = 'Select the consonant class'; break;
+      case AlphabetGameType.INITIAL_SOUND: instruction = 'Identify the initial sound'; break;
+      case AlphabetGameType.FINAL_SOUND: instruction = 'Identify the final sound'; break;
+      default: break;
+    }
+
+    return (
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>{title}</Text>
+        <Text style={styles.headerInstruction}>{instruction}</Text>
+      </View>
+    );
   };
 
-  // ✅ 判断是否需要音频
-  const needsAudio = [
-    QuestionType.SOUND_TO_LETTER,
-    QuestionType.LETTER_TO_SOUND,
-    QuestionType.SYLLABLE,
-  ].includes(question.type);
+  const renderAudioButton = () => {
+    // For Letter-to-Sound, the user must read the letter. Providing central audio defeats the visual recognition task.
+    if (!question.audioUrl || question.gameType === AlphabetGameType.LETTER_TO_SOUND) return null;
+    return (
+      <TouchableOpacity
+        style={[styles.audioButton, isPlaying && styles.audioButtonActive]}
+        onPress={() => playAudio(question.audioUrl)}
+      >
+        <Volume2 size={32} color={Colors.white} />
+      </TouchableOpacity>
+    );
+  };
 
-  return (
-    <View style={styles.container}>
-      {/* 题型标题 */}
-      <Text style={styles.typeLabel}>{renderQuestionTitle(question.type)}</Text>
+  const renderStem = () => {
+    if (question.gameType === AlphabetGameType.LETTER_TO_SOUND ||
+      question.gameType === AlphabetGameType.CONSONANT_CLASS) {
+      return (
+        <View style={styles.stemContainer}>
+          <Text style={styles.stemLetter}>{question.targetLetter.thaiChar}</Text>
+        </View>
+      );
+    }
+    return null;
+  };
 
-      {/* 题干 */}
-      <Text style={styles.question}>{question.stem}</Text>
+  const renderOptions = () => {
+    const options = question.options || [];
+    const minOptions = question.gameType === AlphabetGameType.CONSONANT_CLASS ? 3 : 4;
 
-      {/* 音频按钮 */}
-      {needsAudio && audioUrl && (
-        <TouchableOpacity
-          style={styles.audioButton}
-          onPress={handlePlayAudio}
-          disabled={isPlaying}
-        >
-          {isPlaying ? (
-            <ActivityIndicator size="small" color={Colors.white} />
-          ) : (
-            <Text style={styles.audioButtonText}>🔊 播放发音</Text>
-          )}
-        </TouchableOpacity>
-      )}
+    if (!options || options.length < minOptions) {
+      return (
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>题目选项加载失败</Text>
+          <TouchableOpacity
+            style={styles.retryButton}
+            onPress={() => {
+              setQuestion(createQuestion());
+              resetForNewQuestion();
+            }}
+          >
+            <Text style={styles.retryButtonText}>重新生成题目</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
 
-      {/* 选项 */}
-      <View style={styles.optionsContainer}>
-        {question.options.map((option, index) => {
-          const isSelected = selectedOption === option;
-          const isCorrect = answered && option === question.correct;
-          const isWrong = answered && isSelected && option !== question.correct;
+    return (
+      <Animated.View
+        style={[
+          styles.optionsGrid,
+          { transform: [{ translateX: shakeX }] }
+        ]}
+      >
+        {options.map((optLetter, index) => {
+          let displayValue = '';
+          let comparisonValue = '';
+
+          switch (question.gameType) {
+            case AlphabetGameType.SOUND_TO_LETTER:
+              displayValue = optLetter.thaiChar;
+              comparisonValue = optLetter.thaiChar;
+              break;
+            case AlphabetGameType.LETTER_TO_SOUND:
+              displayValue = `/${optLetter.initialSound || '...'} /`;
+              comparisonValue = optLetter.initialSound || optLetter.fullSoundUrl || optLetter._id;
+              break;
+            case AlphabetGameType.INITIAL_SOUND:
+              displayValue = `/${optLetter.initialSound}/`;
+              comparisonValue = optLetter.initialSound;
+              break;
+            case AlphabetGameType.FINAL_SOUND:
+              displayValue = `/${optLetter.finalSound || optLetter.initialSound}/`;
+              comparisonValue = optLetter.finalSound || optLetter.initialSound;
+              break;
+            default:
+              displayValue = optLetter.thaiChar;
+              comparisonValue = optLetter.thaiChar;
+          }
+
+          const isSelected = selectedOptionIndex === index;
+          const isCorrect = (answerState === 'correct' || answerState === 'locked') && comparisonValue === question.correctAnswer;
+          const isWrong = answerState === 'wrong' && isSelected && comparisonValue !== question.correctAnswer;
+          const isDimmed = (answerState === 'correct' || answerState === 'locked') && !isCorrect;
 
           return (
             <TouchableOpacity
-              key={index}
+              key={`${index}-${comparisonValue}`}
               style={[
-                styles.optionButton,
+                styles.optionCard,
                 isSelected && styles.optionSelected,
                 isCorrect && styles.optionCorrect,
                 isWrong && styles.optionWrong,
+                isDimmed && styles.optionDimmed,
               ]}
-              onPress={() => handleSelectOption(option)}
-              disabled={answered}
+              onPress={() => {
+                if (question.gameType === AlphabetGameType.LETTER_TO_SOUND) {
+                  // Get normalized audio URL using helper
+                  const url = getLetterAudioUrl(optLetter);
+
+                  if (url) {
+                    console.log('🔊 Playing Option Sound:', url);
+                    void playAudio(url);
+                  } else {
+                    console.warn('⚠️ No audio URL found for option:', optLetter.thaiChar);
+                  }
+
+                  handleOptionSelect(comparisonValue, index);
+                } else {
+                  handleOptionSelect(comparisonValue, index);
+                }
+              }}
+              disabled={answerState !== 'idle' && answerState !== 'locked'}
             >
-              <Text style={styles.optionText}>{option}</Text>
-              {answered && (
-                <Text style={styles.feedbackIcon}>
-                  {isCorrect ? '✓' : isWrong ? '✗' : ''}
+              {question.gameType === AlphabetGameType.LETTER_TO_SOUND ? (
+                // Use AudioLines for "Voice Wave" style
+                <AudioLines size={32} color={isSelected ? Colors.thaiGold : Colors.taupe} />
+              ) : (
+                <Text style={[
+                  styles.optionText,
+                  isCorrect && styles.optionTextCorrect,
+                  isWrong && styles.optionTextWrong
+                ]}>
+                  {displayValue}
                 </Text>
               )}
+
+              <View style={styles.iconContainer}>
+                {isCorrect && <Check size={20} color="#2A9D8F" />}
+                {isWrong && <X size={20} color="#E63946" />}
+              </View>
             </TouchableOpacity>
           );
         })}
+      </Animated.View>
+    );
+  };
+
+  return (
+    <View style={styles.container}>
+      {renderQuestionHeader()}
+
+      <View style={styles.content}>
+        {renderStem()}
+        {renderAudioButton()}
+        {renderOptions()}
       </View>
 
-      {/* 下一题按钮 */}
-      {answered && (
-        <TouchableOpacity style={styles.nextButton} onPress={onNext}>
-          <Text style={styles.nextButtonText}>下一题 →</Text>
-        </TouchableOpacity>
-      )}
+      <View style={styles.bottomArea}>
+        {/* Confirm Button for Audio Questions */}
+        {(question.gameType === AlphabetGameType.LETTER_TO_SOUND) && answerState === 'idle' && selectedOptionIndex !== null && (
+          <TouchableOpacity style={styles.nextButton} onPress={handleConfirmAnswer}>
+            <Text style={styles.nextButtonText}>Check Answer</Text>
+          </TouchableOpacity>
+        )}
+
+        {answerState === 'locked' && (
+          <TouchableOpacity style={styles.nextButton} onPress={handleNextQuestion}>
+            <Text style={styles.nextButtonText}>Next Question →</Text>
+          </TouchableOpacity>
+        )}
+      </View>
     </View>
   );
 }
@@ -199,49 +468,86 @@ const styles = StyleSheet.create({
     padding: 24,
     backgroundColor: Colors.paper,
   },
-  typeLabel: {
+  header: {
+    alignItems: 'center',
+    marginBottom: 32,
+  },
+  headerTitle: {
     fontFamily: Typography.notoSerifBold,
     fontSize: 16,
-    color: Colors.taupe,
-    marginBottom: 12,
+    color: Colors.thaiGold,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: 8,
+  },
+  headerInstruction: {
+    fontFamily: Typography.notoSerifRegular,
+    fontSize: 18,
+    color: Colors.ink,
     textAlign: 'center',
   },
-  question: {
+  content: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    paddingTop: 40,
+  },
+  stemContainer: {
+    marginBottom: 32,
+  },
+  stemLetter: {
     fontFamily: Typography.playfairBold,
-    fontSize: 24,
+    fontSize: 88,
     color: Colors.ink,
-    marginBottom: 24,
-    textAlign: 'center',
   },
   audioButton: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     backgroundColor: Colors.thaiGold,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 24,
+    justifyContent: 'center',
     alignItems: 'center',
+    marginBottom: 60,
+    shadowColor: Colors.thaiGold,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+    elevation: 8,
   },
-  audioButtonText: {
-    fontFamily: Typography.notoSerifBold,
-    fontSize: 16,
-    color: Colors.white,
+  audioButtonActive: {
+    transform: [{ scale: 0.95 }],
+    opacity: 0.9,
   },
-  optionsContainer: {
-    gap: 12,
-    marginBottom: 20,
-  },
-  optionButton: {
-    backgroundColor: Colors.white,
-    borderWidth: 2,
-    borderColor: Colors.sand,
-    borderRadius: 12,
-    padding: 16,
+  optionsGrid: {
+    width: '100%',
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: 16,
+    justifyContent: 'center',
+  },
+  optionCard: {
+    width: '47%',
+    aspectRatio: 1.4,
+    backgroundColor: Colors.white,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: '#EFEFEF',
+    justifyContent: 'center',
     alignItems: 'center',
+    position: 'relative',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+      },
+      android: { elevation: 2 }
+    })
   },
   optionSelected: {
     borderColor: Colors.thaiGold,
-    backgroundColor: '#FFF9E6',
+    backgroundColor: '#FFFCF5',
   },
   optionCorrect: {
     borderColor: '#2A9D8F',
@@ -251,23 +557,80 @@ const styles = StyleSheet.create({
     borderColor: '#E63946',
     backgroundColor: '#FFE8EA',
   },
+  optionDimmed: {
+    opacity: 0.3,
+  },
   optionText: {
     fontFamily: Typography.notoSerifBold,
-    fontSize: 18,
+    fontSize: 42,
     color: Colors.ink,
+    textAlign: 'center',
+    lineHeight: 56,
+    includeFontPadding: false,
+    textAlignVertical: 'center',
   },
-  feedbackIcon: {
-    fontSize: 24,
+  optionTextCorrect: {
+    color: '#2A9D8F',
+  },
+  optionTextWrong: {
+    color: '#E63946',
+  },
+  iconContainer: {
+    position: 'absolute',
+    right: 8,
+    top: 8,
+  },
+  bottomArea: {
+    height: 80,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   nextButton: {
-    backgroundColor: Colors.thaiGold,
-    borderRadius: 12,
-    padding: 16,
+    backgroundColor: Colors.ink,
+    paddingHorizontal: 32,
+    paddingVertical: 14,
+    borderRadius: 100,
+    flexDirection: 'row',
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 4,
   },
   nextButtonText: {
     fontFamily: Typography.notoSerifBold,
     fontSize: 16,
+    color: Colors.white,
+  },
+  errorContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 32,
+  },
+  errorText: {
+    fontFamily: Typography.notoSerifBold,
+    fontSize: 18,
+    color: '#E63946',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  errorSubText: {
+    fontFamily: Typography.notoSerifRegular,
+    fontSize: 14,
+    color: Colors.taupe,
+    marginBottom: 24,
+    textAlign: 'center',
+  },
+  retryButton: {
+    backgroundColor: Colors.thaiGold,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    fontFamily: Typography.notoSerifBold,
+    fontSize: 14,
     color: Colors.white,
   },
 });

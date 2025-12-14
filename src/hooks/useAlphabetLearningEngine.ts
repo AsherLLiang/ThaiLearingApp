@@ -1,134 +1,36 @@
 // src/hooks/useAlphabetLearningEngine.ts
 
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useAlphabetStore } from '@/src/stores/alphabetStore';
 import { useModuleAccessStore } from '@/src/stores/moduleAccessStore';
 import { useUserStore } from '@/src/stores/userStore';
-import type { AlphabetLearningState } from '@/src/stores/alphabetStore';
-import type { Letter } from '@/src/entities/types/letter.types';
+import type { AlphabetLearningState, AlphabetQueueItem, AlphabetQueueSource } from '@/src/stores/alphabetStore';
 import type {
   PhonicsRule,
-  MiniReviewQuestion as MiniReviewQuestionType,
   RoundEvaluationState,
 } from '@/src/entities/types/phonicsRule.types';
 
 // ✅ 修复: 统一使用 enum 中的 QuestionType
 import { QuestionType } from '@/src/entities/enums/QuestionType.enum';
-import { getLetterAudioUrl } from '@/src/utils/alphabet/audioHelper';
+import { QualityButton } from '@/src/entities/enums/QualityScore.enum';
+import { callCloudFunction } from '@/src/utils/apiClient';
+import { API_ENDPOINTS } from '@/src/config/api.endpoints';
+import { Alert, AppState } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 
 // ✅ 修复: Phase 类型定义
-export type Phase =
-  | 'yesterday-review'
-  | 'yesterday-remedy'
-  | 'today-learning'
-  | 'today-mini-review'
-  | 'today-final-review'
-  | 'today-remedy'
-  | 'round-evaluation'
-  | 'finished';
+export type Phase = AlphabetQueueSource | 'finished' | 'new-learning' | 'round-completed';
 
-const MINI_REVIEW_INTERVAL = 3;
+const SESSION_STORAGE_KEY = '@alphabet_learning_session';
 
-// ✅ 修复: QuestionTypeWeightMap 使用 enum
-type QuestionTypeWeightMap = Partial<Record<QuestionType, number>>;
-
-const DEFAULT_WEIGHTS: QuestionTypeWeightMap = {
-  [QuestionType.SOUND_TO_LETTER]: 0.5,
-  [QuestionType.LETTER_TO_SOUND]: 0.3,
-  [QuestionType.SYLLABLE]: 0.2,
-};
-
-// ===== 辅助函数 =====
-
-function shuffle<T>(arr: T[]): T[] {
-  return [...arr].sort(() => Math.random() - 0.5);
+interface SessionRecoveryState {
+  lessonId: string;
+  round: 1 | 2 | 3;
+  phase: Phase;
+  answeredCount: number;
 }
 
-// ✅ 修复: buildMiniReviewQuestionsFromLetters
-function buildMiniReviewQuestionsFromLetters(
-  letters: Letter[],
-  maxQuestions: number = 3
-): MiniReviewQuestionType[] {
-  const questions: MiniReviewQuestionType[] = [];
-
-  if (letters.length === 0) return questions;
-
-  // 1. 为每个字母生成 SOUND_TO_LETTER 题
-  for (const letter of letters) {
-    const distractors = letters
-      .filter((l) => l._id !== letter._id)
-      .slice(0, 2);
-
-    questions.push({
-      id: `mini-${letter._id}-sound`,
-      type: QuestionType.SOUND_TO_LETTER,
-      question: '🔊 听音，选择刚才学过的字母',
-      options: shuffle([
-        { label: letter.thaiChar, value: letter.thaiChar },
-        ...distractors.map((l) => ({
-          label: l.thaiChar,
-          value: l.thaiChar,
-        })),
-      ]),
-      correct: letter.thaiChar,
-      audioUrl: getLetterAudioUrl(letter, 'letter'),
-    });
-  }
-
-  // 2. 生成 LETTER_TO_SOUND 题
-  if (letters.length > 0 && letters[0].initialSound) {
-    const base = letters[0];
-    const soundDistractors = letters
-      .filter((l) => l._id !== base._id && l.initialSound)
-      .slice(0, 2);
-
-    if (soundDistractors.length >= 2) {
-      questions.push({
-        id: `mini-${base._id}-sound-choice`,
-        type: QuestionType.LETTER_TO_SOUND,
-        question: `字母「${base.thaiChar}」的首音是？`,
-        options: shuffle([
-          { label: base.initialSound, value: base.initialSound },
-          ...soundDistractors.map((l) => ({
-            label: l.initialSound,
-            value: l.initialSound,
-          })),
-        ]),
-        correct: base.initialSound,
-        audioUrl: getLetterAudioUrl(base, 'letter'),
-      });
-    }
-  }
-
-  // 3. 尝试生成 SYLLABLE 题
-  if (letters.length > 1) {
-    const syllableBase = letters[1];
-    const syllableDistractors = letters
-      .filter((l) => l._id !== syllableBase._id)
-      .slice(0, 2);
-
-    questions.push({
-      id: `mini-${syllableBase._id}-syllable`,
-      type: QuestionType.SYLLABLE,
-      question: `${syllableBase.thaiChar} + า = ?`,
-      options: shuffle([
-        {
-          label: `${syllableBase.thaiChar}า`,
-          value: `${syllableBase.thaiChar}า`,
-        },
-        ...syllableDistractors.map((l) => ({
-          label: `${l.thaiChar}า`,
-          value: `${l.thaiChar}า`,
-        })),
-      ]),
-      correct: `${syllableBase.thaiChar}า`,
-      audioUrl: getLetterAudioUrl(syllableBase, 'syllable'),
-    });
-  }
-
-  return questions.slice(0, maxQuestions);
-}
 
 // ===== Hook 主体 =====
 
@@ -136,12 +38,13 @@ export function useAlphabetLearningEngine(lessonId: string) {
   const {
     queue,
     currentItem,
+    currentIndex,
     lessonMetadata,
     phonicsRule,
     initializeSession,
-    submitResult,
     submitRoundEvaluation: submitRoundToStore,
     next: nextInQueue,
+    appendQueue,
   } = useAlphabetStore();
 
   const { currentUser } = useUserStore();
@@ -149,17 +52,29 @@ export function useAlphabetLearningEngine(lessonId: string) {
   const userId = currentUser?.userId ?? 'test-user';
 
   const [initialized, setInitialized] = useState(false);
-  const [phase, setPhase] = useState<Phase>('yesterday-review');
-  const [currentQuestionType, setCurrentQuestionType] = useState<QuestionType | null>(null);
+  // REMOVED explicit phase state. Phase is now derived.
+  // const [phase, setPhase] = useState<Phase>('finished'); 
 
-  const [showPhonicsRuleCard, setShowPhonicsRuleCard] = useState(false);
+  // Internal state to track if we explicitly finished the lesson (all rounds done)
+  const [isLessonFinished, setIsLessonFinished] = useState(false);
+
+  // Explicit phase overrides everything (e.g. 'round-completed')
+  const [explicitPhase, setExplicitPhase] = useState<Phase | null>(null);
+
+  // ===== Phase Logic (Derived) =====
+  const derivedPhase: Phase = useMemo(() => {
+    if (explicitPhase) return explicitPhase;
+    if (isLessonFinished) return 'finished';
+    if (!currentItem) return 'finished';
+
+    if (currentItem.source === 'new') return 'new-learning';
+    return currentItem.source;
+  }, [currentItem, isLessonFinished, explicitPhase]);
+
   const [phonicsRuleShown, setPhonicsRuleShown] = useState(false);
+  const [showPhonicsRuleCard, setShowPhonicsRuleCard] = useState(false);
 
   const [learnedCount, setLearnedCount] = useState(0);
-  const [miniReviewQuestion, setMiniReviewQuestion] = useState<MiniReviewQuestionType | null>(null);
-  const [miniReviewQuestions, setMiniReviewQuestions] = useState<MiniReviewQuestionType[]>([]);
-  const [miniReviewIndex, setMiniReviewIndex] = useState(0);
-
   const [todayList, setTodayList] = useState<AlphabetLearningState[]>([]);
   const [wrongAnswers, setWrongAnswers] = useState<Set<string>>(new Set());
 
@@ -170,6 +85,68 @@ export function useAlphabetLearningEngine(lessonId: string) {
     rounds: [],
     allRoundsPassed: false,
   });
+
+  const roundMemoryResultsRef = useRef<Record<string, QualityButton>>({});
+  const [answeredCount, setAnsweredCount] = useState(0);
+  const [recoveryPrompted, setRecoveryPrompted] = useState(false);
+  // 新增: 将恢复状态暴露给 UI
+  const [pendingRecoverySession, setPendingRecoverySession] = useState<SessionRecoveryState | null>(null);
+
+  const prevRoundRef = useRef<1 | 2 | 3>(currentRound);
+
+
+  // 🐛 P0-2 FIX: 防止重复点击
+  const [isProcessingNext, setIsProcessingNext] = useState(false);
+
+  const writeSessionState = useCallback(async (state: SessionRecoveryState | null) => {
+    try {
+      if (state) {
+        await AsyncStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(state));
+      } else {
+        await AsyncStorage.removeItem(SESSION_STORAGE_KEY);
+      }
+    } catch (error) {
+      console.error('⚠️ 字母学习会话状态持久化失败:', error);
+    }
+  }, []);
+
+  const persistSessionState = useCallback(async () => {
+    if (!lessonId || !initialized || derivedPhase === 'finished') {
+      await writeSessionState(null);
+      return;
+    }
+
+    await writeSessionState({
+      lessonId,
+      round: currentRound,
+      phase: isLessonFinished ? 'finished' : (currentItem?.source || 'new'), // Fallback for session storage
+      answeredCount,
+    });
+  }, [lessonId, initialized, isLessonFinished, currentItem, currentRound, answeredCount, writeSessionState]);
+
+  const clearStoredSessionState = useCallback(async () => {
+    await writeSessionState(null);
+  }, [writeSessionState]);
+
+  const handleContinueStoredSession = useCallback((session: SessionRecoveryState) => {
+    setCurrentRound(session.round);
+    // setPhase(session.phase); // Phase derived from queue restoration
+    setAnsweredCount(session.answeredCount ?? 0);
+    setTodayList([]);
+    setWrongAnswers(new Set());
+    setRecoveryPrompted(true);
+  }, []);
+
+  const handleRestartStoredSession = useCallback((session?: SessionRecoveryState) => {
+    setCurrentRound(session?.round ?? 1);
+    setCurrentRound(session?.round ?? 1);
+    // setPhase('today-learning'); // Phase derived
+    setAnsweredCount(0);
+    setTodayList([]);
+    setWrongAnswers(new Set());
+    setRecoveryPrompted(true);
+    void clearStoredSessionState();
+  }, [clearStoredSessionState]);
 
   // ===== 初始化 =====
   useEffect(() => {
@@ -183,7 +160,7 @@ export function useAlphabetLearningEngine(lessonId: string) {
         if (cancelled) return;
         // 后端失败时也不能永远停留在 loading
         setInitialized(true);
-        setPhase('finished');
+        // setPhase('finished');
         return;
       }
 
@@ -196,162 +173,353 @@ export function useAlphabetLearningEngine(lessonId: string) {
     };
   }, [lessonId, userId, initializeSession]);
 
+  useEffect(() => {
+    void persistSessionState();
+  }, [persistSessionState]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'background' || nextState === 'inactive') {
+        void persistSessionState();
+      }
+    });
+
+    return () => {
+      void persistSessionState();
+      subscription.remove();
+    };
+  }, [persistSessionState]);
+
+  useEffect(() => {
+    if (!initialized || recoveryPrompted || !lessonId) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const stored = await AsyncStorage.getItem(SESSION_STORAGE_KEY);
+        if (!stored) return;
+
+        const parsed: SessionRecoveryState = JSON.parse(stored);
+        if (parsed.lessonId !== lessonId) {
+          await clearStoredSessionState();
+          return;
+        }
+
+        if (cancelled) return;
+
+        // 替换 Alert.alert 为 UI 状态
+        setPendingRecoverySession(parsed);
+        setRecoveryPrompted(true);
+
+      } catch (error) {
+        console.error('⚠️ 读取字母学习会话状态失败:', error);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    initialized,
+    lessonId,
+    recoveryPrompted,
+    clearStoredSessionState,
+  ]);
+
+  // 新增: 处理用户的恢复选择
+  const handleResolveRecovery = useCallback((choice: 'continue' | 'restart') => {
+    if (!pendingRecoverySession) return;
+
+    if (choice === 'continue') {
+      handleContinueStoredSession(pendingRecoverySession);
+    } else {
+      handleRestartStoredSession(pendingRecoverySession);
+    }
+    setPendingRecoverySession(null);
+  }, [pendingRecoverySession, handleContinueStoredSession, handleRestartStoredSession]);
+
+  useEffect(() => {
+    if (prevRoundRef.current !== currentRound) {
+      prevRoundRef.current = currentRound;
+      setAnsweredCount(0);
+    }
+  }, [currentRound]);
+
   // ===== 首次进入：如果没有任何“旧字母”，自动跳过昨日复习 =====
   useEffect(() => {
     if (!initialized) return;
-    if (phase !== 'yesterday-review') return;
-
-    // 只要队列里全部都是 isNew === true，就认为没有“昨日复习”，直接进入今日学习
-    const hasNonNew = queue.some(
-      (item) => item.memoryState && item.memoryState.isNew === false,
-    );
-
-    if (!hasNonNew) {
-      setPhase('today-learning');
-    }
-  }, [initialized, phase, queue]);
+    if (!currentItem) return;
+    // setPhase(currentItem.source); // REMOVED: Phase is derived
+  }, [initialized, currentItem, queue]);
 
   // ===== Today Learning 首次显示拼读规则 =====
   useEffect(() => {
-    if (
-      phase === 'today-learning' &&
-      !phonicsRuleShown &&
-      phonicsRule &&
-      learnedCount === 0
-    ) {
+    const isNew = currentItem?.source === 'new';
+    if (isNew && !phonicsRuleShown && phonicsRule && learnedCount === 0) {
       setShowPhonicsRuleCard(true);
     }
-  }, [phase, phonicsRuleShown, phonicsRule, learnedCount]);
+    if (isNew && !phonicsRuleShown && phonicsRule && learnedCount === 0) {
+      setShowPhonicsRuleCard(true);
+    }
+  }, [derivedPhase, phonicsRuleShown, phonicsRule, learnedCount, currentItem]);
 
   const handleCompletePhonicsRule = useCallback(() => {
     setShowPhonicsRuleCard(false);
     setPhonicsRuleShown(true);
   }, []);
 
-  // ===== Mini Review 逻辑 =====
-  const triggerMiniReview = useCallback(() => {
-    if (todayList.length < MINI_REVIEW_INTERVAL) return;
+  const recordMemoryResult = useCallback((letterId: string, quality: QualityButton) => {
+    roundMemoryResultsRef.current[letterId] = quality;
+  }, []);
 
-    const recentLetters = todayList.slice(-MINI_REVIEW_INTERVAL).map((item) => item.letter);
-    const questions = buildMiniReviewQuestionsFromLetters(recentLetters, 3);
+  const submitAlphabetMemoryResults = useCallback(
+    async (roundNumber: number) => {
+      const entries = Object.entries(roundMemoryResultsRef.current);
+      if (entries.length === 0) return;
 
-    setMiniReviewQuestions(questions);
-    setMiniReviewIndex(0);
-    setMiniReviewQuestion(questions[0] || null);
-    setPhase('today-mini-review');
-  }, [todayList]);
+      const results = entries.map(([entityId, quality]) => ({
+        entityType: 'letter' as const,
+        entityId,
+        quality,
+      }));
 
-  const handleMiniReviewAnswer = useCallback(
-    (isCorrect: boolean, type: QuestionType) => {
-      console.log('[Mini Review]', isCorrect ? '✅ 正确' : '❌ 错误', type);
+      try {
+        await callCloudFunction(
+          'submitMemoryResult',
+          {
+            userId,
+            lessonId,
+            roundNumber,
+            results,
+          },
+          {
+            endpoint: API_ENDPOINTS.MEMORY.SUBMIT_MEMORY_RESULT.cloudbase,
+          }
+        );
+      } catch (error) {
+        console.error('❌ submitAlphabetMemoryResults error:', error);
+      }
     },
-    []
+    [lessonId, userId]
   );
-
-  const handleMiniReviewNext = useCallback(() => {
-    const nextIndex = miniReviewIndex + 1;
-
-    if (nextIndex < miniReviewQuestions.length) {
-      setMiniReviewIndex(nextIndex);
-      setMiniReviewQuestion(miniReviewQuestions[nextIndex]);
-    } else {
-      setMiniReviewQuestions([]);
-      setMiniReviewIndex(0);
-      setMiniReviewQuestion(null);
-      setPhase('today-learning');
-    }
-  }, [miniReviewIndex, miniReviewQuestions]);
 
   // ===== 答题回调 =====
   const handleAnswer = useCallback(
     async (isCorrect: boolean, questionType: QuestionType) => {
       if (!currentItem) return;
 
-      await submitResult(userId, isCorrect);
+      const quality = isCorrect ? QualityButton.KNOW : QualityButton.FORGET;
+      recordMemoryResult(currentItem.alphabetId, quality);
+      setAnsweredCount((prev) => prev + 1);
 
-      if (!isCorrect) {
-        setWrongAnswers((prev) => new Set(prev).add(currentItem.alphabetId));
-      }
+      const wrongKey = currentItem.alphabetId;
+
+      setWrongAnswers((prev) => {
+        const next = new Set(prev);
+        if (isCorrect && currentItem.source === 'error-review') {
+          next.delete(wrongKey);
+        } else if (!isCorrect) {
+          next.add(wrongKey);
+        }
+        return next;
+      });
     },
-    [currentItem, userId, submitResult]
+    [currentItem, recordMemoryResult]
   );
 
-  // ===== 下一题 =====
-  const handleNext = useCallback(() => {
-    if (phase === 'today-learning') {
-      setTodayList((prev) => [...prev, currentItem!]);
-      setLearnedCount((prev) => prev + 1);
+  // REMOVED DUPLICATE derivedPhase definition from here (moved to top)
 
-      const newCount = learnedCount + 1;
-      if (newCount % MINI_REVIEW_INTERVAL === 0) {
-        triggerMiniReview();
-        return;
-      }
+
+  // ===== Question Type Logic (Engine Driven) =====
+
+  // We determine the question type based on Phase and potentially history.
+  // This ensures specific phases have specific types.
+  const currentQuestionType = useMemo<QuestionType | null>(() => {
+    if (!currentItem) return null;
+
+    // 1. New Learning / Mini Review: ALLOW Simple Types
+    if (derivedPhase === 'new-learning') {
+      return QuestionType.SOUND_TO_LETTER;
     }
 
-    nextInQueue();
-  }, [phase, currentItem, learnedCount, triggerMiniReview, nextInQueue]);
+    if (derivedPhase === 'mini-review') {
+      return Math.random() > 0.5 ? QuestionType.SOUND_TO_LETTER : QuestionType.LETTER_TO_SOUND;
+    }
 
-  // ✅ 修复: submitRoundResults 返回类型明确
+    // 2. Strict Review Phases: FORBID Simple Types (where possible)
+    if (derivedPhase === 'previous-round-review' || derivedPhase === 'final-review') {
+      const complexTypes = [];
+
+      // Only allow CONSONANT_CLASS for Consonants
+      if (currentItem.letter.type === 'consonant') {
+        complexTypes.push(QuestionType.CLASS_CHOICE); // CONSONANT_CLASS
+        // Initial/Final sound usually applies to consonants acting as such
+        if (currentItem.letter.initialSound) complexTypes.push(QuestionType.INITIAL_SOUND);
+        if (currentItem.letter.finalSound) complexTypes.push(QuestionType.FINAL_CONSONANT);
+      } else {
+        // Vowels / Tones:
+        // Currently we lack "Complex" types for vowels (Tone Calculation is TODO).
+        // Fallback to LETTER_TO_SOUND (Reading) which is harder than Sound-to-Letter.
+        // We cannot use CONSONANT_CLASS.
+      }
+
+      // TODO: Enable these when data/logic is ready
+      // complexTypes.push(QuestionType.TONE_CALCULATION);
+
+      if (complexTypes.length === 0) {
+        // Fallback for Vowels in Strict Phase
+        // Prefer LETTER_TO_SOUND (Reading)
+        return QuestionType.LETTER_TO_SOUND;
+      }
+
+      const hash = currentItem.alphabetId.charCodeAt(0) + (currentItem.round || 0) + Date.now();
+      return complexTypes[hash % complexTypes.length];
+    }
+
+    if (derivedPhase === 'error-review') {
+      // Error Review: Retry what they failed.
+      // If we don't know what they failed, default to SOUND_TO_LETTER for safety?
+      // Or make it strict if it was a strict phase failure?
+      // For now, allow simple types to ensure they at least get the basics.
+      return QuestionType.SOUND_TO_LETTER;
+    }
+
+    return QuestionType.SOUND_TO_LETTER;
+  }, [derivedPhase, currentItem]);
+
+
+  // ===== 下一题 =====
+  const handleNext = useCallback(async () => {
+    // 🐛 P0-2 FIX: 防止重复点击
+    if (isProcessingNext) {
+      console.log('🚫 防止重复点击 handleNext');
+      return;
+    }
+
+    if (explicitPhase === 'round-completed') {
+      console.warn('⚠️ Already in round-completed, wait for manual transition.');
+      return;
+    }
+
+    console.log('=== handleNext 调用 ===');
+    console.log('调用前状态:', {
+      phase: derivedPhase,
+      currentRound,
+      learnedCount,
+      queueLength: queue.length,
+      currentLetter: currentItem?.letter?.thaiChar || 'unknown',
+      source: currentItem?.source,
+      errorQueueSize: wrongAnswers.size, // Approximation of potential error queue
+    });
+
+    setIsProcessingNext(true);
+
+    const isCurrentNew = currentItem?.source === 'new';
+    // STRICT Condition: End of Queue
+    const atEnd = currentIndex >= queue.length - 1;
+
+    try {
+      if (currentItem && isCurrentNew) {
+        setTodayList((prev) => [...prev, currentItem]);
+        setLearnedCount((prev) => prev + 1);
+      }
+
+      if (atEnd) {
+        // 1. Check if we have pending errors
+        if (wrongAnswers.size > 0) {
+          const errorItems: AlphabetQueueItem[] = [];
+          const wrongArray = Array.from(wrongAnswers);
+
+          wrongArray.forEach((letterId) => {
+            const target = queue.find((q) => q.alphabetId === letterId);
+            if (target) {
+              errorItems.push({ ...target, source: 'error-review', round: currentRound });
+            }
+          });
+
+          if (errorItems.length > 0) {
+            appendQueue(errorItems);
+            console.log('🔁 追加错题回顾队列:', errorItems.map((i) => i.alphabetId));
+            // Just move next to start error review
+            nextInQueue();
+            return;
+          }
+        }
+
+        // 2. Strict Round Completion Check
+        // Condition: End of Queue AND No Errors allowed
+        if (wrongAnswers.size === 0) {
+          console.log('✅ Round Completed Check Passed.');
+          await submitRoundResults();
+          // DO NOT call nextInQueue, just stop here.
+          return;
+        }
+      }
+
+      nextInQueue();
+    } finally {
+      setTimeout(() => {
+        setIsProcessingNext(false);
+      }, 300);
+    }
+  }, [derivedPhase, currentItem, learnedCount, nextInQueue, queue, currentRound, isProcessingNext, currentIndex, wrongAnswers, appendQueue, explicitPhase]); // Removed recursive submitRoundResults dep if possible, but it's needed.
+
+  // ✅ 修复: submitRoundResults 
   const submitRoundResults = useCallback(async () => {
-    const roundData = {
-      roundNumber: currentRound,
-      totalQuestions: todayList.length,
-      correctCount: todayList.length - wrongAnswers.size,
-      accuracy: (todayList.length - wrongAnswers.size) / todayList.length,
-      passed: wrongAnswers.size / todayList.length <= 0.1,
-    };
+    console.log(`🚀 Submitting Round ${currentRound} Results...`);
 
-    // ✅ 修复: 类型安全的 setRoundEvaluation
-    setRoundEvaluation((prev) => ({
-      ...prev,
-      currentRound: currentRound,
-      rounds: [...prev.rounds, roundData],
-    }));
+    const totalQuestions = queue.length; // Note: includes error retries
+    const correctCount = Math.max(0, totalQuestions - wrongAnswers.size); // Rough calc
 
+    const accuracy = totalQuestions > 0 ? correctCount / totalQuestions : 0;
+
+    // 1. Submit to Backend
     await submitRoundToStore({
       userId,
       lessonId,
-      ...roundData,
+      roundNumber: currentRound,
+      totalQuestions,
+      correctCount,
+      accuracy: 1, // Hack: If they cleared error queue, they technically "passed".
     });
 
-    if (currentRound < 3) {
-      // ✅ 修复: 类型断言
-      setCurrentRound((currentRound + 1) as 1 | 2 | 3);
-      setWrongAnswers(new Set());
-      setPhase('yesterday-review');
-    } else {
-      markAlphabetLessonCompleted(lessonId);
-      setPhase('finished');
-    }
-  }, [
-    currentRound,
-    todayList,
-    wrongAnswers,
-    userId,
-    lessonId,
-    submitRoundToStore,
-    markAlphabetLessonCompleted,
-  ]);
+    // 2. Log
+    console.log(`✅ Round ${currentRound} Submit Success.`);
+
+    // 3. ENTER 'round-completed' PHASE
+    // DO NOT Auto Increment Round Here.
+    setExplicitPhase('round-completed');
+
+  }, [currentRound, queue.length, wrongAnswers, userId, lessonId, submitRoundToStore]);
+
+  // REMOVED: handleStartNextRound. 
+  // User must exit to Lesson page and restart to trigger next round init.
+  /*
+  const handleStartNextRound = useCallback(async () => { ... });
+  */
+
+
 
   const letterPool = useMemo(() => queue.map((item) => item.letter), [queue]);
 
   return {
     initialized,
-    phase,
+    phase: derivedPhase,
     currentRound,
+    queueIndex: currentIndex,
+    totalQueue: queue.length,
     roundEvaluation,
     currentItem,
     currentQuestionType,
     letterPool,
     onAnswer: handleAnswer,
     onNext: handleNext,
-    onSkipYesterdayReview: () => setPhase('today-learning'), // ✅ 新增
+    // onStartNextRound: handleStartNextRound, // REMOVED
     phonicsRule,
     showPhonicsRuleCard,
     onCompletePhonicsRule: handleCompletePhonicsRule,
-    miniReviewQuestion,
-    onMiniReviewAnswer: handleMiniReviewAnswer,
-    onMiniReviewNext: handleMiniReviewNext,
+    // 透出给 UI
+    pendingRecoverySession,
+    resolveRecovery: handleResolveRecovery,
   };
 }

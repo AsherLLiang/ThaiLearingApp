@@ -15,8 +15,13 @@
   - **字母模块（Alphabet Module）**：Lesson1–7，带三轮课程级训练与逻辑题型基础；
   - **词汇模块（Vocabulary Module）**：至少 1 门基础泰语课程（Thai_1），支持例句/对话/用法精讲与轻量化复习；
   - **课程入口 + 学习仪表盘**：统一的 Courses 页 + LearningStore 统计；
-  - **统一记忆引擎（SM‑2）**：通过 `memory-engine` / `vocabulary` 云函数管理长期复习。
-- AI 模块只做**轻量设计与入口占位**，不作为首发硬需求。
+  - **统一记忆引擎（SM‑2）**：通过 `memory-engine` / `vocabulary` 云函数管理长期复习；
+  - **轻量 AI 模块（AI Module, Lite）**：在首发中真正接入以下四类 AI 能力：
+    - 基于错题和学习进度的**弱项词汇强化练习**（`generateWeaknessVocabulary`）；
+    - 基于用户选择词/错题生成的**微阅读短文**（`generateMicroReading`）；
+    - 针对单词的**基础词汇解析/补充例句**（`explainVocabulary`，仅做解释与例句扩展，不直接修改记忆状态）；
+    - 针对字母 / 单词 / 句子的**发音分析与反馈**（`analyzePronunciation` 的首发 MVP 版，用于基础打分与文字反馈）。
+- AI 模块仍保持 **Lite / 首发 MVP** 的定位：只覆盖以上 4 类与学习闭环强相关的能力，其余高阶功能（复杂推荐系统、更丰富的阅读理解场景等）作为后续版本扩展。
 
 ### 1.2 架构基线
 
@@ -312,6 +317,7 @@ class AiEngineCF {
   +analyzePronunciation()
   +generateWeaknessVocabulary()
   +generateMicroReading()
+  +explainVocabulary()
 }
 
 AiPronunciationScreen --> ApiClient
@@ -437,6 +443,286 @@ LearnVocabCF --> UserVocabularyProgress
 AiEngineCF --> MemoryStatus
 AiEngineCF --> Vocabulary
 AiEngineCF --> Letters
+```
+
+### 2.2 顶层用例图（冻结版，全项目唯一用例集合）
+
+```mermaid
+flowchart TD
+  %% Actor
+  U[User]
+
+  %% Core use cases (≤10)
+  UC_Auth((Sign Up / Sign In / Sign Out))
+  UC_Home((View Home & Current Course))
+  UC_SelectCourse((Browse & Select Course))
+  UC_AlphabetLearn((Learn Alphabet Lessons))
+  UC_VocabLearn((Learn Vocabulary Lessons))
+  UC_Review((Review Learned Items))
+  UC_ViewProgress((View Progress & Achievements))
+  UC_Settings((Change Study Settings))
+  UC_AIPractice((AI-assisted Practice))
+
+  %% Actor → Use case
+  U --> UC_Auth
+  U --> UC_Home
+  U --> UC_SelectCourse
+  U --> UC_AlphabetLearn
+  U --> UC_VocabLearn
+  U --> UC_Review
+  U --> UC_ViewProgress
+  U --> UC_Settings
+  U --> UC_AIPractice
+
+  %% Relationships between use cases
+  UC_SelectCourse -. includes .-> UC_AlphabetLearn
+  UC_SelectCourse -. includes .-> UC_VocabLearn
+  UC_AlphabetLearn -. includes .-> UC_Review
+  UC_VocabLearn -. includes .-> UC_Review
+  UC_AIPractice -. extends .-> UC_Review
+```
+
+> 以上用例图为本项目唯一的“业务场景集合”。后续如需新增/删除用例，必须首先更新本图，再同步调整对应模块 Spec。
+
+### 2.3 关键用例时序图（按用例分组）
+
+#### 2.3.1 UC_Auth – Sign Up / Sign In / Sign Out
+
+```mermaid
+sequenceDiagram
+  actor U as User
+  participant AuthScreen as Auth Screen
+  participant UserStore
+  participant ApiClient
+  participant UserCF as user-* CF
+  participant Users as users collection
+
+  U ->> AuthScreen: enter credentials / tap login
+  AuthScreen ->> UserStore: login(email,password)
+  UserStore ->> ApiClient: callCloudFunction('user-login',data)
+  ApiClient ->> UserCF: main({action:'login',data})
+  UserCF ->> Users: query user by email
+  Users -->> UserCF: user document
+  UserCF -->> ApiClient: success + user profile
+  ApiClient -->> UserStore: response
+  UserStore -->> AuthScreen: update currentUser\nnavigate to Home
+
+  U ->> ProfileScreen: tap logout
+  ProfileScreen ->> UserStore: logout()
+  UserStore -->> ProfileScreen: clear currentUser\nnavigate to Login
+```
+
+#### 2.3.2 UC_Home – View Home & Current Course
+
+```mermaid
+sequenceDiagram
+  actor U as User
+  participant HomeScreen
+  participant UserStore
+  participant ModuleAccessStore
+  participant LearningStore
+
+  U ->> HomeScreen: open app / switch to Home tab
+  HomeScreen ->> UserStore: get currentUser
+  UserStore -->> HomeScreen: currentUser
+  HomeScreen ->> ModuleAccessStore: userProgress (if not loaded)
+  ModuleAccessStore -->> HomeScreen: letterProgress,wordProgress,...
+  HomeScreen ->> LearningStore: get currentCourseId / stats
+  LearningStore -->> HomeScreen: streakDays,totalStudyMinutes
+  HomeScreen ->> HomeScreen: compute currentCourse via getCurrentCourse()
+  HomeScreen -->> U: render greeting, hero card,\nfloating bubbles, stats
+```
+
+#### 2.3.3 UC_SelectCourse – Browse & Select Course
+
+```mermaid
+sequenceDiagram
+  actor U as User
+  participant CoursesScreen
+  participant LearningPreferenceStore
+  participant LearningStore
+  participant ModuleAccessStore
+  participant Router as expo-router
+
+  U ->> CoursesScreen: open Courses tab
+  CoursesScreen ->> LearningPreferenceStore: read dailyLimits
+  CoursesScreen ->> ModuleAccessStore: read userProgress (locks)
+  CoursesScreen -->> U: render alphabet & vocab course cards
+
+  U ->> CoursesScreen: tap Alphabet course
+  CoursesScreen ->> LearningStore: setCurrentAlphabetProgram('alphabet')
+  CoursesScreen ->> Router: push('/alphabet')
+
+  U ->> CoursesScreen: tap Vocabulary course
+  CoursesScreen ->> LearningStore: setCurrentCourse(courseId)
+  CoursesScreen ->> Router: push('/learning?module=word&source=courseSource')
+```
+
+#### 2.3.4 UC_AlphabetLearn – Learn Alphabet Lessons
+
+```mermaid
+sequenceDiagram
+  actor U as User
+  participant AlphabetLessonListScreen as LessonList
+  participant AlphabetLessonScreen as LessonScreen
+  participant UseAlphabetLearningEngine as Hook
+  participant AlphabetStore
+  participant ApiClient
+  participant MemoryEngineCF as memory-engine
+
+  U ->> LessonList: open alphabet course
+  LessonList ->> ApiClient: callCloudFunction('memory-engine',{action:'getAlphabetLessons'})
+  ApiClient ->> MemoryEngineCF: getAlphabetLessons
+  MemoryEngineCF -->> ApiClient: lessons[]
+  ApiClient -->> LessonList: lessons[]
+  LessonList -->> U: render Lesson1..7 cards
+
+  U ->> LessonList: tap "Start" on LessonN
+  LessonList ->> LessonScreen: navigate with lessonId
+
+  LessonScreen ->> Hook: useAlphabetLearningEngine(lessonId)
+  Hook ->> AlphabetStore: initializeSession(userId,lessonId)
+  AlphabetStore ->> ApiClient: callCloudFunction('memory-engine',{action:'getTodayMemories',data:{entityType:'letter',lessonId}})
+  ApiClient ->> MemoryEngineCF: getTodayMemories(letter,lessonId)
+  MemoryEngineCF ->> MemoryStatus: read existing memory records
+  MemoryEngineCF ->> Letters: query letters in lesson
+  MemoryEngineCF -->> ApiClient: items + lessonMetadata + phonicsRule
+  ApiClient -->> AlphabetStore: items
+  AlphabetStore -->> Hook: queue,sessionState
+  Hook -->> U: render LessonScreen via AlphabetLearningEngineView
+```
+
+#### 2.3.5 UC_VocabLearn – Learn Vocabulary Lessons
+
+```mermaid
+sequenceDiagram
+  actor U as User
+  participant WordLearningScreen as WordScreen
+  participant VocabularyStore
+  participant ApiClient
+  participant LearnVocabCF as vocabulary
+
+  U ->> WordScreen: navigate from Courses or Home\n(module=word, source)
+  WordScreen ->> VocabularyStore: initializeSession(userId,source)
+  VocabularyStore ->> ApiClient: callCloudFunction('vocabulary',{action:'getTodayWords',data:{userId,limit,level}})
+  ApiClient ->> LearnVocabCF: getTodayWords
+  LearnVocabCF ->> UserVocabularyProgress: read review items
+  LearnVocabCF ->> Vocabulary: read vocab documents
+  LearnVocabCF -->> ApiClient: words + summary
+  ApiClient -->> VocabularyStore: todayWords
+  VocabularyStore -->> WordScreen: sessionState (reviewQueue,newQueue)
+  WordScreen -->> U: render NewWordView + VocabularyQuestionView
+```
+
+#### 2.3.6 UC_Review – Review Learned Items
+
+```mermaid
+sequenceDiagram
+  actor U as User
+  participant WordScreen
+  participant AlphabetLessonScreen as AlphaScreen
+  participant VocabularyStore
+  participant AlphabetStore
+  participant ApiClient
+  participant MemoryEngineCF as memory-engine
+  participant LearnVocabCF as vocabulary
+
+  U ->> AlphaScreen: answer alphabet quiz
+  AlphaScreen ->> AlphabetStore: submitResult(userId,isCorrect)
+  AlphabetStore ->> ApiClient: callCloudFunction('memory-engine',{action:'submitMemoryResult',data:{userId,entityType:'letter',entityId,quality}})
+  ApiClient ->> MemoryEngineCF: submitMemoryResult
+  MemoryEngineCF ->> MemoryStatus: update letter memory
+
+  U ->> WordScreen: answer vocabulary question
+  WordScreen ->> VocabularyStore: answerQuestion(vocabId,isCorrect,type)
+  VocabularyStore ->> VocabularyStore: update perWordStats & wrongWordIds
+  Note right of VocabularyStore: At end of session\ncompute mastery per word
+  VocabularyStore ->> ApiClient: callCloudFunction('vocabulary',{action:'updateMastery',data:{userId,vocabularyId,mastery}})
+  ApiClient ->> LearnVocabCF: updateMastery
+  LearnVocabCF ->> UserVocabularyProgress: update record
+```
+
+#### 2.3.7 UC_ViewProgress – View Progress & Achievements
+
+```mermaid
+sequenceDiagram
+  actor U as User
+  participant ProfileScreen
+  participant ModuleAccessStore
+  participant LearningStore
+
+  U ->> ProfileScreen: open Profile tab
+  ProfileScreen ->> ModuleAccessStore: get userProgress
+  ModuleAccessStore -->> ProfileScreen: letterProgress,wordProgress,...
+  ProfileScreen ->> LearningStore: get progress (streakDays,totalStudyMinutes)
+  LearningStore -->> ProfileScreen: stats
+  ProfileScreen -->> U: render achievements, stats cards
+```
+
+#### 2.3.8 UC_Settings – Change Study Settings
+
+```mermaid
+sequenceDiagram
+  actor U as User
+  participant ProfileScreen
+  participant LearningPreferenceStore
+  participant ModuleAccessStore
+
+  U ->> ProfileScreen: open settings section
+  U ->> ProfileScreen: tap "Daily Study Goal"
+  ProfileScreen ->> LearningPreferenceStore: setDailyLimit(module,limit)
+  ProfileScreen ->> ModuleAccessStore: update local userProgress.dailyLimit
+  Note right of ProfileScreen: 下次学习时，学习模块\n会把新的 dailyLimit 传给 memory-engine\n并由后端持久化
+
+  U ->> ProfileScreen: select language
+  ProfileScreen ->> LanguageSwitcher: setLanguage(lang)
+  LanguageSwitcher -->> ProfileScreen: reload i18n resources
+```
+
+#### 2.3.9 UC_AIPractice – AI-assisted Practice
+
+```mermaid
+sequenceDiagram
+  actor U as User
+  participant AiWeaknessPracticeScreen as WeakScreen
+  participant AiPronunciationScreen as PronScreen
+  participant AiMicroReadingScreen as ReadScreen
+   participant AiExplainVocabScreen as ExplainScreen
+  participant VocabularyStore
+  participant AlphabetStore
+  participant ApiClient
+  participant AiEngineCF as ai-engine
+
+  U ->> WeakScreen: open AI Weak Vocabulary
+  WeakScreen ->> VocabularyStore: get wrongWordIds,courseSource
+  WeakScreen ->> ApiClient: callCloudFunction('ai-engine',{action:'generateWeaknessVocabulary',data:{userId,focusVocabularyIds}})
+  ApiClient ->> AiEngineCF: generateWeaknessVocabulary
+  AiEngineCF -->> ApiClient: suggestions[]
+  ApiClient -->> WeakScreen: suggestions[]
+  WeakScreen -->> U: render AI extra examples & mnemonics
+
+  U ->> ReadScreen: open AI Micro Reading
+  ReadScreen ->> VocabularyStore: get wrongWordIds
+  ReadScreen ->> ApiClient: callCloudFunction('ai-engine',{action:'generateMicroReading',data:{userId,focusType:'word',focusIds:wrongWordIds}})
+  ApiClient ->> AiEngineCF: generateMicroReading
+  AiEngineCF -->> ApiClient: microReading
+  ApiClient -->> ReadScreen: microReading
+  ReadScreen -->> U: display Thai text + hint
+
+  U ->> ExplainScreen: request AI explanation for a word
+  ExplainScreen ->> VocabularyStore: get current vocabularyId / thaiWord
+  ExplainScreen ->> ApiClient: callCloudFunction('ai-engine',{action:'explainVocabulary',data:{userId,vocabularyId}})
+  ApiClient ->> AiEngineCF: explainVocabulary
+  AiEngineCF -->> ApiClient: explanation
+  ApiClient -->> ExplainScreen: explanation
+  ExplainScreen -->> U: show meaning, breakdown, extra examples
+
+  U ->> PronScreen: record pronunciation
+  PronScreen ->> ApiClient: callCloudFunction('ai-engine',{action:'analyzePronunciation',data:{userId,targetType,targetId,audioUrl}})
+  ApiClient ->> AiEngineCF: analyzePronunciation
+  AiEngineCF -->> ApiClient: feedback
+  ApiClient -->> PronScreen: feedback
+  PronScreen -->> U: show scores & suggestions
 ```
 
 > 旧版项目快照文档（`docs/Document/project-snapshot-*` 等）已删除，任何新需求必须基于以上 Spec 更新。

@@ -6,7 +6,7 @@ import type { AudioRequirementType } from '@/src/entities/enums/QuestionType.enu
 /**
  * 音频Base URL
  */
-const LETTER_AUDIO_BASE = 
+const LETTER_AUDIO_BASE =
   'https://636c-cloud1-1gjcyrdd7ab927c6-1387301748.tcb.qcloud.la/alphabet/';
 
 /**
@@ -14,7 +14,7 @@ const LETTER_AUDIO_BASE =
  */
 function normalizeAudioSource(path?: string | null): string {
   if (!path) return '';
-  if (path.startsWith('http://') || path.startsWith('https://')) {
+  if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('file://')) {
     return path;
   }
   return resolveAudioPath(path);
@@ -31,43 +31,48 @@ export function getLetterAudioUrl(
   letter: Letter,
   type: AudioRequirementType = 'letter'
 ): string {
+  // P0-Optimization: 优先使用本地缓存路径
+  const getLocalOrRemote = (local?: string, remote?: string) => {
+    return normalizeAudioSource(local) || normalizeAudioSource(remote);
+  };
+
   switch (type) {
     case 'letter':
       // 默认使用完整读音:
-      // fullSoundUrl > letterPronunciationUrl > audioPath
+      // fullSoundLocal > fullSoundUrl > ...
       return (
-        normalizeAudioSource(letter.fullSoundUrl) ||
-        normalizeAudioSource(letter.letterPronunciationUrl) ||
+        getLocalOrRemote(letter.fullSoundLocalPath, letter.fullSoundUrl) ||
+        getLocalOrRemote(letter.letterPronunciationLocalPath, letter.letterPronunciationUrl) ||
         resolveAudioPath(letter.audioPath)
       );
 
     case 'syllable':
       // 音节发音
       return (
-        normalizeAudioSource(letter.syllableSoundUrl) ||
-        normalizeAudioSource(letter.fullSoundUrl) ||
+        getLocalOrRemote(letter.syllableSoundLocalPath, letter.syllableSoundUrl) ||
+        getLocalOrRemote(letter.fullSoundLocalPath, letter.fullSoundUrl) ||
         resolveAudioPath(letter.audioPath)
       );
 
     case 'minimal-pair':
       // 最小对立组(使用letter类型,由调用方处理对比)
       return (
-        normalizeAudioSource(letter.fullSoundUrl) ||
-        normalizeAudioSource(letter.letterPronunciationUrl) ||
+        getLocalOrRemote(letter.fullSoundLocalPath, letter.fullSoundUrl) ||
+        getLocalOrRemote(letter.letterPronunciationLocalPath, letter.letterPronunciationUrl) ||
         resolveAudioPath(letter.audioPath)
       );
 
     case 'tone-set':
       // 声调变体(需TTS生成,返回基础音频)
       return (
-        normalizeAudioSource(letter.syllableSoundUrl) ||
-        normalizeAudioSource(letter.fullSoundUrl) ||
+        getLocalOrRemote(letter.syllableSoundLocalPath, letter.syllableSoundUrl) ||
+        getLocalOrRemote(letter.fullSoundLocalPath, letter.fullSoundUrl) ||
         resolveAudioPath(letter.audioPath)
       );
 
     default:
       return (
-        normalizeAudioSource(letter.fullSoundUrl) ||
+        getLocalOrRemote(letter.fullSoundLocalPath, letter.fullSoundUrl) ||
         resolveAudioPath(letter.audioPath)
       );
   }
@@ -81,7 +86,7 @@ export function getLetterAudioUrl(
  */
 function resolveAudioPath(path?: string | null): string {
   if (!path) return '';
-  
+
   // 如果已经是完整URL,直接返回
   if (path.startsWith('http://') || path.startsWith('https://')) {
     return path;
@@ -122,7 +127,7 @@ export function getToneVariantAudioUrls(
   vowel?: string
 ): string[] {
   const baseAudioUrl = getLetterAudioUrl(letter, 'tone-set');
-  
+
   // 当前策略:返回相同的基础音频(临时方案)
   // 前端可以在UI上标注"需TTS生成"
   return [
@@ -132,7 +137,7 @@ export function getToneVariantAudioUrls(
     baseAudioUrl, // 高调
     baseAudioUrl, // 升调
   ];
-  
+
   // 🔮 未来实现(需后端TTS服务):
   // return await ttsService.generateToneVariants(letter, vowel);
 }
@@ -174,7 +179,7 @@ export function getAllLetterAudioUrls(letter: Letter): string[] {
  */
 export async function checkAudioAvailable(url: string): Promise<boolean> {
   if (!url) return false;
-  
+
   try {
     const response = await fetch(url, { method: 'HEAD' });
     return response.ok;

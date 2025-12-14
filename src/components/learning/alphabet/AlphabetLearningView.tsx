@@ -1,9 +1,16 @@
 // src/components/learning/alphabet/AlphabetLearningView.tsx
 
-import  { memo, useCallback, useRef, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { ArrowLeft } from 'lucide-react-native';
+import React, { memo, useCallback, useRef, useEffect, useState } from 'react';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  ScrollView,
+  Platform,
+} from 'react-native';
 import { Audio } from 'expo-av';
+import { Volume2, Play } from 'lucide-react-native';
 
 import type { AlphabetLearningState } from '@/src/stores/alphabetStore';
 import { Colors } from '@/src/constants/colors';
@@ -22,9 +29,10 @@ export const AlphabetLearningView = memo(function AlphabetLearningView({
 }: AlphabetLearningViewProps) {
   const soundRef = useRef<Audio.Sound | null>(null);
   const audioModeConfiguredRef = useRef(false);
+  const autoPlayCounter = useRef(0);
+  const [isPlaying, setIsPlaying] = useState(false);
 
   const letter = alphabet.letter;
-
   const lessonOrder = letter.primaryCurriculumLessonOrder;
 
   const thaiChar = letter.thaiChar;
@@ -37,506 +45,457 @@ export const AlphabetLearningView = memo(function AlphabetLearningView({
 
   const exampleWord = letter.exampleWord;
   const exampleMeaning = letter.exampleMeaning;
-  const keyboardKey = letter.keyboardKey;
+  const syllableSoundUrl = letter.syllableSoundUrl;
+  const endSyllableSoundUrl = letter.endSyllableSoundUrl;
 
   const fullSoundLocalPath = letter.fullSoundLocalPath;
   const coreSyllableLocalPath = letter.syllableSoundLocalPath;
   const endSyllableSoundLocalPath = letter.endSyllableSoundLocalPath;
   const exampleWordLocalPath = letter.letterPronunciationLocalPath;
 
-  useEffect(() => {
-    // 调试：首屏打印当前字母的音频相关字段
-    // 便于确认本地路径是否已经写入
-    // eslint-disable-next-line no-console
-    console.log('🔍 AlphabetLearningView mounted for letter:', {
-      id: letter._id,
-      thaiChar,
-      fullSoundUrl: letter.fullSoundUrl,
-      fullSoundLocalPath,
-      syllableSoundUrl: letter.syllableSoundUrl,
-      syllableSoundLocalPath: coreSyllableLocalPath,
-      endSyllableSoundUrl: letter.endSyllableSoundUrl,
-      endSyllableSoundLocalPath,
-      letterPronunciationUrl: letter.letterPronunciationUrl,
-      letterPronunciationLocalPath: exampleWordLocalPath,
-      alphabetAudioUrl: alphabet.audioUrl,
-    });
-
-    return () => {
-      if (soundRef.current) {
-        soundRef.current.unloadAsync().catch(() => {});
-        soundRef.current = null;
-      }
-    };
-  }, []);
-
-  const playLocalAudio = useCallback(async (localPath?: string | null) => {
-    if (!localPath || !localPath.startsWith('file://')) {
-      // eslint-disable-next-line no-console
-      console.warn('⚠️ playLocalAudio 被调用，但本地路径无效:', localPath);
-      return;
-    }
-
-    try {
-      if (!audioModeConfiguredRef.current) {
-        try {
-          await Audio.setAudioModeAsync({
-            allowsRecordingIOS: false,
-            playsInSilentModeIOS: true,
-            staysActiveInBackground: false,
-            shouldDuckAndroid: true,
-            playThroughEarpieceAndroid: false,
-          });
-          audioModeConfiguredRef.current = true;
-          // eslint-disable-next-line no-console
-          console.log('🎚 已配置音频模式');
-        } catch (modeError) {
-          console.warn('⚠️ 配置音频模式失败:', modeError);
-        }
-      }
-
-      // eslint-disable-next-line no-console
-      console.log('▶ 播放本地音频:', localPath);
-      if (soundRef.current) {
-        await soundRef.current.unloadAsync().catch(() => {});
-        soundRef.current = null;
-      }
-
-      const { sound } = await Audio.Sound.createAsync({ uri: localPath });
-      soundRef.current = sound;
-      await sound.playAsync();
-    } catch (e) {
-      // eslint-disable-next-line no-console
-      console.warn('❌ 播放字母音频失败:', e);
-    }
-  }, []);
+  // --- Audio Logic ---
 
   const resolveAudioPath = useCallback(
     (primary?: string | null) => {
-      if (primary && primary.startsWith('file://')) {
-        // eslint-disable-next-line no-console
-        console.log('✅ resolveAudioPath 使用 primary 本地路径:', primary);
-        return primary;
-      }
-
-      if (alphabet.audioUrl && alphabet.audioUrl.startsWith('file://')) {
-        // eslint-disable-next-line no-console
-        console.log(
-          '✅ resolveAudioPath 回退使用 alphabet.audioUrl:',
-          alphabet.audioUrl,
-        );
+      //  relaxes strict file:// check, allowing any valid path string
+      if (primary && primary.length > 0) return primary;
+      if (alphabet.audioUrl && alphabet.audioUrl.length > 0)
         return alphabet.audioUrl;
-      }
-
-      // eslint-disable-next-line no-console
-      console.warn('⚠️ resolveAudioPath 未找到可用本地路径', {
-        primary,
-        audioUrl: alphabet.audioUrl,
-      });
       return null;
     },
-    [alphabet.audioUrl],
+    [alphabet.audioUrl]
   );
 
+
+  const playLocalAudio = useCallback(async (localPath?: string | null) => {
+    // Relaxes check: allow any string path
+    if (!localPath) return;
+
+
+    try {
+      setIsPlaying(true);
+      if (!audioModeConfiguredRef.current) {
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: false,
+          playsInSilentModeIOS: true,
+          staysActiveInBackground: false,
+          shouldDuckAndroid: true,
+          playThroughEarpieceAndroid: false,
+        });
+        audioModeConfiguredRef.current = true;
+      }
+
+      if (soundRef.current) {
+        await soundRef.current.unloadAsync().catch(() => { });
+        soundRef.current = null;
+      }
+
+      const { sound } = await Audio.Sound.createAsync(
+        { uri: localPath },
+        { shouldPlay: true }
+      );
+      soundRef.current = sound;
+
+      sound.setOnPlaybackStatusUpdate((status) => {
+        if (status.isLoaded && status.didJustFinish) {
+          setIsPlaying(false);
+        }
+      });
+    } catch (e) {
+      console.warn('❌ Playback failed:', e);
+      setIsPlaying(false);
+    }
+  }, []);
+
   const handlePlayFullLetter = useCallback(() => {
-    // eslint-disable-next-line no-console
-    console.log('👆 点击：播放字母完整发音');
     const path = resolveAudioPath(fullSoundLocalPath);
-    // eslint-disable-next-line no-console
-    console.log('   ▶ 计算得到路径(full):', path);
     void playLocalAudio(path);
   }, [fullSoundLocalPath, resolveAudioPath, playLocalAudio]);
 
   const handlePlayCoreSyllable = useCallback(() => {
-    // eslint-disable-next-line no-console
-    console.log('👆 点击：播放音节核心音');
     const path = resolveAudioPath(coreSyllableLocalPath);
-    // eslint-disable-next-line no-console
-    console.log('   ▶ 计算得到路径(core syllable):', path);
     void playLocalAudio(path);
   }, [coreSyllableLocalPath, resolveAudioPath, playLocalAudio]);
 
   const handlePlayEndSyllable = useCallback(() => {
-    // eslint-disable-next-line no-console
-    console.log('👆 点击：播放尾音节');
     const path = resolveAudioPath(
-      endSyllableSoundLocalPath || coreSyllableLocalPath,
+      endSyllableSoundLocalPath || coreSyllableLocalPath
     );
-    // eslint-disable-next-line no-console
-    console.log('   ▶ 计算得到路径(end syllable):', path);
     void playLocalAudio(path);
-  }, [
-    endSyllableSoundLocalPath,
-    coreSyllableLocalPath,
-    resolveAudioPath,
-    playLocalAudio,
-  ]);
+  }, [endSyllableSoundLocalPath, coreSyllableLocalPath, resolveAudioPath, playLocalAudio]);
+
+  // Position Sound Handlers
+  const handlePlayInitialSound = useCallback(() => {
+    // Priority: Local Cache -> Remote Specific URL -> (resolveAudioPath Fallback to Full)
+    const path = resolveAudioPath(coreSyllableLocalPath || syllableSoundUrl);
+    void playLocalAudio(path);
+  }, [coreSyllableLocalPath, syllableSoundUrl, resolveAudioPath, playLocalAudio]);
+
+  const handlePlayFinalSound = useCallback(() => {
+    // Priority: Local Final -> Remote Final -> Local Syllable -> Remote Syllable
+    const path = resolveAudioPath(
+      endSyllableSoundLocalPath || endSyllableSoundUrl || coreSyllableLocalPath || syllableSoundUrl
+    );
+    void playLocalAudio(path);
+  }, [endSyllableSoundLocalPath, endSyllableSoundUrl, coreSyllableLocalPath, syllableSoundUrl, resolveAudioPath, playLocalAudio]);
 
   const handlePlayExampleWord = useCallback(() => {
-    // eslint-disable-next-line no-console
-    console.log('👆 点击：播放示例单词');
     const path = resolveAudioPath(
-      exampleWordLocalPath || fullSoundLocalPath || coreSyllableLocalPath,
+      exampleWordLocalPath || fullSoundLocalPath || coreSyllableLocalPath
     );
-    // eslint-disable-next-line no-console
-    console.log('   ▶ 计算得到路径(example word):', path);
     void playLocalAudio(path);
-  }, [
-    exampleWordLocalPath,
-    fullSoundLocalPath,
-    coreSyllableLocalPath,
-    resolveAudioPath,
-    playLocalAudio,
-  ]);
+  }, [exampleWordLocalPath, fullSoundLocalPath, coreSyllableLocalPath, resolveAudioPath, playLocalAudio]);
 
-  const renderLessonHeader = () => {
-    if (!lessonOrder) {
-      return null;
-    }
 
-    return (
-      <View style={styles.lessonHeader}>
-        <Text style={styles.lessonHeaderText}>Lesson {lessonOrder}</Text>
-      </View>
-    );
-  };
+  // --- Auto-Play Logic (2 times) ---
+
+  useEffect(() => {
+    // Reset counter on letter change
+    autoPlayCounter.current = 0;
+
+    const playTwice = async () => {
+      const path = resolveAudioPath(fullSoundLocalPath);
+      if (!path) return;
+
+      // First play
+      await playLocalAudio(path);
+
+      // Wait a bit before second play
+      setTimeout(async () => {
+        // Check if still mounted/same letter context basically (ref check)
+        if (autoPlayCounter.current < 2) {
+          await playLocalAudio(path);
+          autoPlayCounter.current = 2; // Mark done
+        }
+      }, 1500); // 1.5s delay
+    };
+
+    void playTwice();
+
+    return () => {
+      if (soundRef.current) {
+        soundRef.current.unloadAsync().catch(() => { });
+      }
+    };
+  }, [letter._id, resolveAudioPath, fullSoundLocalPath, playLocalAudio]);
+
+
+  // --- Render ---
 
   return (
-    <View style={styles.container}>
-      {/* 返回按钮 */}
-      {onBack && (
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={onBack}
-        >
-          <ArrowLeft size={24} color={Colors.ink} />
-        </TouchableOpacity>
-      )}
-
-      {/* 顶部标题栏：课程 + 字母 */}
-      {renderLessonHeader()}
-      <View style={styles.topHeader}>
-        <Text style={styles.topHeaderText}>学习字母：{thaiChar}</Text>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.contentContainer}
+      showsVerticalScrollIndicator={false}
+    >
+      {/* Top Header Label */}
+      <View style={styles.header}>
+        <Text style={styles.headerText}>
+          {lessonOrder ? `Lesson ${lessonOrder} · ` : ''}Learning Letter
+        </Text>
       </View>
 
-      {/* 中心内容 */}
-      <View style={styles.content}>
-        {/* 字母主展示区域 */}
-        <View style={styles.mainLetterBlock}>
-          <Text style={styles.letter}>{thaiChar}</Text>
-
-          {(nameEnglish || exampleWord) && (
-            <View style={styles.nameBlock}>
-              {nameEnglish && (
-                <Text style={styles.nameEnglish}>{nameEnglish}</Text>
-              )}
-            </View>
-          )}
+      {/* Hero Card */}
+      <View style={styles.heroCard}>
+        <View style={styles.heroInner}>
+          <Text style={styles.thaiChar}>{thaiChar}</Text>
+          {nameEnglish && <Text style={styles.englishName}>{nameEnglish}</Text>}
 
           <TouchableOpacity
-            style={[
-              styles.audioButton,
-              !resolveAudioPath(fullSoundLocalPath) && styles.audioButtonDisabled,
-            ]}
-            disabled={!resolveAudioPath(fullSoundLocalPath)}
+            style={[styles.mainPlayButton, isPlaying && styles.buttonActive]}
             onPress={handlePlayFullLetter}
+            disabled={!resolveAudioPath(fullSoundLocalPath)}
           >
-            <Text style={styles.audioButtonText}>▶ 播放字母完整发音</Text>
+            <Volume2 size={24} color={Colors.white} />
+            <Text style={styles.mainPlayText}>Play Full Sound</Text>
           </TouchableOpacity>
         </View>
+      </View>
 
-        {/* 音节核心发音 */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>🔊 音节核心发音</Text>
-          <Text style={styles.sectionBody}>
-            {syllableSoundName ? `/${syllableSoundName}/` : '—'}
-          </Text>
+      {/* Details Card */}
+      <View style={styles.detailsCard}>
 
+        {/* Row 1: Syllable Sound */}
+        <View style={styles.detailRow}>
+          <View style={styles.detailLabelContainer}>
+            <View style={styles.iconCircle}>
+              <Text style={styles.iconText}>🔊</Text>
+            </View>
+            <Text style={styles.detailLabel}>Core Sound</Text>
+          </View>
           <TouchableOpacity
-            style={[
-              styles.audioButtonOutline,
-              !resolveAudioPath(coreSyllableLocalPath) &&
-                styles.audioButtonDisabled,
-            ]}
-            disabled={!resolveAudioPath(coreSyllableLocalPath)}
+            style={styles.detailAction}
             onPress={handlePlayCoreSyllable}
+            disabled={!resolveAudioPath(coreSyllableLocalPath)}
           >
-            <Text style={styles.audioButtonOutlineText}>▶ 播放音节核心音</Text>
+            <Text style={styles.detailValue}>/{syllableSoundName || '-'}/</Text>
+            <Play size={16} color={Colors.thaiGold} fill={Colors.thaiGold} />
           </TouchableOpacity>
         </View>
 
-        {/* 音节属性：首音 / 尾音 */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>音节属性</Text>
-          <Text style={styles.sectionBody}>
-            起首辅音：{initialSound ? `/${initialSound}/ (Initial)` : '—'}
-          </Text>
-          <Text style={styles.sectionBody}>
-            尾音：{finalSound ? `/${finalSound}/ (Final)` : '—'}
-          </Text>
+        <View style={styles.divider} />
 
-          <View style={styles.inlineButtonsRow}>
+        {/* Row 2: Initial / Final */}
+        <View style={styles.detailRow}>
+          <View style={styles.detailLabelContainer}>
+            <View style={styles.iconCircle}>
+              <Text style={styles.iconText}>🧩</Text>
+            </View>
+            <Text style={styles.detailLabel}>Position</Text>
+          </View>
+          <View style={styles.positionContainer}>
             <TouchableOpacity
-              style={[
-                styles.smallAudioButton,
-                !resolveAudioPath(coreSyllableLocalPath) &&
-                  styles.audioButtonDisabled,
-              ]}
-              disabled={!resolveAudioPath(coreSyllableLocalPath)}
-              onPress={handlePlayCoreSyllable}
+              style={styles.positionBlock}
+              onPress={handlePlayInitialSound}
+              disabled={!resolveAudioPath(coreSyllableLocalPath || syllableSoundUrl)}
             >
-              <Text style={styles.smallAudioButtonText}>▶ 起首音节</Text>
+              <Text style={styles.positionLabel}>Initial</Text>
+              <View style={styles.positionValueRow}>
+                <Text style={styles.positionValue}>/{initialSound || '-'}/</Text>
+                <Play size={12} color={Colors.thaiGold} fill={Colors.thaiGold} style={{ marginLeft: 4 }} />
+              </View>
             </TouchableOpacity>
+
+            <View style={styles.verticalDivider} />
+
             <TouchableOpacity
-              style={[
-                styles.smallAudioButton,
-                !resolveAudioPath(
-                  endSyllableSoundLocalPath || coreSyllableLocalPath,
-                ) && styles.audioButtonDisabled,
-              ]}
-              disabled={
-                !resolveAudioPath(
-                  endSyllableSoundLocalPath || coreSyllableLocalPath,
-                )
-              }
-              onPress={handlePlayEndSyllable}
+              style={styles.positionBlock}
+              onPress={handlePlayFinalSound}
+              disabled={!resolveAudioPath(endSyllableSoundLocalPath || endSyllableSoundUrl || coreSyllableLocalPath || syllableSoundUrl)}
             >
-              <Text style={styles.smallAudioButtonText}>▶ 尾音节</Text>
+              <Text style={styles.positionLabel}>Final</Text>
+              <View style={styles.positionValueRow}>
+                <Text style={styles.positionValue}>/{finalSound || '-'}/</Text>
+                <Play size={12} color={Colors.thaiGold} fill={Colors.thaiGold} style={{ marginLeft: 4 }} />
+              </View>
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* 示例单词 */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>📌 示例单词</Text>
-          {(exampleWord || exampleMeaning) && (
-            <Text style={styles.sectionBody}>
-              {exampleWord || '—'}
-              {exampleMeaning ? ` · ${exampleMeaning}` : ''}
-            </Text>
-          )}
+        <View style={styles.divider} />
 
+        {/* Row 3: Example Word */}
+        <View style={styles.detailRow}>
+          <View style={styles.detailLabelContainer}>
+            <View style={styles.iconCircle}>
+              <Text style={styles.iconText}>📌</Text>
+            </View>
+            <Text style={styles.detailLabel}>Example</Text>
+          </View>
           <TouchableOpacity
-            style={[
-              styles.audioButtonOutline,
-              !resolveAudioPath(
-                exampleWordLocalPath || fullSoundLocalPath || coreSyllableLocalPath,
-              ) && styles.audioButtonDisabled,
-            ]}
-            disabled={
-              !resolveAudioPath(
-                exampleWordLocalPath || fullSoundLocalPath || coreSyllableLocalPath,
-              )
-            }
+            style={styles.detailAction}
             onPress={handlePlayExampleWord}
+            disabled={!resolveAudioPath(exampleWordLocalPath || fullSoundLocalPath)}
           >
-            <Text style={styles.audioButtonOutlineText}>▶ 播放示例单词</Text>
-          </TouchableOpacity>
-
-          {keyboardKey && (
-            <Text style={styles.sectionSubNote}>
-              键盘对应按键：{keyboardKey}
-            </Text>
-          )}
-        </View>
-      </View>
-
-      {/* 底部分割线 + 继续按钮 */}
-      <View style={styles.bottomBar}>
-        <View style={styles.bottomDivider} />
-        <View style={styles.bottomButtonRow}>
-          <View style={{ flex: 1 }} />
-          <TouchableOpacity style={styles.nextButton} onPress={onNext}>
-            <Text style={styles.nextButtonText}>继续 →</Text>
+            <View style={{ alignItems: 'flex-end' }}>
+              <Text style={styles.exampleWord}>{exampleWord || '-'}</Text>
+              {exampleMeaning && <Text style={styles.exampleMeaning}>{exampleMeaning}</Text>}
+            </View>
+            <Play size={16} color={Colors.thaiGold} fill={Colors.thaiGold} />
           </TouchableOpacity>
         </View>
+
       </View>
-    </View>
+
+      {/* Footer Navigation */}
+      <View style={styles.footer}>
+        <TouchableOpacity style={styles.continueButton} onPress={onNext}>
+          <Text style={styles.continueText}>Continue</Text>
+        </TouchableOpacity>
+      </View>
+
+    </ScrollView>
   );
 });
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingHorizontal: 24,
-    paddingTop: 24,
-    paddingBottom: 32,
-    backgroundColor: Colors.paper,
+    backgroundColor: '#F8F9FA',
   },
-  backButton: {
-    position: 'absolute',
-    top: 24,
-    left: 24,
-    zIndex: 10,
-    padding: 8,
+  contentContainer: {
+    padding: 24,
+    paddingBottom: 48,
   },
-  lessonHeader: {
-    paddingTop: 24,
-    paddingBottom: 8,
-    alignItems: 'center',
-  },
-  lessonHeaderText: {
-    fontFamily: Typography.notoSerifRegular,
-    fontSize: 14,
-    color: Colors.taupe,
-  },
-  topHeader: {
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: Colors.sand,
-    paddingVertical: 10,
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  topHeaderText: {
-    fontFamily: Typography.notoSerifRegular,
-    fontSize: 18,
-    color: Colors.ink,
-  },
-  content: {
-    flex: 1,
-    paddingTop: 8,
-  },
-  mainLetterBlock: {
+  header: {
     alignItems: 'center',
     marginBottom: 24,
+    marginTop: 8,
   },
-  letter: {
+  headerText: {
+    fontFamily: Typography.notoSerifRegular,
+    fontSize: 14,
+    color: Colors.taupe,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+  heroCard: {
+    backgroundColor: Colors.white,
+    borderRadius: 24,
+    padding: 32,
+    alignItems: 'center',
+    marginBottom: 24,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.08,
+        shadowRadius: 16,
+      },
+      android: {
+        elevation: 6,
+      },
+    }),
+  },
+  heroInner: {
+    alignItems: 'center',
+    width: '100%',
+  },
+  thaiChar: {
     fontFamily: Typography.playfairBold,
-    fontSize: 88,
+    fontSize: 96,
     color: Colors.ink,
-    marginBottom: 12,
+    lineHeight: 110,
+    marginBottom: 8,
   },
-  nameEnglish: {
+  englishName: {
     fontFamily: Typography.notoSerifRegular,
-    fontSize: 16,
+    fontSize: 18,
     color: Colors.taupe,
-    marginBottom: 4,
+    marginBottom: 24,
   },
-  nameThai: {
+  mainPlayButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.thaiGold,
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+    borderRadius: 100,
+    gap: 8,
+    width: '100%',
+    justifyContent: 'center',
+  },
+  buttonActive: {
+    opacity: 0.8,
+    transform: [{ scale: 0.98 }]
+  },
+  mainPlayText: {
     fontFamily: Typography.notoSerifBold,
-    fontSize: 18,
-    color: Colors.ink,
-    marginBottom: 16,
-  },
-  nameBlock: {
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  pronunciationBlock: {
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  pronunciationText: {
-    fontFamily: Typography.notoSerifRegular,
-    fontSize: 18,
-    color: Colors.ink,
-    marginBottom: 8,
-  },
-  pronunciationHint: {
-    fontSize: 14,
-    color: Colors.taupe,
-  },
-  audioButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 18,
-    borderRadius: 999,
-    backgroundColor: Colors.ink,
-    alignItems: 'center',
-  },
-  audioButtonText: {
-    fontFamily: Typography.notoSerifRegular,
-    fontSize: 14,
+    fontSize: 16,
     color: Colors.white,
   },
-  audioButtonDisabled: {
-    opacity: 0.4,
-  },
-  section: {
-    borderTopWidth: 1,
-    borderColor: Colors.sand,
-    paddingTop: 12,
-    marginBottom: 16,
-  },
-  sectionTitle: {
-    fontFamily: Typography.notoSerifBold,
-    fontSize: 16,
-    color: Colors.ink,
-    marginBottom: 4,
-  },
-  sectionBody: {
-    fontFamily: Typography.notoSerifRegular,
-    fontSize: 14,
-    color: Colors.ink,
-    marginBottom: 4,
-  },
-  sectionSubNote: {
-    fontFamily: Typography.notoSerifRegular,
-    fontSize: 12,
-    color: Colors.taupe,
-    marginTop: 4,
-  },
-  audioButtonOutline: {
-    marginTop: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 999,
+  detailsCard: {
+    backgroundColor: Colors.white,
+    borderRadius: 20,
+    padding: 24,
+    marginBottom: 32,
     borderWidth: 1,
-    borderColor: Colors.ink,
-    alignItems: 'center',
+    borderColor: '#EFEFEF',
   },
-  audioButtonOutlineText: {
-    fontFamily: Typography.notoSerifRegular,
-    fontSize: 14,
-    color: Colors.ink,
-  },
-  inlineButtonsRow: {
+  detailRow: {
     flexDirection: 'row',
-    marginTop: 8,
-    columnGap: 12,
-  },
-  smallAudioButton: {
-    flex: 1,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: Colors.ink,
     alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
   },
-  smallAudioButtonText: {
-    fontFamily: Typography.notoSerifRegular,
-    fontSize: 12,
-    color: Colors.ink,
-  },
-  exampleText: {
-    marginTop: 8,
-    fontFamily: Typography.notoSerifRegular,
-    fontSize: 16,
-    color: Colors.ink,
-  },
-  bottomBar: {
-    marginTop: 32,
-  },
-  bottomDivider: {
+  divider: {
     height: 1,
-    backgroundColor: Colors.sand,
-    marginBottom: 16,
+    backgroundColor: '#F0F0F0',
+    marginVertical: 4,
   },
-  bottomButtonRow: {
+  detailLabelContainer: {
     flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  iconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#F9FAFB',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  nextButton: {
-    paddingHorizontal: 32,
-    paddingVertical: 12,
-    borderRadius: 999,
-    backgroundColor: Colors.thaiGold,
-    minWidth: 160,
+  iconText: {
+    fontSize: 16,
+  },
+  detailLabel: {
+    fontFamily: Typography.notoSerifBold,
+    fontSize: 15,
+    color: Colors.ink,
+  },
+  detailAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#FFFCF5', // Light gold bg
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(212, 175, 55, 0.2)',
+  },
+  detailValue: {
+    fontFamily: Typography.notoSerifRegular,
+    fontSize: 16,
+    color: Colors.ink,
+  },
+  positionContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  positionBlock: {
     alignItems: 'center',
   },
-  nextButtonText: {
+  positionLabel: {
+    fontSize: 10,
+    color: Colors.taupe,
+    textTransform: 'uppercase',
+    marginBottom: 2,
+    fontFamily: Typography.notoSerifRegular,
+  },
+  positionValue: {
+    fontFamily: Typography.notoSerifBold,
+    fontSize: 15,
+    color: Colors.ink,
+  },
+  verticalDivider: {
+    width: 1,
+    height: 24,
+    backgroundColor: '#E0E0E0',
+  },
+  exampleWord: {
+    fontFamily: Typography.notoSerifBold,
+    fontSize: 16,
+    color: Colors.ink,
+  },
+  exampleMeaning: {
+    fontFamily: Typography.notoSerifRegular,
+    fontSize: 12,
+    color: Colors.taupe,
+  },
+  positionValueRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+
+  footer: {
+    alignItems: 'center',
+  },
+  continueButton: {
+    width: '100%',
+    backgroundColor: Colors.ink,
+    paddingVertical: 16,
+    borderRadius: 16,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  continueText: {
     fontFamily: Typography.notoSerifBold,
     fontSize: 16,
     color: Colors.white,

@@ -24,10 +24,10 @@ export default function AlphabetLessonFlow() {
     phonicsRule,
     showPhonicsRuleCard,
     onCompletePhonicsRule,
-    miniReviewQuestion,
-    onMiniReviewAnswer,
-    onMiniReviewNext,
+    pendingRecoverySession,
+    resolveRecovery,
   } = useAlphabetLearningEngine(lessonId);
+
 
   const handleBack = () => {
     router.back();
@@ -49,9 +49,9 @@ export default function AlphabetLessonFlow() {
       phonicsRule={phonicsRule}
       showPhonicsRuleCard={showPhonicsRuleCard}
       onCompletePhonicsRule={onCompletePhonicsRule}
-      miniReviewQuestion={miniReviewQuestion}
-      onMiniReviewAnswer={onMiniReviewAnswer}
-      onMiniReviewNext={onMiniReviewNext}
+      pendingRecoverySession={pendingRecoverySession}
+      resolveRecovery={resolveRecovery}
     />
+
   );
 }

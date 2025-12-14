@@ -41,6 +41,8 @@ export enum QuestionType {
     CLASS_CHOICE = 'class-choice',
     /** 字母名称识别 */
     LETTER_NAME = 'letter-name',
+    /** 首音判断 */
+    INITIAL_SOUND = 'initial-sound',
 }
 
 /**
@@ -58,6 +60,7 @@ export const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
     [QuestionType.TONE_PERCEPTION]: '声调听辨',
     [QuestionType.CLASS_CHOICE]: '辅音分类',
     [QuestionType.LETTER_NAME]: '字母名称',
+    [QuestionType.INITIAL_SOUND]: '首音判断',
 };
 
 /**
@@ -75,6 +78,7 @@ export const QUESTION_TYPE_DIFFICULTY: Record<QuestionType, 1 | 2 | 3 | 4 | 5> =
     [QuestionType.TONE_PERCEPTION]: 4,
     [QuestionType.CLASS_CHOICE]: 3,
     [QuestionType.LETTER_NAME]: 2,
+    [QuestionType.INITIAL_SOUND]: 2,
 };
 
 /**
@@ -90,20 +94,21 @@ export type AudioRequirementType =
  * 题型所需的音频类型
  */
 export const QUESTION_TYPE_AUDIO_REQUIREMENTS: Record<
-  QuestionType,
-  AudioRequirementType
+    QuestionType,
+    AudioRequirementType
 > = {
-  [QuestionType.SOUND_TO_LETTER]: 'letter',
-  [QuestionType.LETTER_TO_SOUND]: 'letter',
-  [QuestionType.SYLLABLE]: 'syllable',
-  [QuestionType.REVERSE_SYLLABLE]: 'syllable',
-  [QuestionType.MISSING_LETTER]: 'syllable',
-  [QuestionType.ASPIRATED_CONTRAST]: 'minimal-pair',
-  [QuestionType.VOWEL_LENGTH_CONTRAST]: 'minimal-pair',
-  [QuestionType.FINAL_CONSONANT]: 'syllable',
-  [QuestionType.TONE_PERCEPTION]: 'tone-set',
-  [QuestionType.CLASS_CHOICE]: 'letter',
-  [QuestionType.LETTER_NAME]: 'letter',
+    [QuestionType.SOUND_TO_LETTER]: 'letter',
+    [QuestionType.LETTER_TO_SOUND]: 'letter',
+    [QuestionType.SYLLABLE]: 'syllable',
+    [QuestionType.REVERSE_SYLLABLE]: 'syllable',
+    [QuestionType.MISSING_LETTER]: 'syllable',
+    [QuestionType.ASPIRATED_CONTRAST]: 'minimal-pair',
+    [QuestionType.VOWEL_LENGTH_CONTRAST]: 'minimal-pair',
+    [QuestionType.FINAL_CONSONANT]: 'syllable',
+    [QuestionType.TONE_PERCEPTION]: 'tone-set',
+    [QuestionType.CLASS_CHOICE]: 'letter',
+    [QuestionType.LETTER_NAME]: 'letter',
+    [QuestionType.INITIAL_SOUND]: 'letter',
 };
 
 /**
@@ -225,4 +230,5 @@ export const QUESTION_TYPE_ICONS: Record<QuestionType, string> = {
     [QuestionType.TONE_PERCEPTION]: '🎵',
     [QuestionType.CLASS_CHOICE]: '📊',
     [QuestionType.LETTER_NAME]: '📝',
+    [QuestionType.INITIAL_SOUND]: '👂',
 };
