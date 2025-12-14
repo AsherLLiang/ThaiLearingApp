@@ -12,6 +12,10 @@ const {
   getPhonicsRuleByLessonFromDb,
 } = require('../config/alphabetLessonConfig');
 
+const MAX_NEW_LETTERS = 12; // 单课安全上限，防止 3s 超时
+const MAX_LETTER_DAILY_LIMIT = 20; // 字母模块每日学习硬上限（稳定模式）
+const MAX_GENERIC_DAILY_LIMIT = 200; // 其他模块的兜底上限，防止无界请求
+
 /**
  * 懒初始化：字母进度表
  * 兼容旧用户：如果 user_alphabet_progress 中没有记录，则插入一条默认记录
@@ -79,6 +83,7 @@ async function ensureUserVocabularyProgress(db, userId) {
  * @param {Object} params - 请求参数
  */
 async function getTodayMemories(db, params) {
+  const start = Date.now();
   const { userId, entityType, limit = 30, includeNew = true } = params;
 
   if (!userId || !entityType) {
@@ -111,9 +116,10 @@ async function getTodayMemories(db, params) {
     if (userProgress) {
       if (entityType === 'letter') {
         // 字母模块：忽略前端传入的 limit，只使用存储的 dailyLimit（如果有）
-        if (userProgress.dailyLimit) {
-          effectiveLimit = userProgress.dailyLimit;
+        if (userProgress.dailyLimit) { 
+          effectiveLimit = Math.min(userProgress.dailyLimit, MAX_LETTER_DAILY_LIMIT);
         }
+        effectiveLimit = Math.min(effectiveLimit, MAX_LETTER_DAILY_LIMIT);
       } else {
         // 其他模块：保留原有行为
         if (params.limit && params.limit !== userProgress.dailyLimit) {
@@ -123,11 +129,14 @@ async function getTodayMemories(db, params) {
               updatedAt: new Date().toISOString()
             }
           });
-          effectiveLimit = params.limit;
+          effectiveLimit = Math.min(params.limit, MAX_GENERIC_DAILY_LIMIT);
         } else if (!params.limit && userProgress.dailyLimit) {
-          effectiveLimit = userProgress.dailyLimit;
+          effectiveLimit = Math.min(userProgress.dailyLimit, MAX_GENERIC_DAILY_LIMIT);
         }
       }
+    }
+    if (entityType !== 'letter') {
+      effectiveLimit = Math.min(effectiveLimit, MAX_GENERIC_DAILY_LIMIT);
     }
 
     // 3. 获取今日复习实体
@@ -171,7 +180,7 @@ async function getTodayMemories(db, params) {
         const newEntitiesResult = await query
           .where(whereCondition)
           // 为了安全起见，仍加一个较大的上限（远大于实际字母总数）
-          .limit(200)
+          .limit(MAX_NEW_LETTERS)
           .get();
 
         newEntities = newEntitiesResult.data;
@@ -189,22 +198,22 @@ async function getTodayMemories(db, params) {
         const newEntitiesResult = await queryRef
           .orderBy('lessonNumber', 'asc')
           .orderBy('_id', 'asc')
-          .limit(remainingSlots)
+          .limit(Math.min(remainingSlots, MAX_GENERIC_DAILY_LIMIT))
           .get();
 
         newEntities = newEntitiesResult.data;
       }
 
-      for (const entity of newEntities) {
-        const memory = await getOrCreateMemory(
-          db,
-          userId,
-          entityType,
-          entity._id,
-          false
-        );
-        newMemories.push(memory);
-      }
+      const cappedNewEntities =
+        entityType === 'letter'
+          ? newEntities.slice(0, MAX_NEW_LETTERS)
+          : newEntities.slice(0, Math.min(remainingSlots, MAX_GENERIC_DAILY_LIMIT));
+
+      const memoryTasks = cappedNewEntities.map((entity) =>
+        getOrCreateMemory(db, userId, entityType, entity._id, false)
+      );
+      const memoryResults = await Promise.all(memoryTasks);
+      newMemories = memoryResults.filter(Boolean);
     }
 
     // 5. 合并 & 穿插 (Interleave)
@@ -319,6 +328,8 @@ async function getTodayMemories(db, params) {
   } catch (error) {
     console.error('getTodayMemories error:', error);
     return createResponse(false, null, error.message, 'SERVER_ERROR');
+  } finally {
+    console.log('[FunctionCost] getTodayMemories', Date.now() - start, 'ms');
   }
 }
 
