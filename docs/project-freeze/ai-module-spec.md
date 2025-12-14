@@ -1,20 +1,21 @@
 # AI 模块轻量规格说明（AI Module Spec, Lite）
 
 > 目录：`docs/project-freeze/ai-module-spec.md`  
-> 范围：**AI 辅助能力设计，不作为首发版本的必需功能**。  
-> 目标：在不阻塞当前 2 个月上线目标的前提下，冻结 AI 模块的接口与边界，方便后续迭代引入。
+> 范围：**AI 辅助能力设计，首发版本以 Lite / MVP 形式真正接入核心 4 个 Action**。  
+> 目标：在不阻塞当前 2 个月上线目标的前提下，冻结 AI 模块的接口与边界，确保首发版本具备基础 AI 能力，同时为后续版本保留扩展空间。
 
 ---
 
 ## 1. 模块概述与子模块划分
 
-AI 模块包含三个子能力，全部通过一个 CloudBase 云函数统一暴露：
+AI 模块在首发版本中包含四个子能力，全部通过一个 CloudBase 云函数统一暴露：
 
 - 云函数：`ai-engine`（名称可调整，但必须单一入口 + 多 Action）。  
-- Action 列表：
-  1. `analyzePronunciation` – AI 发音反馈引擎（最重要）；  
+- 首发必须实现的 Action 列表：
+  1. `analyzePronunciation` – AI 发音反馈引擎（首发实现 MVP 版，提供基础打分与文字反馈）；  
   2. `generateWeaknessVocabulary` – 基于弱项的词汇强化建议；  
-  3. `generateMicroReading` – 微阅读材料生成（1–2 句短文）。
+  3. `generateMicroReading` – 微阅读材料生成（1–2 句短文）；  
+  4. `explainVocabulary` – 词汇解析与补充例句（仅做解释和示例扩展，不直接修改记忆状态）。
 
 ### 1.1 与其他模块的关系
 
@@ -30,8 +31,14 @@ AI 模块包含三个子能力，全部通过一个 CloudBase 云函数统一暴
 
 ```ts
 // HTTP / CloudBase 入口规范
+type AiEngineAction =
+  | 'analyzePronunciation'
+  | 'generateWeaknessVocabulary'
+  | 'generateMicroReading'
+  | 'explainVocabulary';
+
 interface AiEngineRequest<T = unknown> {
-  action: 'analyzePronunciation' | 'generateWeaknessVocabulary' | 'generateMicroReading';
+  action: AiEngineAction;
   data: T;
 }
 
@@ -43,12 +50,21 @@ interface AiEngineResponse<T = unknown> {
 }
 ```
 
-前端调用示例：
+前端调用示例（发音反馈）：
 
 ```ts
 await callCloudFunction<AiEngineResponse<PronunciationFeedback>>('ai-engine', {
   action: 'analyzePronunciation',
-  data: { ... },
+  data: { /* AnalyzePronunciationRequest */ },
+});
+```
+
+前端调用示例（词汇解析）：
+
+```ts
+await callCloudFunction<AiEngineResponse<ExplainVocabularyResponse>>('ai-engine', {
+  action: 'explainVocabulary',
+  data: { /* ExplainVocabularyRequest */ },
 });
 ```
 
@@ -203,9 +219,54 @@ type GenerateMicroReadingResponse = MicroReading;
 
 ---
 
-## 3. 前端接入约束
+## 3. 新增 Action：explainVocabulary（基础词汇解析）
 
-### 3.1 统一调用路径
+**用途：**  
+为用户提供某个单词的详细解释和补充例句，用于“看不太懂/记不牢”时的一键解析。只作为学习辅助，不直接改变记忆策略。
+
+请求体：
+
+```ts
+interface ExplainVocabularyRequest {
+  userId: string;
+  vocabularyId?: string;   // 推荐使用 vocabulary 集合中的 _id
+  thaiWord?: string;       // 备选：当没有 id 时可直接传词形
+}
+
+interface ExplainVocabularyItem {
+  vocabularyId: string;
+  thaiWord: string;
+  meaning: string;
+  breakdown?: string;      // 拆解/记忆提示
+  extraExamples?: Array<{
+    scene?: string;
+    thai: string;
+    chinese: string;
+  }>;
+}
+
+type ExplainVocabularyResponse = ExplainVocabularyItem;
+```
+
+前端调用示例：
+
+```ts
+await callCloudFunction<AiEngineResponse<ExplainVocabularyResponse>>('ai-engine', {
+  action: 'explainVocabulary',
+  data: {
+    userId,
+    vocabularyId,
+  },
+}, {
+  endpoint: API_ENDPOINTS.AI.ENGINE.cloudbase,
+});
+```
+
+---
+
+## 4. 前端接入约束
+
+### 4.1 统一调用路径
 
 - 所有 AI 调用必须通过统一 util：
 
@@ -219,7 +280,7 @@ await callCloudFunction('ai-engine', { action, data }, {
 
 - 不允许在组件中直接写死 URL 或使用 `fetch`。
 
-### 3.2 状态管理
+### 4.2 状态管理
 
 - AI 模块不单独建立大型 Store，原则上使用：
   - 局部组件状态（如当前反馈结果）；  
@@ -229,35 +290,37 @@ await callCloudFunction('ai-engine', { action, data }, {
 interface AiUsageSnapshot {
   lastPronunciationScore?: number;
   lastMicroReadingId?: string;
+  lastExplainVocabularyId?: string;
   totalPronunciationSessions: number;
 }
 ```
 
-### 3.3 与记忆引擎的关系
+### 4.3 与记忆引擎的关系
 
 - AI 模块不直接修改 `memory_status` / `learningStatus`；  
 - 若需要把 AI 练习结果转化为记忆质量，必须走现有的 `submitMemoryResult` / `updateMastery` 接口，由前端决定什么时候提交（例如用户在 AI 练习中连续 3 次读对某个词）。
 
 ---
 
-## 4. 任务清单与优先级
+## 5. 任务清单与优先级（更新后）
 
-### 4.1 P0：接口占位与基础结构（可与首发并行，约 3–5 天）
+> 以下任务中，P0 是首发版本必须完成的范围；P1 及以后可以在首发后迭代增强。
+
+### 5.1 P0：ai-engine 云函数 + 四大 Action（首发必做，约 2–3 周）
 
 - [ ] 创建 `cloudbase/functions/ai-engine` 云函数骨架，支持 `action` 分发和 `createResponse`。  
 - [ ] 在 `API_ENDPOINTS` 中增加 `AI.ENGINE` 配置。  
 - [ ] 在 `utils/apiClient.ts` 中增加 `callAiEngine` 轻量封装（可选）。  
-- [ ] 在字母/词汇模块 UI 中预留入口按钮（点击后暂时只弹出“开发中”提示）。
+- [ ] 实现 `generateWeaknessVocabulary`，并在词汇模块完成页提供“AI 强化练习”入口。  
+- [ ] 实现 `generateMicroReading`，并与 `analyzePronunciation` 组合成一个“短文朗读 + AI 反馈”的闭环练习页面。  
+- [ ] 实现 `explainVocabulary`，在 NewWordView 或词汇详情页提供“一键 AI 解释/例句补充”入口。  
+- [ ] 实现 `analyzePronunciation` 的 MVP：录音 → 上传 COS → 调用云函数 → 返回基础评分和文字反馈，并在字母/词汇模块中各接入一个入口场景。
 
-### 4.2 P1：发音反馈 MVP（analyzePronunciation，约 2–3 周）
+### 5.2 P1：效果优化与高级能力（首发后迭代，约 2–3 周）
 
-- [ ] 前端完成录音 → 上传 COS → 调用 `analyzePronunciation` 的完整链路。  
-- [ ] 云函数内部先使用简单逻辑（例如只回传固定模板），再逐步接入真实 ASR/LLM。  
-- [ ] 在 Alphabet / 词汇模块中各选一个场景接入，验证体验。
-
-### 4.3 P2：弱项词汇强化与微阅读（约 2–3 周）
-
-- [ ] 实现 `generateWeaknessVocabulary`，前端在词汇模块完成页展示“薄弱词汇 TopN”。  
+- [ ] 基于真实用户数据迭代发音评分阈值和反馈文案。  
+- [ ] 在 AI 模块内实现更智能的题目推荐策略，与错题本和 memory-engine 更紧密结合。  
+- [ ] 扩展 `generateMicroReading` 支持更丰富的文本体裁与长度配置。  
 - [ ] 实现 `generateMicroReading`，并与 `analyzePronunciation` 组合成一个闭环练习页面。  
 - [ ] 将 AI 练习结果同步到 `learningStore` 作为统计信息。
 

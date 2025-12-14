@@ -24,6 +24,7 @@ import { callCloudFunction } from '@/src/utils/apiClient';
 import { API_ENDPOINTS } from '@/src/config/api.endpoints';
 
 import type { Letter } from '@/src/entities/types/letter.types';
+import { buildAlphabetQueue } from '@/src/utils/alphabet/buildAlphabetQueue';
 import type { ApiResponse } from '@/src/entities/types/api.types';
 import { LearningPhase } from '@/src/entities/enums/LearningPhase.enum';
 import {
@@ -76,6 +77,20 @@ export interface AlphabetLearningState {
   memoryState?: MemoryStatus;
 }
 
+// ==================== 队列项（前端构建） ====================
+
+export type AlphabetQueueSource =
+  | 'previous-round-review'
+  | 'new'
+  | 'mini-review'
+  | 'final-review'
+  | 'error-review';
+
+export interface AlphabetQueueItem extends AlphabetLearningState {
+  source: AlphabetQueueSource;
+  round: number;
+}
+
 // ==================== 后端返回结构 ====================
 
 import type {
@@ -101,9 +116,9 @@ interface TodayLettersResponse {
 interface AlphabetStoreState {
   phase: LearningPhase;
 
-  queue: AlphabetLearningState[];
+  queue: AlphabetQueueItem[];
   currentIndex: number;
-  currentItem: AlphabetLearningState | null;
+  currentItem: AlphabetQueueItem | null;
 
   completedCount: number;
   totalCount: number;
@@ -124,6 +139,7 @@ interface AlphabetStoreState {
     options?: {
       limit?: number;
       lessonId?: string;
+      round?: number;
     }
   ) => Promise<void>;
   /**
@@ -141,6 +157,7 @@ interface AlphabetStoreState {
   }) => Promise<void>;
 
   next: () => void;
+  appendQueue: (items: AlphabetQueueItem[]) => void;
   previous: () => void;
 
   reset: () => void;
@@ -229,12 +246,13 @@ export const useAlphabetStore = create<AlphabetStoreState>()(
       // 获取今日字母学习/复习队列
       initializeSession: async (
         userId: string,
-        options?: { limit?: number; lessonId?: string }
+        options?: { limit?: number; lessonId?: string; round?: number }
       ) => {
         set({ isLoading: true, error: null });
 
         const limit = options?.limit ?? 30;
         const lessonId = options?.lessonId;
+        const round = options?.round ?? 1;
 
         try {
           const response = await callCloudFunction<TodayLettersResponse>(
@@ -264,17 +282,47 @@ export const useAlphabetStore = create<AlphabetStoreState>()(
               currentItem: null,
               currentIndex: 0,
               completedCount: 0,
-            totalCount: 0,
-            isLoading: false,
-            lessonMetadata: lessonMetadata ?? null,
-            phonicsRule: phonicsRule ?? null,
-          });
-          return;
-        }
+              totalCount: 0,
+              isLoading: false,
+              lessonMetadata: lessonMetadata ?? null,
+              phonicsRule: phonicsRule ?? null,
+            });
+            return;
+          }
 
-          const queue = items.map((item) =>
+          const learningItems = items.map((item) =>
             mapLetterToState(item, item.memoryState)
           );
+
+          const queue = buildAlphabetQueue(learningItems, {
+            round, // Use passed round
+            previousRoundLetters: [], // TODO: If we want to exclude previous round letters? 
+            // The prompt said "previous-round-review" phase exists. 
+            // Logic for previousRoundLetters might be needed but standard buildAlphabetQueue might handle it if we pass em.
+            // For now, minimal change to support round number.
+          });
+
+          // 🐛 P0-3 DEBUG: 检查后端返回的队列是否包含三新一复逻辑
+          console.log('=== 后端返回的队列分析 ===');
+          console.log('总字母数:', queue.length);
+          console.log(
+            'todayQueue:',
+            queue.map((item, index) => ({
+              index,
+              letterId: item.alphabetId,
+              thaiChar: item.thaiChar,
+              isNew: item.memoryState?.isNew ?? null,
+              reviewStage: item.memoryState?.reviewStage ?? null,
+              source: item.source,
+              round: item.round,
+            }))
+          );
+
+          // 统计新字母和复习字母的分布
+          const newLetters = queue.filter((item) => item.source === 'new');
+          const reviewLetters = queue.filter((item) => item.source !== 'new');
+          console.log('新字母数量:', newLetters.length);
+          console.log('复习字母数量:', reviewLetters.length);
 
           set({
             phase: LearningPhase.IDLE,
@@ -297,7 +345,7 @@ export const useAlphabetStore = create<AlphabetStoreState>()(
                 (FileSystem as any).cacheDirectory ??
                 (FileSystem as any).documentDirectory ??
                 ''
-              }alphabet-audio/`;
+                }alphabet-audio/`;
               const dirInfo = await FileSystem.getInfoAsync(cacheDir);
               if (!dirInfo.exists) {
                 await FileSystem.makeDirectoryAsync(cacheDir, {
@@ -334,11 +382,11 @@ export const useAlphabetStore = create<AlphabetStoreState>()(
                   key: 'full' | 'syllable' | 'end' | 'letter';
                   raw?: string;
                 }> = [
-                  { key: 'full', raw: letter.fullSoundUrl },
-                  { key: 'syllable', raw: letter.syllableSoundUrl },
-                  { key: 'end', raw: letter.endSyllableSoundUrl },
-                  { key: 'letter', raw: letter.letterPronunciationUrl },
-                ];
+                    { key: 'full', raw: letter.fullSoundUrl },
+                    { key: 'syllable', raw: letter.syllableSoundUrl },
+                    { key: 'end', raw: letter.endSyllableSoundUrl },
+                    { key: 'letter', raw: letter.letterPronunciationUrl },
+                  ];
 
                 for (const entry of fieldEntries) {
                   if (!entry.raw) continue;
@@ -470,7 +518,7 @@ export const useAlphabetStore = create<AlphabetStoreState>()(
         }
       },
 
-      // 复习提交：只接受「对/错」
+      // 复习提交：只更新本地会话状态，记忆写入由 round 完成时统一处理
       submitResult: async (userId: string, isCorrect: boolean) => {
         const { currentItem, currentIndex, queue } = get();
         if (!currentItem) return;
@@ -481,24 +529,6 @@ export const useAlphabetStore = create<AlphabetStoreState>()(
           : QualityButton.FORGET;
 
         try {
-          const response = await callCloudFunction(
-            'submitMemoryResult',
-            {
-              userId,
-              entityType: 'letter',
-              entityId: currentItem.alphabetId,
-              quality, // '记得' | '陌生'
-            },
-            {
-              endpoint: API_ENDPOINTS.MEMORY.SUBMIT_MEMORY_RESULT.cloudbase,
-            }
-          );
-
-          if (!response.success) {
-            throw new Error(response.error ?? '提交失败');
-          }
-
-          // 更新前端本地会话状态
           const updatedQueue = [...queue];
           const item = updatedQueue[currentIndex];
 
@@ -522,8 +552,6 @@ export const useAlphabetStore = create<AlphabetStoreState>()(
             completedCount,
           });
 
-          // 自动跳转下一题
-          get().next();
         } catch (e: any) {
           console.error('❌ submitResult error:', e);
           set({
@@ -579,6 +607,17 @@ export const useAlphabetStore = create<AlphabetStoreState>()(
             currentItem: null,
           });
         }
+      },
+
+      // 追加队列（用于错题回顾等动态插入）
+      appendQueue: (items: AlphabetQueueItem[]) => {
+        const { queue, currentIndex } = get();
+        const newQueue = [...queue, ...items];
+        set({
+          queue: newQueue,
+          totalCount: newQueue.length,
+          currentItem: newQueue[currentIndex] ?? null,
+        });
       },
 
       // 上一个字母（主要用于调试或某些 UI）

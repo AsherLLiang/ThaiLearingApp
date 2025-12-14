@@ -13,7 +13,7 @@ import type { Letter } from './letter.types';
 
 /**
  * AlphabetLearningState - 字母学习状态
- * 
+ *
  * 用于学习会话中追踪单个字母的学习进度
  */
 export interface AlphabetLearningState {
@@ -24,19 +24,65 @@ export interface AlphabetLearningState {
     pronunciation: string;          // 发音
     example: string;                // 例词 (已包含中文)
     audioPath: string;              // 音频URL
-    
+
     // 学习进度
     currentAttempts: number;        // 当前尝试次数
     requiredAttempts: number;       // 需要达到的次数 (默认3)
     qualityHistory: number[];       // 质量评分历史 (1-5)
     isCompleted: boolean;           // 是否完成
     timestamp: string;              // 最后更新时间 (ISO格式)
-    
+
     // 后端记忆状态 (可选,来自后端getTodayMemories)
     memoryState?: MemoryStatus;
-    
+
     // ⭐ 新增: 保留完整Letter对象,方便访问所有字段
     letterData?: Letter;
+}
+
+// ==================== Phase 2 统一题型协议 ====================
+
+import type { AlphabetGameType } from '@/src/entities/enum/alphabetGameTypes';
+
+/**
+ * AlphabetQueueItem - 题目队列项
+ *
+ * 用于 Question Engine 的统一队列项协议
+ * 包含字母信息和题型信息
+ */
+export interface AlphabetQueueItem {
+    /** 字母ID */
+    letterId: string;
+
+    /** 题型 */
+    gameType: AlphabetGameType;
+
+    /** 完整的字母对象,供题目生成器使用 */
+    letter: Letter;
+}
+
+/**
+ * AlphabetQuestion - 统一题目协议
+ *
+ * 由 lettersQuestionGenerator 生成的标准题目结构
+ */
+export interface AlphabetQuestion {
+    /** 题目ID (可用于追踪) */
+    id: string;
+
+    /** 题型 */
+    gameType: AlphabetGameType;
+
+    /** 目标字母 (正确答案对应的字母对象) */
+    targetLetter: Letter;
+
+    /** 选项 (选择题使用,拼写题可为空) */
+    options?: Letter[];
+
+    /** 正确答案 (字母的 thaiChar 或其他属性值) */
+    correctAnswer: string;
+
+    /** 音频URL (如果题目需要播放音频) */
+    audioUrl?: string;
 }
 
 /**
@@ -206,3 +252,27 @@ export const ATTEMPTS_INCREMENT_MAP: Record<QualityButton, number> = {
     [QualityButton.GOOD]: 1,        // +1
     [QualityButton.EASY]: 2,        // +2 (跳过一次)
 };
+
+// ==================== Phase 2 错题统计 ====================
+
+/**
+ * RoundErrorSummary - 轮次错题统计
+ *
+ * 用于在 Round 结果页展示错误最多的字母
+ */
+export interface RoundErrorSummary {
+    /** 字母ID */
+    letterId: string;
+
+    /** 完整的字母对象 */
+    letter: Letter;
+
+    /** 错误次数 */
+    wrongCount: number;
+
+    /** 总尝试次数 */
+    totalAttempts: number;
+
+    /** 错误率 (wrongCount / totalAttempts) */
+    errorRate?: number;
+}

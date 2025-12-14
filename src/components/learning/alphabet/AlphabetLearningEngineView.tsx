@@ -1,19 +1,22 @@
 // src/components/learning/alphabet/AlphabetLearningEngineView.tsx
 
 import React from 'react';
-import { View, ActivityIndicator, TouchableOpacity, Text, SafeAreaView } from 'react-native';
+import { View, ActivityIndicator, Text, SafeAreaView, TouchableOpacity } from 'react-native';
+import { ChevronLeft } from 'lucide-react-native';
 
 import { AlphabetLearningView } from '@/src/components/learning/alphabet/AlphabetLearningView';
 import { AlphabetReviewView } from '@/src/components/learning/alphabet/AlphabetReviewView';
 import { PhonicsRuleCard } from '@/src/components/learning/alphabet/PhonicsRuleCard';
-import { MiniReviewQuestion as MiniReviewQuestionComponent } from '@/src/components/learning/alphabet/MiniReviewQuestion';
-import type { AlphabetLearningState } from '@/src/stores/alphabetStore';
+import { SessionRecoveryCard } from '@/src/components/learning/alphabet/SessionRecoveryCard';
+import { AlphabetCompletionView } from '@/src/components/learning/alphabet/AlphabetCompletionView';
+import { RoundCompletionView } from '@/src/components/learning/alphabet/RoundCompletionView';
+import type { AlphabetQueueItem } from '@/src/stores/alphabetStore';
+
 import type { Phase } from '@/src/hooks/useAlphabetLearningEngine';
 import type { QuestionType } from '@/src/entities/enums/QuestionType.enum';
 import type { Letter } from '@/src/entities/types/letter.types';
 import type {
   PhonicsRule,
-  MiniReviewQuestion as MiniReviewQuestionType,
   RoundEvaluationState,
 } from '@/src/entities/types/phonicsRule.types';
 import { Colors } from '@/src/constants/colors';
@@ -24,25 +27,54 @@ interface AlphabetLearningEngineViewProps {
   initialized: boolean;
   currentRound: number;
   roundEvaluation?: RoundEvaluationState;
-  currentItem: AlphabetLearningState | null;
+  currentItem: AlphabetQueueItem | null;
   currentQuestionType: QuestionType | null;
   letterPool?: Letter[];
   onAnswer: (isCorrect: boolean, questionType: QuestionType) => void;
   onNext: () => void;
-  onSkipYesterdayReview?: () => void;
+  // REMOVED: onStartNextRound (Manual start happens in Lesson Page now)
   onBack?: () => void;
   phonicsRule?: PhonicsRule | null;
   showPhonicsRuleCard?: boolean;
   onCompletePhonicsRule?: () => void;
-  miniReviewQuestion?: MiniReviewQuestionType | null;
-  onMiniReviewAnswer?: (isCorrect: boolean, type: any) => void;
-  onMiniReviewNext?: () => void;
+
+  // Recovery
+  pendingRecoverySession?: any;
+  resolveRecovery?: (choice: 'continue' | 'restart') => void;
+
+  // New props for Observability
+  queueIndex?: number;
+  totalQueue?: number;
+
+  onSkipYesterdayReview?: () => void;
 }
+
+// Helper to get friendly phase name
+const getPhaseLabel = (phase: Phase) => {
+  switch (phase) {
+    case 'new-learning': return 'New Letters';
+    case 'mini-review': return 'Quick Review';
+    case 'final-review': return 'Final Review';
+    case 'error-review': return 'Fix Mistakes';
+    case 'previous-round-review': return 'Warm Up';
+    case 'round-completed': return 'Round Done';
+    case 'finished': return 'Finished';
+    default: return phase;
+  }
+};
 
 function RoundHeader({
   currentRound,
+  phase,
+  queueIndex,
+  totalQueue,
+  onBack,
 }: {
   currentRound: number;
+  phase: Phase;
+  queueIndex?: number;
+  totalQueue?: number;
+  onBack?: () => void;
 }) {
   return (
     <View
@@ -50,19 +82,66 @@ function RoundHeader({
         paddingHorizontal: 16,
         paddingTop: 12,
         paddingBottom: 4,
-        flexDirection: 'row',
-        justifyContent: 'space-between',
+        flexDirection: 'column',
+        justifyContent: 'center',
         alignItems: 'center',
       }}
     >
-      <Text
-        style={{
-          fontFamily: Typography.notoSerifRegular,
-          fontSize: 14,
-          color: Colors.taupe,
-        }}
-      >
-        第 {currentRound} 轮 / 共 3 轮
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
+        {/* Left: Back Button or Spacer */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          {onBack && (
+            <TouchableOpacity onPress={onBack} hitSlop={12}>
+              <ChevronLeft size={24} color={Colors.taupe} />
+            </TouchableOpacity>
+          )}
+          <Text
+            style={{
+              fontFamily: Typography.notoSerifRegular,
+              fontSize: 14,
+              color: Colors.taupe,
+            }}
+          >
+            Round {currentRound} / 3
+          </Text>
+        </View>
+
+        {/* Visible Phase Label */}
+        <View style={{
+          backgroundColor: '#F0F0F0',
+          paddingHorizontal: 8,
+          paddingVertical: 4,
+          borderRadius: 4
+        }}>
+          <Text style={{
+            fontFamily: Typography.notoSerifBold,
+            fontSize: 12,
+            color: Colors.ink
+          }}>
+            {getPhaseLabel(phase)}
+          </Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function DebugBanner({
+  phase,
+  round,
+  queueIndex,
+  total
+}: {
+  phase: Phase,
+  round: number,
+  queueIndex: number,
+  total: number
+}) {
+  if (!__DEV__) return null;
+  return (
+    <View style={{ position: 'absolute', top: 0, left: 0, right: 0, backgroundColor: 'rgba(255, 0, 0, 0.1)', padding: 4, zIndex: 999, alignItems: 'center' }}>
+      <Text style={{ fontSize: 10, color: 'red', fontWeight: 'bold' }}>
+        [DEBUG] Round: {round} | Phase: {phase} | Q: {(queueIndex ?? 0) + 1}/{total ?? '?'}
       </Text>
     </View>
   );
@@ -78,15 +157,19 @@ export function AlphabetLearningEngineView({
   letterPool,
   onAnswer,
   onNext,
-  onSkipYesterdayReview,
+  // onStartNextRound, // Removed
   onBack,
   phonicsRule,
   showPhonicsRuleCard,
   onCompletePhonicsRule,
-  miniReviewQuestion,
-  onMiniReviewAnswer,
-  onMiniReviewNext,
+
+  pendingRecoverySession,
+  resolveRecovery,
+
+  queueIndex,
+  totalQueue,
 }: AlphabetLearningEngineViewProps) {
+
   // 加载状态
   if (!initialized || !currentItem) {
     return (
@@ -96,178 +179,73 @@ export function AlphabetLearningEngineView({
     );
   }
 
-  // 复习阶段（昨日复习、昨日补救、mini review、final review、今日补救）
-  if (
-    phase === 'yesterday-review' ||
-    phase === 'yesterday-remedy' ||
-    phase === 'today-final-review' ||
-    phase === 'today-remedy'
-  ) {
-    return (
-      <SafeAreaView style={{ flex: 1 }}>
-        <RoundHeader currentRound={currentRound} />
-        {phase === 'yesterday-review' && onSkipYesterdayReview && (
-          <View
-            style={{
-              paddingHorizontal: 16,
-              paddingTop: 12,
-              paddingBottom: 4,
-              alignItems: 'flex-end',
-            }}
-          >
-            <TouchableOpacity onPress={onSkipYesterdayReview}>
-              <Text
-                style={{
-                  fontFamily: Typography.notoSerifRegular,
-                  fontSize: 13,
-                  color: Colors.taupe,
-                }}
-              >
-                跳过昨日复习 →
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        <AlphabetReviewView
-          alphabet={currentItem}
-          letterPool={letterPool}
-          preferredType={currentQuestionType ?? undefined}
-          onAnswer={onAnswer}
-          onNext={onNext}
-          onBack={onBack}
-        />
-      </SafeAreaView>
-    );
-  }
-
-  // 今日 Mini Review 阶段：使用 MiniReviewQuestion 组件
-  if (phase === 'today-mini-review') {
-    if (miniReviewQuestion && onMiniReviewAnswer && onMiniReviewNext) {
-      return (
-        <SafeAreaView style={{ flex: 1 }}>
-          <RoundHeader currentRound={currentRound} />
-          <MiniReviewQuestionComponent
-            question={miniReviewQuestion}
-            onAnswer={onMiniReviewAnswer}
-            onNext={onMiniReviewNext}
-            onBack={onBack}
-          />
-        </SafeAreaView>
-      );
-    }
-
-    // 回退：若题目未准备好，降级为普通复习视图
-    return (
-      <SafeAreaView style={{ flex: 1 }}>
-        <AlphabetReviewView
-          alphabet={currentItem}
-          letterPool={letterPool}
-          preferredType={currentQuestionType ?? undefined}
-          onAnswer={onAnswer}
-          onNext={onNext}
-          onBack={onBack}
-        />
-      </SafeAreaView>
-    );
-  }
-
-  // 今日学习阶段
-  if (phase === 'today-learning') {
-    if (showPhonicsRuleCard && phonicsRule && onCompletePhonicsRule) {
-      return (
-        <SafeAreaView style={{ flex: 1 }}>
-          <RoundHeader currentRound={currentRound} />
-          <PhonicsRuleCard rule={phonicsRule} onComplete={onCompletePhonicsRule} />
-        </SafeAreaView>
-      );
-    }
-
-    return (
-      <SafeAreaView style={{ flex: 1 }}>
-        <RoundHeader currentRound={currentRound} />
-        <AlphabetLearningView
-          alphabet={currentItem}
-          onNext={onNext}
-          onBack={onBack}
-        />
-      </SafeAreaView>
-    );
-  }
-
-  // 完成阶段
   if (phase === 'finished') {
-    const rounds = roundEvaluation?.rounds ?? [];
-
     return (
-      <SafeAreaView style={{ flex: 1, padding: 24 }}>
-        <Text
-          style={{
-            fontFamily: Typography.notoSerifRegular,
-            fontSize: 18,
-            marginBottom: 16,
-            textAlign: 'center',
-            color: Colors.taupe,
-          }}
-        >
-          本课三轮评估已完成
-        </Text>
-
-        {rounds.length > 0 && (
-          <View style={{ marginBottom: 24 }}>
-            {rounds
-              .sort((a, b) => a.roundNumber - b.roundNumber)
-              .map((round) => (
-                <View
-                  key={round.roundNumber}
-                  style={{
-                    paddingVertical: 8,
-                    flexDirection: 'row',
-                    justifyContent: 'space-between',
-                  }}
-                >
-                  <Text
-                    style={{
-                      fontFamily: Typography.notoSerifRegular,
-                      fontSize: 16,
-                      color: Colors.taupe,
-                    }}
-                  >
-                    第 {round.roundNumber} 轮
-                  </Text>
-                  <Text
-                    style={{
-                      fontFamily: Typography.notoSerifRegular,
-                      fontSize: 16,
-                      color: round.passed ? Colors.success : Colors.error,
-                    }}
-                  >
-                    {(round.accuracy * 100).toFixed(0)}%{' '}
-                    {round.passed ? '通过' : '未达标'}
-                  </Text>
-                </View>
-              ))}
-          </View>
-        )}
-
-        <Text
-          style={{
-            fontFamily: Typography.notoSerifRegular,
-            fontSize: 14,
-            textAlign: 'center',
-            color: Colors.taupe,
-          }}
-        >
-          你可以返回课程列表继续下一课学习。
-        </Text>
-      </SafeAreaView>
+      <AlphabetCompletionView
+        roundEvaluation={roundEvaluation}
+        onFinish={onBack || (() => { })} // Fallback to no-op if onBack missing, but it handles router.back
+      />
     );
   }
 
-  // 默认加载状态
+  if (phase === 'round-completed') {
+    return (
+      <RoundCompletionView
+        roundNumber={currentRound}
+        onFinish={onBack || (() => { console.warn('No Back Handler'); })}
+      />
+    );
+  }
+
+  const source = (currentItem as any)?.source;
+  const isNewLetter = source === 'new';
+
+  const hasValidRule = !!(phonicsRule && phonicsRule.title && phonicsRule.content?.length > 0);
+
+  const shouldShowPhonicsRule =
+    isNewLetter &&
+    showPhonicsRuleCard &&
+    hasValidRule &&
+    onCompletePhonicsRule;
+
+  const renderMainView = () => {
+
+    if (shouldShowPhonicsRule) {
+      return <PhonicsRuleCard rule={phonicsRule} onComplete={onCompletePhonicsRule} />;
+    }
+
+    if (!isNewLetter) {
+      // Use currentQuestionType provided by engine, fallback to SoundToLetter if null
+      return (
+        <AlphabetReviewView
+          alphabet={currentItem}
+          letterPool={letterPool}
+          preferredType={currentQuestionType ?? undefined}
+          onAnswer={onAnswer}
+          onNext={onNext}
+          onBack={onBack}
+        />
+      );
+    }
+
+    return <AlphabetLearningView alphabet={currentItem} onNext={onNext} onBack={onBack} />;
+  };
+
   return (
-    <SafeAreaView style={{ flex: 1, justifyContent: 'center' }}>
-      <ActivityIndicator size="large" />
+    <SafeAreaView style={{ flex: 1 }}>
+      <DebugBanner phase={phase} round={currentRound} queueIndex={queueIndex ?? 0} total={totalQueue ?? 0} />
+
+      {/* 优先显示恢复弹窗 */}
+      {pendingRecoverySession && resolveRecovery && (
+        <SessionRecoveryCard
+          onContinue={() => resolveRecovery('continue')}
+          onRestart={() => resolveRecovery('restart')}
+        />
+      )}
+
+      <RoundHeader currentRound={currentRound} phase={phase} queueIndex={queueIndex} totalQueue={totalQueue} />
+
+      {renderMainView()}
     </SafeAreaView>
   );
 }

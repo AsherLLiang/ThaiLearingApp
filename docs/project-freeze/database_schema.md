@@ -43,7 +43,7 @@
 | `startingLetter` | String | 泰语首字母 | 例如 `"ก"` |
 | `pronunciation` | String | 发音/音标 | 例如 `"gà"` |
 | `partOfSpeech` | String | 词性 | 例如 `"名词"` |
-| `audioPath` | String | 单词主音频文件名 | 例如 `"7.mp3"`，前端拼接：`{source}/{audioPath}` |
+| `audioPath` | String | 单词主音频文件名 | 例如 `"7.mp3"`。所有词汇音频统一存放在 COS 根目录 `BaseThai_Audio/` 下，以书名 `source` 作为子目录前缀：`BaseThai_Audio/{source}_Audio/{audioPath}`，其中 `source` 如 `"BaseThai_1"`、`"BaseThai_2"` 等。 |
 | `exampleSentences` | Object | 例句集合 | Map 结构，详见下文 |
 | `dialogue` | Object | 对话场景 | 包含场景描述及对话内容，详见下文 |
 | `cognates` | Array\<Object\> | 同源词/相关词 | 结构见下文 |
@@ -69,7 +69,9 @@
 }
 ```
 
-> 前端播放例句音频时应直接使用 `exampleSentences[key].audioPath`，并按 `{source}/{audioPath}` 拼接完整路径。
+> 前端播放例句音频时应直接使用 `exampleSentences[key].audioPath`，并按 `BaseThai_Audio/{source}_Audio/{audioPath}` 拼接完整路径。其中：
+> - `source` 与 `vocabulary.source` 一致（如 `"BaseThai_1"`）；  
+> - `audioPath` 为该例句在对应 `{source}_Audio` 目录中的文件名或相对路径。
 
 #### 1.2.2 `dialogue` 字段结构
 
