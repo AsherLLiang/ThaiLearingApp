@@ -245,6 +245,7 @@ export const useModuleAccessStore = create<ModuleAccessStore>()((set, get) => ({
     },
 
     // ===== 获取用户进度 =====
+    // ===== 获取用户进度 =====
     /**
      * 从后端获取用户进度数据
      */
@@ -257,29 +258,43 @@ export const useModuleAccessStore = create<ModuleAccessStore>()((set, get) => ({
             return;
         }
 
-        try {
-            set({ isLoading: true, error: null });
+        set({ isLoading: true, error: null });
 
-            const result = await callCloudFunction<UserProgressResponse>(
+        // Helper to try fetch
+        const fetchProgress = async (endpoint: string) => {
+            return await callCloudFunction<UserProgressResponse>(
                 'getUserProgress',
                 { userId },
-                {
-                    endpoint: API_ENDPOINTS.MEMORY.GET_TODAY_MEMORIES.cloudbase,
-                }
+                { endpoint }
             );
+        };
+
+        try {
+            // 1. Try Primary Endpoint (memory-engine)
+            let result = await fetchProgress(API_ENDPOINTS.MEMORY.GET_TODAY_MEMORIES.cloudbase);
+
+            // 2. Fallback to Legacy Endpoint (learn-vocab) if failed
+            if (!result.success) {
+                console.warn(`⚠️ Primary endpoint failed (${result.error}), trying fallback...`);
+                result = await fetchProgress(API_ENDPOINTS.MODULE.CHECK_ACCESS.cloudbase);
+            }
 
             if (result.success && result.data) {
                 set({
                     userProgress: result.data.progress,
                     isLoading: false,
                 });
-
                 console.log('✅ 用户进度数据已更新:', result.data.progress);
             } else {
-                console.warn('⚠️ 获取用户进度失败，使用默认数据');
+                console.warn('⚠️ 获取用户进度失败 (Primary & Fallback)，使用默认数据');
+                // Don't overwrite with default if we have stale data? 
+                // Actually, for safety, maybe we should? Or keep stale?
+                // Requirements mainly imply getting fresh data. 
+                // If failed, we likely shouldn't nuke existing state if it exists, but here we usually start from null/default.
                 set({
                     userProgress: defaultProgress,
                     isLoading: false,
+                    error: result.error || 'Failed to fetch progress'
                 });
             }
         } catch (error: any) {

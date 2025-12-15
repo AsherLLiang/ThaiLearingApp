@@ -16,6 +16,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiClient } from '@/src/utils/apiClient';
 import { API_ENDPOINTS } from '@/src/config/api.endpoints';
 import { useUserStore } from './userStore';
+import { useModuleAccessStore, type ModuleType } from './moduleAccessStore';
 import type {
     Vocabulary,
     VocabularyLearningState,
@@ -45,7 +46,7 @@ interface VocabularyStore {
     submitAnswer: (quality: QualityButton) => Promise<void>;
     moveToNext: () => void;
     finishSession: () => void;
-    startCourse: (source: string) => Promise<void>; // Added: Start a course
+    startCourse: (source: string, moduleType?: ModuleType) => Promise<void>; // Modified: Accept moduleType for access check
 
     // ===== 本地进度操作 =====
     markAsMastered: (vocabularyId: string) => void;
@@ -135,7 +136,14 @@ export const useVocabularyStore = create<VocabularyStore>()(
             },
 
             // ===== 开始课程 =====
-            startCourse: async (source: string) => {
+            startCourse: async (source: string, moduleType: ModuleType = 'word') => {
+                // 🔒 Strict Safety Net: 验证是否有权限访问该模块
+                const allowed = useModuleAccessStore.getState().checkAccessLocally(moduleType);
+                if (!allowed) {
+                    console.warn(`🚫 Access Denied: Module '${moduleType}' is locked. Cannot start course '${source}'.`);
+                    return; // ⛔️ 强制中断，不执行任何切换逻辑
+                }
+
                 const { currentCourseSource, progress, courseProgressMap } = get();
 
                 // If switching to a different course, reset progress

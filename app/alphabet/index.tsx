@@ -285,80 +285,88 @@ export default function AlphabetCoursesScreen() {
           <ActivityIndicator size="large" color={Colors.thaiGold} />
         </View>
       ) : (
-        <ScrollView style={styles.scroll} contentContainerStyle={styles.inner}>
-          <ThaiPatternBackground opacity={0.12} />
+        <View style={{ flex: 1 }}>
+          <ScrollView style={styles.scroll} contentContainerStyle={styles.inner}>
+            <ThaiPatternBackground opacity={0.12} />
 
-          {lessons.map((lesson, index) => {
-            // 🔥 TODO-07: 解锁逻辑统一为 completedAlphabetLessons
-            const unlocked = isLessonUnlocked(index);
+            {lessons.map((lesson, index) => {
+              // 🔥 TODO-07: 解锁逻辑统一为 completedAlphabetLessons
+              const unlocked = isLessonUnlocked(index);
 
-            // 🔥 TODO-07: "当前课程" = 第一个已解锁但未完成的课程
-            const isCompleted = completedLessons.includes(lesson.id);
-            const isCurrent = unlocked && !isCompleted;
+              // 🔥 TODO-07: "当前课程" = 第一个已解锁但未完成的课程
+              const isCompleted = completedLessons.includes(lesson.id);
+              const isCurrent = unlocked && !isCompleted;
 
-            return (
-              <Pressable
-                key={lesson.id}
-                style={[styles.card, isCurrent && styles.activeCard]}
-                onPress={() => handleCardPress(lesson)}
-              >
-                <View style={styles.cardPressable}>
-                  <View style={styles.info}>
-                    <View style={styles.cardHeader}>
-                      <Text style={styles.title} numberOfLines={1}>
-                        {lesson.title}
-                      </Text>
-                      {isCurrent && (
-                        <View style={styles.currentBadge}>
-                          <Text style={styles.currentBadgeText}>Current</Text>
-                        </View>
-                      )}
-                    </View>
-
-                    <Text style={styles.description} numberOfLines={2}>
-                      {lesson.description}
-                    </Text>
-
-                    <View style={styles.footer}>
-                      <View style={styles.metaColumn}>
-                        <Text style={styles.lessonMeta}>
-                          {lesson.letterKeys.length} letters
+              return (
+                <Pressable
+                  key={lesson.id}
+                  style={[styles.card, isCurrent && styles.activeCard]}
+                  onPress={() => handleCardPress(lesson)}
+                >
+                  <View style={styles.cardPressable}>
+                    <View style={styles.info}>
+                      <View style={styles.cardHeader}>
+                        <Text style={styles.title} numberOfLines={1}>
+                          {lesson.title}
                         </Text>
+                        {isCurrent && (
+                          <View style={styles.currentBadge}>
+                            <Text style={styles.currentBadgeText}>Current</Text>
+                          </View>
+                        )}
                       </View>
 
-                      {/* Start Learning Button - Direct Access */}
-                      <Pressable
-                        disabled={!unlocked}
-                        style={[
-                          styles.startBtn,
-                          isCurrent && styles.activeStartBtn,
-                          !unlocked && styles.disabledStartBtn,
-                        ]}
-                        // Stop propagation to prevent opening drawer when clicking Start directly
-                        onPress={(e) => {
-                          e.stopPropagation();
-                          router.push(`/alphabet/${lesson.id}`);
-                        }}
-                      >
-                        <Text
+                      <Text style={styles.description} numberOfLines={2}>
+                        {lesson.description}
+                      </Text>
+
+                      <View style={styles.footer}>
+                        <View style={styles.metaColumn}>
+                          <Text style={styles.lessonMeta}>
+                            {lesson.letterKeys.length} letters
+                          </Text>
+                        </View>
+
+                        {/* Start Learning Button - Direct Access */}
+                        <Pressable
+                          disabled={!unlocked}
                           style={[
-                            styles.startBtnText,
-                            isCurrent && styles.activeStartBtnText,
+                            styles.startBtn,
+                            isCurrent && styles.activeStartBtn,
+                            !unlocked && styles.disabledStartBtn,
                           ]}
+                          // Stop propagation to prevent opening drawer when clicking Start directly
+                          onPress={(e) => {
+                            e.stopPropagation();
+                            router.push(`/alphabet/${lesson.id}`);
+                          }}
                         >
-                          {unlocked ? 'Start' : 'Locked'}
-                        </Text>
-                      </Pressable>
+                          <Text
+                            style={[
+                              styles.startBtnText,
+                              isCurrent && styles.activeStartBtnText,
+                            ]}
+                          >
+                            {unlocked ? 'Start' : 'Locked'}
+                          </Text>
+                        </Pressable>
+                      </View>
                     </View>
                   </View>
-                </View>
-              </Pressable>
-            );
-          })}
+                </Pressable>
+              );
+            })}
 
-          <View style={styles.unlockALLBtnContainer}>
+            <View style={{ height: 100 }} />
+          </ScrollView>
+
+          {/* Fixed Footer for Test Entry */}
+          <View style={styles.footerContainer}>
             <Pressable
-              style={styles.unlockAllBtn}
+              style={({ pressed }) => [
+                styles.unlockAllBtn,
+                pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] }
+              ]}
               onPress={() => router.push('/alphabet/test')}
             >
               <Text style={styles.unlockAllText}>
@@ -366,8 +374,7 @@ export default function AlphabetCoursesScreen() {
               </Text>
             </Pressable>
           </View>
-
-        </ScrollView>
+        </View>
       )}
 
       {/* Detail Drawer */}
@@ -523,19 +530,32 @@ const styles = StyleSheet.create({
   disabledStartBtn: {
     backgroundColor: '#E0E0E0',
   },
-  unlockALLBtnContainer: {
-    marginTop: 8,
-    alignItems: 'center',
+  // Footer Button Styles
+  footerContainer: {
+    padding: 24,
+    paddingBottom: 34, // Extra padding for safe area
+    backgroundColor: Colors.white,
+    borderTopWidth: 1,
+    borderTopColor: Colors.sand,
   },
   unlockAllBtn: {
-    paddingVertical: 12,
-    paddingHorizontal: 24,
+    width: '100%',
+    backgroundColor: Colors.ink,
+    paddingVertical: 16,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
   },
   unlockAllText: {
-    fontFamily: Typography.notoSerifBold,
-    fontSize: 14,
-    color: Colors.taupe,
-    textDecorationLine: 'underline',
+    fontFamily: Typography.playfairBold,
+    fontSize: 16,
+    color: Colors.white,
+    letterSpacing: 0.5,
   },
 });
 

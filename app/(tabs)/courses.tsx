@@ -116,37 +116,38 @@ export default function CoursesScreen() {
     });
   }, [activeCategory, searchQuery]);
 
-  const proceedToCourse = async (course: CourseWithImage) => {
-    const moduleType = getModuleType(course);
-    const needsDailySetup = !hasDailyLimit(moduleType);
 
-    await startCourse(course.source);
-    setModalVisible(false);
-    setPendingCourse(null);
-
-    router.push({
-      pathname: needsDailySetup ? '/learning/setup' : '/learning',
-      params: {
-        module: moduleType,
-        source: course.source,
-      },
-    });
-  };
 
   // ⭐ 统一的 Start Learning 逻辑：接收 course，返回一个点击 handler
   const handleStartLearning = (course: CourseWithImage) => {
     return () => {
       const moduleType = getModuleType(course);
+
+      // 🔒 Double Check: UI Should be disabled, but logic must be safe
+      const isLocked = moduleType !== 'letter' && !useModuleAccessStore.getState().checkAccessLocally(moduleType);
+      if (isLocked) {
+        console.warn('Course locked, double-check start prevented');
+        return;
+      }
+
       const needsDailySetup = !hasDailyLimit(moduleType);
 
       // ✅ 同一个课程：直接按照是否已设置日计划进行跳转
       if (currentCourseSource === course.source) {
-        router.push({
-          pathname: needsDailySetup ? '/learning/setup' : '/learning',
-          params: {
-            module: moduleType,
-            source: course.source,
-          },
+        // Pass moduleType to startCourse for strict check
+        startCourse(course.source, moduleType).then(() => {
+          // Special routing for Alphabet, ignoring daily setup check
+          if (moduleType === 'letter') {
+            router.push('/alphabet');
+          } else {
+            router.push({
+              pathname: needsDailySetup ? '/learning/setup' : '/learning',
+              params: {
+                module: moduleType,
+                source: course.source,
+              },
+            });
+          }
         });
         return;
       }
@@ -160,6 +161,28 @@ export default function CoursesScreen() {
   const confirmSwitchCourse = async () => {
     if (pendingCourse) {
       await proceedToCourse(pendingCourse);
+    }
+  };
+
+  const proceedToCourse = async (course: CourseWithImage) => {
+    const moduleType = getModuleType(course);
+    const needsDailySetup = !hasDailyLimit(moduleType);
+
+    await startCourse(course.source, moduleType);
+    setModalVisible(false);
+    setPendingCourse(null);
+
+    // Special routing for Alphabet
+    if (moduleType === 'letter') {
+      router.push('/alphabet');
+    } else {
+      router.push({
+        pathname: needsDailySetup ? '/learning/setup' : '/learning',
+        params: {
+          module: moduleType,
+          source: course.source,
+        },
+      });
     }
   };
 
@@ -217,9 +240,13 @@ export default function CoursesScreen() {
       >
         {/* 所有课程（包括AlphabetCourseCard和单词课程） */}
         {filteredCourses.map((course) => {
-      const isCurrent = currentCourseSource === course.source;
-      const moduleType = getModuleType(course);
-      const progress = getCourseProgress(course);
+          const isCurrent = currentCourseSource === course.source;
+          const moduleType = getModuleType(course);
+          const progress = getCourseProgress(course);
+
+          // 🔒 Calculation: Alphabet always unlocked, others check store
+          const { checkAccessLocally } = useModuleAccessStore.getState();
+          const isLocked = moduleType !== 'letter' && !checkAccessLocally(moduleType);
 
           // 字母课程：使用 AlphabetCourseCard，直接进入 /alphabet 流程
           if (course.category === 'letter') {
@@ -229,6 +256,7 @@ export default function CoursesScreen() {
                 course={course}
                 isCurrent={isCurrent}
                 progress={progress}
+                onStart={handleStartLearning(course)} // Connected handleStartLearning
               />
             );
           }
@@ -241,6 +269,7 @@ export default function CoursesScreen() {
               isCurrent={isCurrent}
               progress={progress}
               onStart={handleStartLearning(course)}
+              isLocked={isLocked} // Pass locked state
             />
           );
         })}

@@ -21,20 +21,28 @@ interface AlphabetCourseCardProps {
     completed: number;
     total: number;
   };
+  onStart: () => void;
 }
 
-export function AlphabetCourseCard({ course, isCurrent, progress }: AlphabetCourseCardProps) {
+export function AlphabetCourseCard({ course, isCurrent, progress, onStart }: AlphabetCourseCardProps) {
   const router = useRouter();
   const { t } = useTranslation();
 
-  const progressPercent =
-    progress && progress.total > 0
-      ? Math.min(100, Math.round((progress.completed / progress.total) * 100))
-      : null;
+  const progressPercent = (() => {
+    if (!progress) {
+      return null;
+    }
+    const completed = progress.completed || 0;
+    const total = progress.total || 44; // Default total if not provided
+    if (total === 0) {
+      return 0; // Or null, depending on desired behavior for 0 total
+    }
+    return Math.min(100, Math.round((completed / total) * 100));
+  })();
 
   return (
     <View style={[styles.card, isCurrent && styles.activeCard]}>
-      <View style={styles.cardPressable}>
+      <Pressable style={styles.cardPressable} onPress={onStart}>
         <Image source={course.imageSource} style={styles.image} />
         <View style={styles.info}>
           <View style={styles.header}>
@@ -69,7 +77,10 @@ export function AlphabetCourseCard({ course, isCurrent, progress }: AlphabetCour
             {/* Start Learning 按钮 */}
             <Pressable
               style={[styles.startBtn, isCurrent && styles.activeStartBtn]}
-              onPress={() => router.push('/alphabet')}
+              onPress={(e) => {
+                e.stopPropagation();
+                onStart();
+              }}
             >
               <Text style={[styles.startBtnText, isCurrent && styles.activeStartBtnText]}>
                 {isCurrent ? t('courses.continue', '继续学习') : t('courses.startBtnText', '开始学习')}
@@ -77,7 +88,7 @@ export function AlphabetCourseCard({ course, isCurrent, progress }: AlphabetCour
             </Pressable>
           </View>
         </View>
-      </View>
+      </Pressable>
     </View>
   );
 }
