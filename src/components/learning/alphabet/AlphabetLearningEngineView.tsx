@@ -56,7 +56,8 @@ const getPhaseLabel = (phase: Phase) => {
     case 'mini-review': return 'Quick Review';
     case 'final-review': return 'Final Review';
     case 'error-review': return 'Fix Mistakes';
-    case 'previous-round-review': return 'Warm Up';
+    // 🔥 TODO-03: 统一使用 'previous-review'
+    case 'previous-review': return 'Warm Up';
     case 'round-completed': return 'Round Done';
     case 'finished': return 'Finished';
     default: return phase;
@@ -198,7 +199,8 @@ export function AlphabetLearningEngineView({
   }
 
   const source = (currentItem as any)?.source;
-  const isNewLetter = source === 'new';
+  // 🔥 TODO-03: 统一使用 'new-learning'
+  const isNewLetter = source === 'new-learning';
 
   const hasValidRule = !!(phonicsRule && phonicsRule.title && phonicsRule.content?.length > 0);
 

@@ -19,8 +19,9 @@ import { Alert, AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 
-// ✅ 修复: Phase 类型定义
-export type Phase = AlphabetQueueSource | 'finished' | 'new-learning' | 'round-completed';
+// 🔥 TODO-03: Phase = AlphabetQueueSource + 特殊状态
+// Phase 仅用于 UI 展示，不参与执行决策
+export type Phase = AlphabetQueueSource | 'finished' | 'round-completed';
 
 const SESSION_STORAGE_KEY = '@alphabet_learning_session';
 
@@ -53,26 +54,25 @@ export function useAlphabetLearningEngine(lessonId: string) {
   } = useAlphabetStore();
 
   const { currentUser } = useUserStore();
-  const { markAlphabetLessonCompleted } = useModuleAccessStore();
+  const { markAlphabetLessonCompleted, userProgress } = useModuleAccessStore();
   const userId = currentUser?.userId ?? 'test-user';
 
   const [initialized, setInitialized] = useState(false);
   // REMOVED explicit phase state. Phase is now derived.
   // const [phase, setPhase] = useState<Phase>('finished'); 
 
-  // Internal state to track if we explicitly finished the lesson (all rounds done)
+  // 🔥 TODO-03: 以下状态仅用于 UI 展示，不参与执行决策 (legacy UI only)
   const [isLessonFinished, setIsLessonFinished] = useState(false);
-
-  // Explicit phase overrides everything (e.g. 'round-completed')
   const [explicitPhase, setExplicitPhase] = useState<Phase | null>(null);
 
   // ===== Phase Logic (Derived) =====
+  // 🔥 TODO-03: derivedPhase 仅用于 UI 展示，不参与执行决策 (legacy UI only)
   const derivedPhase: Phase = useMemo(() => {
     if (explicitPhase) return explicitPhase;
     if (isLessonFinished) return 'finished';
     if (!currentItem) return 'finished';
 
-    if (currentItem.source === 'new') return 'new-learning';
+    // 直接返回 source，不再进行映射转换
     return currentItem.source;
   }, [currentItem, isLessonFinished, explicitPhase]);
 
@@ -120,9 +120,10 @@ export function useAlphabetLearningEngine(lessonId: string) {
   }, []);
 
   const persistSessionState = useCallback(async () => {
-    // 🔥 Bug 1 修复：round-completed 和 finished 阶段都不应写入 in-progress
-    if (!lessonId || !initialized || derivedPhase === 'finished' || derivedPhase === 'round-completed') {
-      console.log('💾 [Persist] Clearing session (phase:', derivedPhase, ')');
+    // 🔥 TODO-03: 不依赖 derivedPhase，改为判断 isLessonFinished 和 currentItem
+    // 当课程结束或没有当前题目时，清除 session
+    if (!lessonId || !initialized || isLessonFinished || !currentItem) {
+      console.log('💾 [Persist] Clearing session (finished or no item)');
       await writeSessionState(null);
       return;
     }
@@ -136,14 +137,14 @@ export function useAlphabetLearningEngine(lessonId: string) {
     const sessionData: SessionRecoveryState = {
       lessonId,
       round: currentRound,
-      phase: (isLessonFinished ? 'finished' : (currentItem?.source || 'new')) as Phase, // Fallback for session storage
+      phase: currentItem.source, // 🔥 TODO-03: 直接使用 source，不再映射
       answeredCount,
       currentIndex, // 🔥 Bug 3 修复：保存 currentIndex
       status: 'in-progress', // 默认状态为 in-progress
     };
     console.log('💾 [Persist] Writing session:', sessionData);
     await writeSessionState(sessionData);
-  }, [lessonId, initialized, isLessonFinished, currentItem, currentRound, answeredCount, currentIndex, writeSessionState, derivedPhase, hasStartedAnswering]);
+  }, [lessonId, initialized, isLessonFinished, currentItem, currentRound, answeredCount, currentIndex, writeSessionState, hasStartedAnswering]);
 
   const clearStoredSessionState = useCallback(async () => {
     await writeSessionState(null);
@@ -335,14 +336,12 @@ export function useAlphabetLearningEngine(lessonId: string) {
 
   // ===== Today Learning 首次显示拼读规则 =====
   useEffect(() => {
-    const isNew = currentItem?.source === 'new';
+    // 🔥 TODO-03: 统一使用 'new-learning'
+    const isNew = currentItem?.source === 'new-learning';
     if (isNew && !phonicsRuleShown && phonicsRule && learnedCount === 0) {
       setShowPhonicsRuleCard(true);
     }
-    if (isNew && !phonicsRuleShown && phonicsRule && learnedCount === 0) {
-      setShowPhonicsRuleCard(true);
-    }
-  }, [derivedPhase, phonicsRuleShown, phonicsRule, learnedCount, currentItem]);
+  }, [phonicsRuleShown, phonicsRule, learnedCount, currentItem]);
 
   const handleCompletePhonicsRule = useCallback(() => {
     setShowPhonicsRuleCard(false);
@@ -419,22 +418,24 @@ export function useAlphabetLearningEngine(lessonId: string) {
 
   // ===== Question Type Logic (Engine Driven) =====
 
-  // We determine the question type based on Phase and potentially history.
-  // This ensures specific phases have specific types.
+  // 🔥 TODO-03: 题型选择只能基于 currentItem.source，不依赖 Phase
   const currentQuestionType = useMemo<QuestionType | null>(() => {
     if (!currentItem) return null;
 
+    const source = currentItem.source;
+
     // 1. New Learning / Mini Review: ALLOW Simple Types
-    if (derivedPhase === 'new-learning') {
+    if (source === 'new-learning') {
       return QuestionType.SOUND_TO_LETTER;
     }
 
-    if (derivedPhase === 'mini-review') {
+    if (source === 'mini-review') {
       return Math.random() > 0.5 ? QuestionType.SOUND_TO_LETTER : QuestionType.LETTER_TO_SOUND;
     }
 
     // 2. Strict Review Phases: FORBID Simple Types (where possible)
-    if (derivedPhase === 'previous-round-review' || derivedPhase === 'final-review') {
+    // 🔥 TODO-03: 统一使用 'previous-review'
+    if (source === 'previous-review' || source === 'final-review') {
       const complexTypes = [];
 
       // Only allow CONSONANT_CLASS for Consonants
@@ -463,7 +464,7 @@ export function useAlphabetLearningEngine(lessonId: string) {
       return complexTypes[hash % complexTypes.length];
     }
 
-    if (derivedPhase === 'error-review') {
+    if (source === 'error-review') {
       // Error Review: Retry what they failed.
       // If we don't know what they failed, default to SOUND_TO_LETTER for safety?
       // Or make it strict if it was a strict phase failure?
@@ -472,7 +473,7 @@ export function useAlphabetLearningEngine(lessonId: string) {
     }
 
     return QuestionType.SOUND_TO_LETTER;
-  }, [derivedPhase, currentItem]);
+  }, [currentItem]);
 
 
   // ===== 下一题 =====
@@ -483,8 +484,10 @@ export function useAlphabetLearningEngine(lessonId: string) {
       return;
     }
 
-    if (explicitPhase === 'round-completed') {
-      console.warn('⚠️ Already in round-completed, wait for manual transition.');
+    // 🔥 TODO-03: 不依赖 explicitPhase，改为判断 currentItem
+    // 当轮次完成后，currentItem 为 null，无法继续答题
+    if (!currentItem) {
+      console.warn('⚠️ No current item, round may be completed.');
       return;
     }
 
@@ -501,7 +504,8 @@ export function useAlphabetLearningEngine(lessonId: string) {
 
     setIsProcessingNext(true);
 
-    const isCurrentNew = currentItem?.source === 'new';
+    // 🔥 TODO-03: 统一使用 'new-learning'
+    const isCurrentNew = currentItem?.source === 'new-learning';
     // STRICT Condition: End of Queue
     const atEnd = currentIndex >= queue.length - 1;
 
@@ -549,7 +553,7 @@ export function useAlphabetLearningEngine(lessonId: string) {
         setIsProcessingNext(false);
       }, 300);
     }
-  }, [derivedPhase, currentItem, learnedCount, nextInQueue, queue, currentRound, isProcessingNext, currentIndex, wrongAnswers, appendQueue, explicitPhase]); // Removed recursive submitRoundResults dep if possible, but it's needed.
+  }, [currentItem, learnedCount, nextInQueue, queue, currentRound, isProcessingNext, currentIndex, wrongAnswers, appendQueue]); // 🔥 TODO-03: 移除 derivedPhase 和 explicitPhase 依赖
 
   // ✅ 修复: submitRoundResults
   const submitRoundResults = useCallback(async () => {
@@ -559,38 +563,63 @@ export function useAlphabetLearningEngine(lessonId: string) {
     const correctCount = Math.max(0, totalQuestions - wrongAnswers.size); // Rough calc
 
     const accuracy = totalQuestions > 0 ? correctCount / totalQuestions : 0;
+    const passed = wrongAnswers.size === 0; // Round passes only if no errors
 
-    // 1. Submit to Backend
-    await submitRoundToStore({
-      userId,
-      lessonId,
-      roundNumber: currentRound,
-      totalQuestions,
-      correctCount,
-      accuracy: 1, // Hack: If they cleared error queue, they technically "passed".
-    });
+    // 🔥 TODO-05: 判定 mode，free-play 模式下禁止任何写入
+    const mode = userProgress?.letterCompleted ? 'free-play' : 'learning';
 
-    // 2. Log
-    console.log(`✅ Round ${currentRound} Submit Success.`);
+    if (mode === 'learning') {
+      // ===== learning 模式：正常写入进度 =====
 
-    // 3. 🔥 推进到下一轮（Round1 → Round2 → Round3）
-    const nextRound = Math.min(currentRound + 1, 3) as 1 | 2 | 3;
+      // 1. Submit to Backend
+      await submitRoundToStore({
+        userId,
+        lessonId,
+        roundNumber: currentRound,
+        totalQuestions,
+        correctCount,
+        accuracy: 1, // Hack: If they cleared error queue, they technically "passed".
+      });
 
-    // 🔥 先更新 Store 的 currentRound (避免 useEffect 同步时覆盖)
-    setStoreCurrentRound(nextRound);
-    console.log(`🔄 Store currentRound updated: ${nextRound}`);
+      // 2. Log
+      console.log(`✅ Round ${currentRound} Submit Success.`);
 
-    // 🔥 再更新 Hook 的本地状态
-    setCurrentRound(nextRound);
+      // 🔥 TODO-04: Alphabet → moduleAccessStore 接线
+      // 仅在 learning 模式 + Round3 完成 + 通过 时，标记课程完成
+      if (currentRound === 3 && passed) {
+        console.log('📚 Lesson completed! Marking in moduleAccessStore...');
+        markAlphabetLessonCompleted(lessonId);
+        console.log('✅ Lesson marked as completed in moduleAccessStore');
+      }
 
-    // 4. 🔥 显式清除 session（避免下次进入时弹出恢复弹窗）
-    await clearStoredSessionState();
-    console.log('🗑️ Round completed, session cleared');
+      // 3. 🔥 推进到下一轮（Round1 → Round2 → Round3）
+      const nextRound = Math.min(currentRound + 1, 3) as 1 | 2 | 3;
 
-    // 5. ENTER 'round-completed' PHASE
-    setExplicitPhase('round-completed');
+      // 🔥 先更新 Store 的 currentRound (避免 useEffect 同步时覆盖)
+      setStoreCurrentRound(nextRound);
+      console.log(`🔄 Store currentRound updated: ${nextRound}`);
 
-  }, [currentRound, queue.length, wrongAnswers, userId, lessonId, submitRoundToStore, clearStoredSessionState, setStoreCurrentRound]);
+      // 🔥 再更新 Hook 的本地状态
+      setCurrentRound(nextRound);
+
+      // 4. 🔥 显式清除 session（避免下次进入时弹出恢复弹窗）
+      await clearStoredSessionState();
+      console.log('🗑️ Round completed, session cleared');
+
+      // 5. ENTER 'round-completed' PHASE
+      setExplicitPhase('round-completed');
+    } else {
+      // ===== free-play 模式：只读学习，不写入任何进度 =====
+      console.log(`🎮 free-play 模式：Round 完成，但不写入进度`);
+
+      // 仅清除 session，不推进 round
+      await clearStoredSessionState();
+
+      // 显示完成 UI
+      setExplicitPhase('round-completed');
+    }
+
+  }, [currentRound, queue.length, wrongAnswers, userId, lessonId, submitRoundToStore, clearStoredSessionState, setStoreCurrentRound, userProgress, markAlphabetLessonCompleted, setCurrentRound, setExplicitPhase]);
 
   // REMOVED: handleStartNextRound. 
   // User must exit to Lesson page and restart to trigger next round init.

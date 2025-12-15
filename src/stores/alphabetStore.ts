@@ -48,6 +48,8 @@ export interface MemoryStatus {
 
 // ==================== 会话中的字母状态 ====================
 
+export type AlphabetLearningMode = 'learning' | 'free-play';
+
 export interface AlphabetLearningState {
   // 基础
   alphabetId: string;
@@ -79,12 +81,13 @@ export interface AlphabetLearningState {
 
 // ==================== 队列项（前端构建） ====================
 
+// 🔥 TODO-03: 统一 source 命名，与 ALPHABET_MODULE_IMPLEMENTATION_SKELETON.md 对齐
 export type AlphabetQueueSource =
-  | 'previous-round-review'
-  | 'new'
-  | 'mini-review'
-  | 'final-review'
-  | 'error-review';
+  | 'previous-review'      // 之前轮次的复习
+  | 'new-learning'         // 新字母学习
+  | 'mini-review'          // 迷你复习（每3个字母）
+  | 'final-review'         // 最终复习
+  | 'error-review';        // 错题复习
 
 export interface AlphabetQueueItem extends AlphabetLearningState {
   source: AlphabetQueueSource;
@@ -264,26 +267,32 @@ export const useAlphabetStore = create<AlphabetStoreState>()(
 
         // 🔥 从后端读取当前轮次（如果未显式传入）
         let round = options?.round ?? 1;
+        let mode: AlphabetLearningMode = 'learning';
 
-        if (!options?.round && lessonId) {
-          try {
-            // 读取 user_alphabet_progress 中的 currentRound
-            const progressCol = await callCloudFunction<any>(
-              'getUserProgress',
-              { userId, entityType: 'letter' },
-              { endpoint: MODULE_ENDPOINTS.GET_USER_PROGRESS.cloudbase }
-            );
+        try {
+          // 读取 user_alphabet_progress，统一判定 currentRound 与 mode
+          const progressCol = await callCloudFunction<any>(
+            'getUserProgress',
+            { userId, entityType: 'letter' },
+            { endpoint: MODULE_ENDPOINTS.GET_USER_PROGRESS.cloudbase }
+          );
 
-            // 🔥 从 user_alphabet_progress 读取 currentRound
-            if (progressCol.success && progressCol.data?.progress?.currentRound) {
-              round = progressCol.data.progress.currentRound;
+          if (progressCol.success && progressCol.data?.progress) {
+            const progress = progressCol.data.progress;
+            if (!options?.round && progress.currentRound) {
+              round = progress.currentRound;
               console.log(`✅ 从后端读取到 currentRound: ${round}`);
-            } else {
+            } else if (!progress.currentRound) {
               console.log(`⚠️ 后端未返回 currentRound，使用默认值: 1`);
             }
-          } catch (e) {
-            console.warn('⚠️ 读取 currentRound 失败，使用默认值 1:', e);
+
+            mode = progress.letterCompleted ? 'free-play' : 'learning';
+            console.log(`✅ AlphabetLearningMode: ${mode}`);
+          } else {
+            console.log('⚠️ 未获取到 progress，默认使用 learning 模式');
           }
+        } catch (e) {
+          console.warn('⚠️ 读取 user_alphabet_progress 失败，使用默认值:', e);
         }
 
         try {
@@ -327,13 +336,14 @@ export const useAlphabetStore = create<AlphabetStoreState>()(
             mapLetterToState(item, item.memoryState)
           );
 
-          // 🔥 Round2/3 时，全部字母都是复习字母
-          const previousRoundLetters = round > 1 ? learningItems : [];
-          const newLettersForQueue = round === 1 ? learningItems : [];
+          const shouldIncludePrevious = mode === 'learning' && round > 1;
+          const previousRoundLetters = shouldIncludePrevious ? learningItems : [];
 
-          const queue = buildAlphabetQueue(newLettersForQueue, {
+          const queue = buildAlphabetQueue({
+            lessonLetters: learningItems,
             round,
-            previousRoundLetters, // 🔥 Round2/3 传递全部字母作为复习内容
+            mode,
+            previousRoundLetters,
           });
 
           // 🐛 P0-3 DEBUG: 检查后端返回的队列是否包含三新一复逻辑
@@ -353,8 +363,9 @@ export const useAlphabetStore = create<AlphabetStoreState>()(
           );
 
           // 统计新字母和复习字母的分布
-          const newLettersInQueue = queue.filter((item) => item.source === 'new');
-          const reviewLetters = queue.filter((item) => item.source !== 'new');
+          // 🔥 TODO-03: 统一使用 'new-learning'
+          const newLettersInQueue = queue.filter((item) => item.source === 'new-learning');
+          const reviewLetters = queue.filter((item) => item.source !== 'new-learning');
           console.log('新字母数量:', newLettersInQueue.length);
           console.log('复习字母数量:', reviewLetters.length);
 
