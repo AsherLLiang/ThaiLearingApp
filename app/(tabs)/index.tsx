@@ -144,45 +144,58 @@ export default function HomeScreen() {
 
           {/* Hero Progress Card */}
           <View>
-            <Pressable
-              style={styles.heroCard}
-              onPress={() => {
-                if (currentCourse.module) {
-                  router.push({
-                    pathname: currentCourse.route,
-                    params: { module: currentCourse.module }
-                  });
-                } else {
-                  router.push(currentCourse.route);
-                }
-              }}
-            >
-              <View style={styles.heroContent}>
-                <View style={styles.heroTopRow}>
-                  <View>
-                    <Text style={styles.courseLabel}>{t('home.currentCourse')}</Text>
-                    <Text style={styles.courseName}>{currentCourse.name}</Text>
-                  </View>
-                  <View style={styles.levelBadge}>
-                    <Text style={styles.levelText}>{currentCourse.level}</Text>
-                  </View>
-                </View>
+            {(() => {
+              // 🔒 Lock Check for Hero Card
+              const { checkAccessLocally } = useModuleAccessStore.getState();
+              const isHeroLocked = currentCourse.module !== 'letter' && !checkAccessLocally(currentCourse.module);
 
-                <View style={styles.heroBottomRow}>
-                  <View style={styles.heroTextContainer}>
-                    <Text style={styles.thaiText}>{currentCourse.thaiText}</Text>
-                    <Text style={styles.translationText}>{currentCourse.translation}</Text>
+              return (
+                <Pressable
+                  style={[styles.heroCard, isHeroLocked && { opacity: 0.8, backgroundColor: '#333' }]} // Visual feedback
+                  disabled={isHeroLocked}
+                  onPress={() => {
+                    if (isHeroLocked) return;
+
+                    if (currentCourse.module) {
+                      router.push({
+                        pathname: currentCourse.route,
+                        params: { module: currentCourse.module }
+                      });
+                    } else {
+                      router.push(currentCourse.route);
+                    }
+                  }}
+                >
+                  <View style={styles.heroContent}>
+                    <View style={styles.heroTopRow}>
+                      <View>
+                        <Text style={styles.courseLabel}>{t('home.currentCourse')}</Text>
+                        <Text style={styles.courseName}>
+                          {currentCourse.name} {isHeroLocked ? '(Locked)' : ''}
+                        </Text>
+                      </View>
+                      <View style={styles.levelBadge}>
+                        <Text style={styles.levelText}>{currentCourse.level}</Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.heroBottomRow}>
+                      <View style={styles.heroTextContainer}>
+                        <Text style={styles.thaiText}>{currentCourse.thaiText}</Text>
+                        <Text style={styles.translationText}>{currentCourse.translation}</Text>
+                      </View>
+
+                      <View style={[styles.playButtonLarge, isHeroLocked && { backgroundColor: '#666' }]}>
+                        <Play size={20} fill={isHeroLocked ? '#999' : Colors.ink} color={isHeroLocked ? '#999' : Colors.ink} />
+                      </View>
+                    </View>
                   </View>
 
-                  <View style={styles.playButtonLarge}>
-                    <Play size={20} fill={Colors.ink} color={Colors.ink} />
-                  </View>
-                </View>
-              </View>
-
-              <View style={styles.heroGradient1} />
-              <View style={styles.heroGradient2} />
-            </Pressable>
+                  <View style={styles.heroGradient1} />
+                  <View style={styles.heroGradient2} />
+                </Pressable>
+              );
+            })()}
           </View>
 
           {/* Stats Grid */}

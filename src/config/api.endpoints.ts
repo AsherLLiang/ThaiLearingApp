@@ -244,12 +244,12 @@ export const ALPHABET_ENDPOINTS = {
   } as EndpointMap,
 
   GET_TEST: {
-    cloudbase: '/vocabulary-get-alphabet-test',
+    cloudbase: 'alphabet',
     java: '/api/vocabulary/alphabets/test'
   } as EndpointMap,
 
   SUBMIT_TEST: {
-    cloudbase: '/vocabulary-submit-alphabet-test',
+    cloudbase: 'alphabet',
     java: '/api/vocabulary/alphabets/test/submit'
   } as EndpointMap,
 };

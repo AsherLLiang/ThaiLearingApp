@@ -24,6 +24,7 @@ interface CourseCardProps {
         completed: number;
         total: number;
     };
+    isLocked?: boolean; // Added: Locked state prop
 }
 
 export function CourseCard({
@@ -32,6 +33,7 @@ export function CourseCard({
     onStart,
     onCardPress,
     progress,
+    isLocked = false, // Default to unlocked
 }: CourseCardProps) {
     const { t } = useTranslation();
 
@@ -42,16 +44,28 @@ export function CourseCard({
     return (
         <Pressable
             key={course.id}
-            style={[styles.card, isCurrent && styles.activeCard]}
-            onPress={onCardPress || onStart}
+            style={[
+                styles.card,
+                (isCurrent && !isLocked) && styles.activeCard,
+                // Removed: isLocked && styles.lockedCard (User requested normal look)
+            ]}
+            onPress={isLocked ? undefined : (onCardPress || onStart)} // Still disable press if locked
+            disabled={isLocked}
         >
-            <Image source={course.imageSource} style={styles.image} />
+            <Image
+                source={course.imageSource}
+                style={styles.image} // Removed: isLocked && styles.lockedImage
+            />
             <View style={styles.info}>
                 <View style={styles.header}>
-                    <Text style={styles.title} numberOfLines={1}>{course.title}</Text>
-                    <View style={styles.levelBadge}>
-                        <Text style={styles.levelText}>{course.level}</Text>
-                    </View>
+                    <Text style={styles.title} numberOfLines={1}>
+                        {course.title}
+                    </Text>
+                    {!isLocked && (
+                        <View style={styles.levelBadge}>
+                            <Text style={styles.levelText}>{course.level}</Text>
+                        </View>
+                    )}
                 </View>
 
                 <Text style={styles.description} numberOfLines={2}>
@@ -59,30 +73,46 @@ export function CourseCard({
                 </Text>
 
                 <View style={styles.footer}>
+                    {/* Meta Info (Hidden or dimmed when locked) */}
                     <View style={styles.metaColumn}>
-                        {progressPercent !== null ? (
-                            <>
-                                <View style={styles.progressBar}>
-                                    <View style={[styles.progressFill, { width: `${progressPercent}%` }]} />
-                                </View>
-                                <Text style={styles.metaText}>
-                                    {progress?.completed}/{progress?.total} ({progressPercent}%)
-                                </Text>
-                            </>
-                        ) : (
-                            <Text style={styles.metaText}>{course.lessons} 课时</Text>
+                        {!isLocked && (
+                            progressPercent !== null ? (
+                                <>
+                                    <View style={styles.progressBar}>
+                                        <View style={[styles.progressFill, { width: `${progressPercent}%` }]} />
+                                    </View>
+                                    <Text style={styles.metaText}>
+                                        {progress?.completed}/{progress?.total} ({progressPercent}%)
+                                    </Text>
+                                </>
+                            ) : (
+                                <Text style={styles.metaText}>{course.lessons} 课时</Text>
+                            )
                         )}
                     </View>
 
                     <Pressable
-                        style={[styles.startBtn, isCurrent && styles.activeStartBtn]}
+                        style={[
+                            styles.startBtn,
+                            isCurrent && styles.activeStartBtn,
+                            isLocked && styles.lockedBtn // Locked button style
+                        ]}
                         onPress={(e) => {
+                            if (isLocked) return;
                             e.stopPropagation();
                             onStart();
                         }}
+                        disabled={isLocked}
                     >
-                        <Text style={[styles.startBtnText, isCurrent && styles.activeStartBtnText]}>
-                            {isCurrent ? t('courses.continue', '继续学习') : t('courses.startBtnText', '开始学习')}
+                        <Text style={[
+                            styles.startBtnText,
+                            isCurrent && styles.activeStartBtnText,
+                            isLocked && styles.lockedBtnText // Locked text style
+                        ]}>
+                            {isLocked
+                                ? t('courses.locked', '未解锁')
+                                : (isCurrent ? t('courses.continue', '继续学习') : t('courses.startBtnText', '开始学习'))
+                            }
                         </Text>
                     </Pressable>
                 </View>
@@ -111,10 +141,20 @@ const styles = StyleSheet.create({
         borderWidth: 2,
         backgroundColor: '#FFFCF5',
     },
+    lockedCard: {
+        backgroundColor: '#F5F5F5',
+        borderColor: '#E0E0E0',
+        elevation: 0,
+        shadowOpacity: 0,
+    },
     image: {
         width: 110,
         height: '100%',
         resizeMode: 'cover',
+    },
+    lockedImage: {
+        opacity: 0.5,
+        tintColor: 'gray', // Grayscale effect
     },
     info: {
         flex: 1,
@@ -133,6 +173,9 @@ const styles = StyleSheet.create({
         fontFamily: Typography.notoSerifBold,
         fontSize: 16,
         color: Colors.ink,
+    },
+    lockedText: {
+        color: '#A0A0A0',
     },
     levelBadge: {
         paddingHorizontal: 6,
@@ -188,6 +231,9 @@ const styles = StyleSheet.create({
     activeStartBtn: {
         backgroundColor: Colors.thaiGold,
     },
+    lockedBtn: {
+        backgroundColor: '#E0E0E0',
+    },
     startBtnText: {
         fontSize: 12,
         color: Colors.white,
@@ -196,5 +242,8 @@ const styles = StyleSheet.create({
     activeStartBtnText: {
         color: Colors.white,
         fontWeight: '600',
+    },
+    lockedBtnText: {
+        color: '#9E9E9E',
     },
 });
