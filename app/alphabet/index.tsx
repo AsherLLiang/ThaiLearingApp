@@ -1,7 +1,7 @@
 // app/alphabet/index.tsx
 // 字母课程总览页（课程入口 → Lesson 1~5）
 
-import React, { useEffect, useState, useRef, useMemo } from 'react';
+import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -21,12 +21,12 @@ import { ArrowLeft, X, BookOpen, ChevronRight } from 'lucide-react-native';
 import { Colors } from '@/src/constants/colors';
 import { Typography } from '@/src/constants/typography';
 
-import { useAlphabetStore } from '@/src/stores/alphabetStore';
 import { ThaiPatternBackground } from '@/src/components/common/ThaiPatternBackground';
 import { getAllLessons } from '@/src/config/alphabet/lessonMetadata.config';
 import type { LessonMetadata } from '@/src/entities/types/phonicsRule.types';
 import { callCloudFunction } from '@/src/utils/apiClient';
 import { API_ENDPOINTS } from '@/src/config/api.endpoints';
+import { useModuleAccessStore } from '@/src/stores/moduleAccessStore';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -167,6 +167,15 @@ export default function AlphabetCoursesScreen() {
   const [selectedLesson, setSelectedLesson] = useState<LessonCardProps | null>(null);
   const [drawerVisible, setDrawerVisible] = useState(false);
 
+  // 🔥 TODO-07: 使用 moduleAccessStore 读取已完成课程列表
+  const { userProgress, getUserProgress } = useModuleAccessStore();
+  const completedLessons = userProgress?.completedAlphabetLessons ?? [];
+
+  // 🔥 TODO-07: 确保进入页面时加载用户进度
+  useEffect(() => {
+    getUserProgress();
+  }, [getUserProgress]);
+
   useEffect(() => {
     let mounted = true;
 
@@ -220,18 +229,12 @@ export default function AlphabetCoursesScreen() {
     };
   }, []);
 
-  const { completedCount, totalCount } = useAlphabetStore();
+  // 🔥 TODO-07: 进度百分比基于已完成课程数,而非字母数
+  const totalLessons = lessons.length;
   const overallProgressPercent =
-    totalCount > 0
-      ? Math.min(100, Math.round((completedCount / totalCount) * 100))
+    totalLessons > 0
+      ? Math.min(100, Math.round((completedLessons.length / totalLessons) * 100))
       : 0;
-
-  const cumulativeCounts = lessons.reduce<number[]>((acc, lesson, index) => {
-    const prev = index === 0 ? 0 : acc[index - 1];
-    const total = lesson.progress?.total ?? lesson.lessonData.totalCount;
-    acc.push(prev + total);
-    return acc;
-  }, []);
 
   const handleCardPress = (lesson: LessonCardProps) => {
     setSelectedLesson(lesson);
@@ -243,13 +246,21 @@ export default function AlphabetCoursesScreen() {
     router.push(`/alphabet/${lessonId}`);
   };
 
+  // 🔥 TODO-07: 课程解锁逻辑只依赖 completedAlphabetLessons
+  // 规则: lesson1 永远解锁, lessonN 需要 lesson(N-1) 已完成
+  const isLessonUnlocked = useCallback((lessonIndex: number): boolean => {
+    if (lessonIndex === 0) return true; // lesson1 永远解锁
+    const prevLessonId = lessons[lessonIndex - 1]?.id;
+    return prevLessonId ? completedLessons.includes(prevLessonId) : false;
+  }, [lessons, completedLessons]);
+
   // Helper to check unlocked status for modal
   const isSelectedUnlocked = useMemo(() => {
     if (!selectedLesson) return false;
     const index = lessons.findIndex(l => l.id === selectedLesson.id);
     if (index === -1) return false;
-    return index === 0 || completedCount >= cumulativeCounts[index - 1];
-  }, [selectedLesson, lessons, completedCount, cumulativeCounts]);
+    return isLessonUnlocked(index);
+  }, [selectedLesson, lessons, isLessonUnlocked]);
 
 
   return (
@@ -278,12 +289,12 @@ export default function AlphabetCoursesScreen() {
           <ThaiPatternBackground opacity={0.12} />
 
           {lessons.map((lesson, index) => {
-            const unlocked =
-              index === 0 || completedCount >= cumulativeCounts[index - 1];
+            // 🔥 TODO-07: 解锁逻辑统一为 completedAlphabetLessons
+            const unlocked = isLessonUnlocked(index);
 
-            const isCurrent =
-              completedCount < cumulativeCounts[index] &&
-              (index === 0 || completedCount >= cumulativeCounts[index - 1]);
+            // 🔥 TODO-07: "当前课程" = 第一个已解锁但未完成的课程
+            const isCompleted = completedLessons.includes(lesson.id);
+            const isCurrent = unlocked && !isCompleted;
 
             return (
               <Pressable
