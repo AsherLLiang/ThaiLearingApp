@@ -18,7 +18,7 @@ import type {
   AlphabetQueueItem,
   AlphabetQuestion,
 } from '@/src/entities/types/alphabet.types';
-import { AlphabetGameType } from '@/src/entities/enum/alphabetGameTypes';
+import { AlphabetGameType } from '@/src/entities/types/alphabetGameTypes';
 import { generateLetterDistractors } from './lettersDistractorEngine';
 import { getLetterAudioUrl } from './alphabet/audioHelper';
 

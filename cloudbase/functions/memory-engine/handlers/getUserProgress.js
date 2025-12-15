@@ -31,6 +31,27 @@ async function getUserProgress(db, params) {
 
     const progress = progressResult.data[0];
 
+    // 🔥 获取字母模块专属进度（包含 currentRound）
+    let alphabetProgress = null;
+    if (params.entityType === 'letter') {
+      const alphabetProgressResult = await db.collection('user_alphabet_progress')
+        .where({ userId })
+        .limit(1)
+        .get();
+
+      console.log('📊 [getUserProgress] alphabetProgressResult:', {
+        found: alphabetProgressResult.data?.length > 0,
+        data: alphabetProgressResult.data?.[0]
+      });
+
+      if (alphabetProgressResult.data && alphabetProgressResult.data.length > 0) {
+        alphabetProgress = alphabetProgressResult.data[0];
+        console.log('📊 [getUserProgress] alphabetProgress.currentRound:', alphabetProgress.currentRound);
+      } else {
+        console.log('⚠️ [getUserProgress] No alphabet progress found for user:', userId);
+      }
+    }
+
     // 3. 统计各模块学习数据
     // 注意: 如果数据量很大，count() 比 get() 更高效
     const letterCountResult = await db.collection('memory_status')
@@ -52,6 +73,8 @@ async function getUserProgress(db, params) {
     // 4. 组装
     const result = {
       ...progress,
+      // 🔥 合并字母模块专属字段（currentRound）
+      ...(alphabetProgress ? { currentRound: alphabetProgress.currentRound } : {}),
       statistics: {
         letter: {
           total: 44,

@@ -29,6 +29,8 @@ interface SessionRecoveryState {
   round: 1 | 2 | 3;
   phase: Phase;
   answeredCount: number;
+  currentIndex: number; // 🔥 Bug 3 修复：添加 currentIndex
+  status: 'in-progress' | 'completed';
 }
 
 
@@ -39,12 +41,15 @@ export function useAlphabetLearningEngine(lessonId: string) {
     queue,
     currentItem,
     currentIndex,
+    currentRound: storeCurrentRound, // 🔥 Bug 2 修复：从 Store 读取 currentRound
     lessonMetadata,
     phonicsRule,
     initializeSession,
     submitRoundEvaluation: submitRoundToStore,
     next: nextInQueue,
     appendQueue,
+    setCurrentIndex, // 🔥 Bug 3 修复：引入 setCurrentIndex 方法
+    setCurrentRound: setStoreCurrentRound, // 🔥 Bug 2 修复：引入 setCurrentRound 方法
   } = useAlphabetStore();
 
   const { currentUser } = useUserStore();
@@ -79,7 +84,8 @@ export function useAlphabetLearningEngine(lessonId: string) {
   const [wrongAnswers, setWrongAnswers] = useState<Set<string>>(new Set());
 
   // ✅ 修复: currentRound 类型为 1 | 2 | 3
-  const [currentRound, setCurrentRound] = useState<1 | 2 | 3>(1);
+  // 🔥 Bug 2 修复：初始化时从 Store 读取 currentRound
+  const [currentRound, setCurrentRound] = useState<1 | 2 | 3>(storeCurrentRound || 1);
   const [roundEvaluation, setRoundEvaluation] = useState<RoundEvaluationState>({
     currentRound: 1,
     rounds: [],
@@ -91,6 +97,9 @@ export function useAlphabetLearningEngine(lessonId: string) {
   const [recoveryPrompted, setRecoveryPrompted] = useState(false);
   // 新增: 将恢复状态暴露给 UI
   const [pendingRecoverySession, setPendingRecoverySession] = useState<SessionRecoveryState | null>(null);
+
+  // 🔥 新增: 标记用户是否已经开始答题（用于延迟 session 保存时机）
+  const [hasStartedAnswering, setHasStartedAnswering] = useState(false);
 
   const prevRoundRef = useRef<1 | 2 | 3>(currentRound);
 
@@ -111,18 +120,30 @@ export function useAlphabetLearningEngine(lessonId: string) {
   }, []);
 
   const persistSessionState = useCallback(async () => {
-    if (!lessonId || !initialized || derivedPhase === 'finished') {
+    // 🔥 Bug 1 修复：round-completed 和 finished 阶段都不应写入 in-progress
+    if (!lessonId || !initialized || derivedPhase === 'finished' || derivedPhase === 'round-completed') {
+      console.log('💾 [Persist] Clearing session (phase:', derivedPhase, ')');
       await writeSessionState(null);
       return;
     }
 
-    await writeSessionState({
+    // 🔥 新增：只有用户开始答题后，才保存 session
+    if (!hasStartedAnswering) {
+      console.log('💾 [Persist] User has not started answering, skip persisting');
+      return;
+    }
+
+    const sessionData: SessionRecoveryState = {
       lessonId,
       round: currentRound,
-      phase: isLessonFinished ? 'finished' : (currentItem?.source || 'new'), // Fallback for session storage
+      phase: (isLessonFinished ? 'finished' : (currentItem?.source || 'new')) as Phase, // Fallback for session storage
       answeredCount,
-    });
-  }, [lessonId, initialized, isLessonFinished, currentItem, currentRound, answeredCount, writeSessionState]);
+      currentIndex, // 🔥 Bug 3 修复：保存 currentIndex
+      status: 'in-progress', // 默认状态为 in-progress
+    };
+    console.log('💾 [Persist] Writing session:', sessionData);
+    await writeSessionState(sessionData);
+  }, [lessonId, initialized, isLessonFinished, currentItem, currentRound, answeredCount, currentIndex, writeSessionState, derivedPhase, hasStartedAnswering]);
 
   const clearStoredSessionState = useCallback(async () => {
     await writeSessionState(null);
@@ -135,22 +156,49 @@ export function useAlphabetLearningEngine(lessonId: string) {
     setTodayList([]);
     setWrongAnswers(new Set());
     setRecoveryPrompted(true);
-  }, []);
 
-  const handleRestartStoredSession = useCallback((session?: SessionRecoveryState) => {
-    setCurrentRound(session?.round ?? 1);
-    setCurrentRound(session?.round ?? 1);
-    // setPhase('today-learning'); // Phase derived
+    // 🔥 恢复学习时，标记为已经开始答题（因为是中断后恢复）
+    setHasStartedAnswering(true);
+
+    // 🔥 Bug 3 修复：恢复队列位置
+    if (session.currentIndex !== undefined && session.currentIndex >= 0) {
+      setCurrentIndex(session.currentIndex);
+      console.log(`🔄 恢复队列位置: currentIndex = ${session.currentIndex}`);
+    }
+  }, [setCurrentIndex]);
+
+  const handleRestartStoredSession = useCallback(async (session?: SessionRecoveryState) => {
+    // 🔥 Bug 4 修复：重新开始本轮时，需要调用 initializeSession 重新加载队列
+    // 从 Round1 的第一个阶段开始（previous-round-review 或 new-learning）
+    const targetRound = session?.round ?? 1;
+
+    setCurrentRound(targetRound);
     setAnsweredCount(0);
     setTodayList([]);
     setWrongAnswers(new Set());
     setRecoveryPrompted(true);
-    void clearStoredSessionState();
-  }, [clearStoredSessionState]);
+
+    // 🔥 重新开始时，重置答题标记
+    setHasStartedAnswering(false);
+
+    // 🔥 清除旧 session
+    await clearStoredSessionState();
+
+    // 🔥 重新初始化队列，指定 round
+    try {
+      await initializeSession(userId, { lessonId, round: targetRound });
+      console.log(`🔄 重新加载队列: Round ${targetRound}`);
+    } catch (error) {
+      console.error('❌ handleRestartStoredSession: initializeSession 失败:', error);
+    }
+  }, [clearStoredSessionState, initializeSession, userId, lessonId]);
 
   // ===== 初始化 =====
   useEffect(() => {
     let cancelled = false;
+
+    // 🔥 每次重新初始化时，重置答题标记
+    setHasStartedAnswering(false);
 
     (async () => {
       try {
@@ -191,16 +239,40 @@ export function useAlphabetLearningEngine(lessonId: string) {
   }, [persistSessionState]);
 
   useEffect(() => {
-    if (!initialized || recoveryPrompted || !lessonId) return;
+    if (!initialized || recoveryPrompted || !lessonId) {
+      console.log('🔍 [Recovery Check] Skipped:', { initialized, recoveryPrompted, lessonId });
+      return;
+    }
+
+    console.log('🔍 [Recovery Check] Starting check...');
 
     let cancelled = false;
     (async () => {
       try {
         const stored = await AsyncStorage.getItem(SESSION_STORAGE_KEY);
+        console.log('🔍 [Recovery Check] Stored session:', stored ? 'Found' : 'Not found');
+
         if (!stored) return;
 
         const parsed: SessionRecoveryState = JSON.parse(stored);
+        console.log('🔍 [Recovery Check] Parsed session:', {
+          lessonId: parsed.lessonId,
+          round: parsed.round,
+          phase: parsed.phase,
+          status: parsed.status,
+          currentIndex: parsed.currentIndex
+        });
+
+        // 验证 lessonId 匹配
         if (parsed.lessonId !== lessonId) {
+          console.log('🔍 [Recovery Check] LessonId mismatch, clearing...');
+          await clearStoredSessionState();
+          return;
+        }
+
+        // 🔥 关键修复：仅当 status === 'in-progress' 时才弹出恢复提示
+        if (parsed.status !== 'in-progress') {
+          console.log('🔍 [Recovery Check] Status not in-progress, clearing...', parsed.status);
           await clearStoredSessionState();
           return;
         }
@@ -208,6 +280,7 @@ export function useAlphabetLearningEngine(lessonId: string) {
         if (cancelled) return;
 
         // 替换 Alert.alert 为 UI 状态
+        console.log('🔍 [Recovery Check] Showing recovery dialog');
         setPendingRecoverySession(parsed);
         setRecoveryPrompted(true);
 
@@ -237,6 +310,14 @@ export function useAlphabetLearningEngine(lessonId: string) {
     }
     setPendingRecoverySession(null);
   }, [pendingRecoverySession, handleContinueStoredSession, handleRestartStoredSession]);
+
+  // 🔥 Bug 2 修复：从 Store 同步 currentRound 到 Hook 本地状态
+  useEffect(() => {
+    if (storeCurrentRound && storeCurrentRound !== currentRound) {
+      console.log(`🔄 Syncing currentRound from Store: ${storeCurrentRound}`);
+      setCurrentRound(storeCurrentRound);
+    }
+  }, [storeCurrentRound, currentRound]);
 
   useEffect(() => {
     if (prevRoundRef.current !== currentRound) {
@@ -308,6 +389,12 @@ export function useAlphabetLearningEngine(lessonId: string) {
     async (isCorrect: boolean, questionType: QuestionType) => {
       if (!currentItem) return;
 
+      // 🔥 标记用户已经开始答题（触发 session 保存）
+      if (!hasStartedAnswering) {
+        setHasStartedAnswering(true);
+        console.log('🎯 User started answering, session will now persist');
+      }
+
       const quality = isCorrect ? QualityButton.KNOW : QualityButton.FORGET;
       recordMemoryResult(currentItem.alphabetId, quality);
       setAnsweredCount((prev) => prev + 1);
@@ -324,7 +411,7 @@ export function useAlphabetLearningEngine(lessonId: string) {
         return next;
       });
     },
-    [currentItem, recordMemoryResult]
+    [currentItem, recordMemoryResult, hasStartedAnswering]
   );
 
   // REMOVED DUPLICATE derivedPhase definition from here (moved to top)
@@ -464,7 +551,7 @@ export function useAlphabetLearningEngine(lessonId: string) {
     }
   }, [derivedPhase, currentItem, learnedCount, nextInQueue, queue, currentRound, isProcessingNext, currentIndex, wrongAnswers, appendQueue, explicitPhase]); // Removed recursive submitRoundResults dep if possible, but it's needed.
 
-  // ✅ 修复: submitRoundResults 
+  // ✅ 修复: submitRoundResults
   const submitRoundResults = useCallback(async () => {
     console.log(`🚀 Submitting Round ${currentRound} Results...`);
 
@@ -486,11 +573,24 @@ export function useAlphabetLearningEngine(lessonId: string) {
     // 2. Log
     console.log(`✅ Round ${currentRound} Submit Success.`);
 
-    // 3. ENTER 'round-completed' PHASE
-    // DO NOT Auto Increment Round Here.
+    // 3. 🔥 推进到下一轮（Round1 → Round2 → Round3）
+    const nextRound = Math.min(currentRound + 1, 3) as 1 | 2 | 3;
+
+    // 🔥 先更新 Store 的 currentRound (避免 useEffect 同步时覆盖)
+    setStoreCurrentRound(nextRound);
+    console.log(`🔄 Store currentRound updated: ${nextRound}`);
+
+    // 🔥 再更新 Hook 的本地状态
+    setCurrentRound(nextRound);
+
+    // 4. 🔥 显式清除 session（避免下次进入时弹出恢复弹窗）
+    await clearStoredSessionState();
+    console.log('🗑️ Round completed, session cleared');
+
+    // 5. ENTER 'round-completed' PHASE
     setExplicitPhase('round-completed');
 
-  }, [currentRound, queue.length, wrongAnswers, userId, lessonId, submitRoundToStore]);
+  }, [currentRound, queue.length, wrongAnswers, userId, lessonId, submitRoundToStore, clearStoredSessionState, setStoreCurrentRound]);
 
   // REMOVED: handleStartNextRound. 
   // User must exit to Lesson page and restart to trigger next round init.
@@ -501,6 +601,11 @@ export function useAlphabetLearningEngine(lessonId: string) {
 
 
   const letterPool = useMemo(() => queue.map((item) => item.letter), [queue]);
+
+  // 🔥 新增: 在 RoundCompleted 或课程完成时调用，清除 session
+  const handleFinishRound = useCallback(async () => {
+    await clearStoredSessionState();
+  }, [clearStoredSessionState]);
 
   return {
     initialized,
@@ -521,5 +626,6 @@ export function useAlphabetLearningEngine(lessonId: string) {
     // 透出给 UI
     pendingRecoverySession,
     resolveRecovery: handleResolveRecovery,
+    onFinishRound: handleFinishRound,
   };
 }

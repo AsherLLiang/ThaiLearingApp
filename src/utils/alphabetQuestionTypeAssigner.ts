@@ -11,7 +11,7 @@
  * - Final Review 阶段: 使用整合题型(辅音类别、首音、尾音、声调、拼读)
  */
 
-import { AlphabetGameType } from '@/src/entities/enum/alphabetGameTypes';
+import { AlphabetGameType } from '@/src/entities/types/alphabetGameTypes';
 
 /**
  * 三新一复阶段使用的轻量题型

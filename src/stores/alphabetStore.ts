@@ -21,7 +21,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
 
 import { callCloudFunction } from '@/src/utils/apiClient';
-import { API_ENDPOINTS } from '@/src/config/api.endpoints';
+import { API_ENDPOINTS, MODULE_ENDPOINTS } from '@/src/config/api.endpoints';
 
 import type { Letter } from '@/src/entities/types/letter.types';
 import { buildAlphabetQueue } from '@/src/utils/alphabet/buildAlphabetQueue';
@@ -133,6 +133,9 @@ interface AlphabetStoreState {
   lessonMetadata: LessonMetadata | null;
   phonicsRule: PhonicsRule | null;
 
+  // 🔥 Bug 2 修复：添加 currentRound 字段
+  currentRound: 1 | 2 | 3;
+
   // Actions
   initializeSession: (
     userId: string,
@@ -159,6 +162,10 @@ interface AlphabetStoreState {
   next: () => void;
   appendQueue: (items: AlphabetQueueItem[]) => void;
   previous: () => void;
+  // 🔥 Bug 3 修复：添加 setCurrentIndex 方法
+  setCurrentIndex: (index: number) => void;
+  // 🔥 Bug 2 修复：添加 setCurrentRound 方法
+  setCurrentRound: (round: 1 | 2 | 3) => void;
 
   reset: () => void;
   clearError: () => void;
@@ -242,6 +249,8 @@ export const useAlphabetStore = create<AlphabetStoreState>()(
       cachedAudioKeys: [],
       lessonMetadata: null,
       phonicsRule: null,
+      // 🔥 Bug 2 修复：添加初始值
+      currentRound: 1,
 
       // 获取今日字母学习/复习队列
       initializeSession: async (
@@ -252,7 +261,30 @@ export const useAlphabetStore = create<AlphabetStoreState>()(
 
         const limit = options?.limit ?? 30;
         const lessonId = options?.lessonId;
-        const round = options?.round ?? 1;
+
+        // 🔥 从后端读取当前轮次（如果未显式传入）
+        let round = options?.round ?? 1;
+
+        if (!options?.round && lessonId) {
+          try {
+            // 读取 user_alphabet_progress 中的 currentRound
+            const progressCol = await callCloudFunction<any>(
+              'getUserProgress',
+              { userId, entityType: 'letter' },
+              { endpoint: MODULE_ENDPOINTS.GET_USER_PROGRESS.cloudbase }
+            );
+
+            // 🔥 从 user_alphabet_progress 读取 currentRound
+            if (progressCol.success && progressCol.data?.progress?.currentRound) {
+              round = progressCol.data.progress.currentRound;
+              console.log(`✅ 从后端读取到 currentRound: ${round}`);
+            } else {
+              console.log(`⚠️ 后端未返回 currentRound，使用默认值: 1`);
+            }
+          } catch (e) {
+            console.warn('⚠️ 读取 currentRound 失败，使用默认值 1:', e);
+          }
+        }
 
         try {
           const response = await callCloudFunction<TodayLettersResponse>(
@@ -263,6 +295,7 @@ export const useAlphabetStore = create<AlphabetStoreState>()(
               limit,
               includeNew: true,
               lessonId,
+              roundNumber: round, // 🔥 传递 roundNumber
             },
             {
               endpoint: API_ENDPOINTS.MEMORY.GET_TODAY_MEMORIES.cloudbase,
@@ -294,12 +327,13 @@ export const useAlphabetStore = create<AlphabetStoreState>()(
             mapLetterToState(item, item.memoryState)
           );
 
-          const queue = buildAlphabetQueue(learningItems, {
-            round, // Use passed round
-            previousRoundLetters: [], // TODO: If we want to exclude previous round letters? 
-            // The prompt said "previous-round-review" phase exists. 
-            // Logic for previousRoundLetters might be needed but standard buildAlphabetQueue might handle it if we pass em.
-            // For now, minimal change to support round number.
+          // 🔥 Round2/3 时，全部字母都是复习字母
+          const previousRoundLetters = round > 1 ? learningItems : [];
+          const newLettersForQueue = round === 1 ? learningItems : [];
+
+          const queue = buildAlphabetQueue(newLettersForQueue, {
+            round,
+            previousRoundLetters, // 🔥 Round2/3 传递全部字母作为复习内容
           });
 
           // 🐛 P0-3 DEBUG: 检查后端返回的队列是否包含三新一复逻辑
@@ -319,9 +353,9 @@ export const useAlphabetStore = create<AlphabetStoreState>()(
           );
 
           // 统计新字母和复习字母的分布
-          const newLetters = queue.filter((item) => item.source === 'new');
+          const newLettersInQueue = queue.filter((item) => item.source === 'new');
           const reviewLetters = queue.filter((item) => item.source !== 'new');
-          console.log('新字母数量:', newLetters.length);
+          console.log('新字母数量:', newLettersInQueue.length);
           console.log('复习字母数量:', reviewLetters.length);
 
           set({
@@ -331,6 +365,7 @@ export const useAlphabetStore = create<AlphabetStoreState>()(
             currentIndex: 0,
             completedCount: 0,
             totalCount: queue.length,
+            currentRound: round as 1 | 2 | 3, // 🔥 Bug 2 修复：保存 currentRound
             isLoading: false,
             lessonMetadata: lessonMetadata ?? null,
             phonicsRule: phonicsRule ?? null,
@@ -409,10 +444,7 @@ export const useAlphabetStore = create<AlphabetStoreState>()(
                         if (!info.exists) {
                           // eslint-disable-next-line no-console
                           console.log(
-                            `📥 下载音频(第 ${attempt + 1} 次):`,
-                            httpUrl,
-                            '→',
-                            localPath,
+                            `📥 下载音频(第 ${attempt + 1} 次):`
                           );
                           await FileSystem.downloadAsync(httpUrl, localPath);
                         }
@@ -456,18 +488,6 @@ export const useAlphabetStore = create<AlphabetStoreState>()(
                   letter.endSyllableSoundLocalPath ||
                   current.audioUrl;
 
-                // eslint-disable-next-line no-console
-                console.log('✅ 预下载结果(letter):', {
-                  id: letter._id,
-                  thaiChar: letter.thaiChar,
-                  fullSoundLocalPath: letter.fullSoundLocalPath,
-                  syllableSoundLocalPath: letter.syllableSoundLocalPath,
-                  endSyllableSoundLocalPath: letter.endSyllableSoundLocalPath,
-                  letterPronunciationLocalPath:
-                    letter.letterPronunciationLocalPath,
-                  primaryAudio,
-                });
-
                 updatedQueue[index] = {
                   ...current,
                   letter,
@@ -487,14 +507,6 @@ export const useAlphabetStore = create<AlphabetStoreState>()(
                   console.log('🎯 预下载后当前字母状态:', {
                     id: currentItem.letter._id,
                     thaiChar: currentItem.letter.thaiChar,
-                    fullSoundLocalPath: currentItem.letter.fullSoundLocalPath,
-                    syllableSoundLocalPath:
-                      currentItem.letter.syllableSoundLocalPath,
-                    endSyllableSoundLocalPath:
-                      currentItem.letter.endSyllableSoundLocalPath,
-                    letterPronunciationLocalPath:
-                      currentItem.letter.letterPronunciationLocalPath,
-                    audioUrl: currentItem.audioUrl,
                   });
                 }
 
@@ -629,6 +641,20 @@ export const useAlphabetStore = create<AlphabetStoreState>()(
           currentIndex: prevIndex,
           currentItem: queue[prevIndex] ?? null,
         });
+      },
+
+      // 🔥 Bug 3 修复：设置队列位置
+      setCurrentIndex: (index: number) => {
+        const { queue } = get();
+        set({
+          currentIndex: index,
+          currentItem: queue[index] ?? null,
+        });
+      },
+
+      // 🔥 Bug 2 修复：设置当前轮次
+      setCurrentRound: (round: 1 | 2 | 3) => {
+        set({ currentRound: round });
       },
 
       // 重置（例如切换用户）

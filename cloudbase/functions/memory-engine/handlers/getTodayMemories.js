@@ -84,7 +84,7 @@ async function ensureUserVocabularyProgress(db, userId) {
  */
 async function getTodayMemories(db, params) {
   const start = Date.now();
-  const { userId, entityType, limit = 30, includeNew = true } = params;
+  const { userId, entityType, limit = 30, includeNew = true, roundNumber } = params;
 
   if (!userId || !entityType) {
     return createResponse(false, null, 'Missing userId or entityType', 'INVALID_PARAMS');
@@ -173,9 +173,11 @@ async function getTodayMemories(db, params) {
           curriculumLessonIds: cmd.in([lessonId]),
         };
 
-        if (existingEntityIds.length > 0) {
+        // 🔥 Round2/3 时不过滤已有记忆的字母（用于复习）
+        if (roundNumber === 1 && existingEntityIds.length > 0) {
           whereCondition._id = cmd.nin(existingEntityIds);
         }
+        // Round2/3 时返回该课程的全部字母
 
         const newEntitiesResult = await query
           .where(whereCondition)

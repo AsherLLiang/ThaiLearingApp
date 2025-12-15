@@ -20,16 +20,18 @@ export default function AlphabetLessonFlow() {
     letterPool,
     onAnswer,
     onNext,
-    onSkipYesterdayReview,
     phonicsRule,
     showPhonicsRuleCard,
     onCompletePhonicsRule,
     pendingRecoverySession,
     resolveRecovery,
+    onFinishRound,
   } = useAlphabetLearningEngine(lessonId);
 
 
-  const handleBack = () => {
+  const handleBack = async () => {
+    // 🔥 在离开页面前清除 session
+    await onFinishRound();
     router.back();
   };
 
@@ -44,7 +46,6 @@ export default function AlphabetLessonFlow() {
       letterPool={letterPool}
       onAnswer={onAnswer}
       onNext={onNext}
-      onSkipYesterdayReview={onSkipYesterdayReview}
       onBack={handleBack}
       phonicsRule={phonicsRule}
       showPhonicsRuleCard={showPhonicsRuleCard}

@@ -19,7 +19,7 @@ import type { Letter } from '@/src/entities/types/letter.types';
 import type { AlphabetQueueItem, AlphabetQuestion } from '@/src/entities/types/alphabet.types';
 
 // Use strict new types
-import { AlphabetGameType, ALPHABET_GAME_TYPE_LABELS } from '@/src/entities/enum/alphabetGameTypes';
+import { AlphabetGameType, ALPHABET_GAME_TYPE_LABELS } from '@/src/entities/types/alphabetGameTypes';
 import { generateQuestion } from '@/src/utils/lettersQuestionGenerator';
 import { getLetterAudioUrl } from '@/src/utils/alphabet/audioHelper';
 // Legacy type for prop compatibility (mapped internally)
@@ -397,7 +397,7 @@ export function AlphabetReviewView({
                   const url = getLetterAudioUrl(optLetter);
 
                   if (url) {
-                    console.log('🔊 Playing Option Sound:', url);
+                    console.log('🔊 Playing Option Sound');
                     void playAudio(url);
                   } else {
                     console.warn('⚠️ No audio URL found for option:', optLetter.thaiChar);
