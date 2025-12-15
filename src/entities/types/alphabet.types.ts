@@ -41,7 +41,7 @@ export interface AlphabetLearningState {
 
 // ==================== Phase 2 统一题型协议 ====================
 
-import type { AlphabetGameType } from '@/src/entities/enum/alphabetGameTypes';
+import type { AlphabetGameType } from '@/src/entities/types/alphabetGameTypes';
 
 /**
  * AlphabetQueueItem - 题目队列项

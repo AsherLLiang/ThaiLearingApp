@@ -6,6 +6,25 @@
 
 ---
 
+## 0. 首发版冻结声明（当前真实实现）
+
+> 禁止在此阶段合并题型体系 / 重构 Phase / 单边删除队列插入逻辑。
+
+- 单一权威（Source of Truth）
+  - 课程字母：DB `letters.curriculumLessonIds` + `getTodayMemories` (handlers/getTodayMemories.js 167-184)；前后端 `lessonMetadata` 仅展示/回退，且 **lesson1 元音存在不一致**（前端 ['า','ี','ู']，后端 ['า','ะ','ิ']）。
+  - 队列生成：后端 `getTodayMemories` 先取复习（不按 lesson 过滤，存在跨课混入风险）+ 3新1复插入，然后前端 `buildAlphabetQueue` 再做 mini-review(每3个新字母回放) + final-review 全量 + error-review 追加。
+  - 题型：实际渲染使用 `AlphabetGameType` + `lettersQuestionGenerator`（SOUND_TO_LETTER / LETTER_TO_SOUND / CONSONANT_CLASS / INITIAL_SOUND / FINAL_SOUND；TONE_CALCULATION/PHONICS_MATH 仍为占位）。`QuestionType` / `alphabetQuestionTypes` / `alphabetQuestionGenerator` 为历史定义，未在首发版生效。
+  - Phase：UI/逻辑以 `queue.source`（new/mini-review/final-review/error-review）派生，`LearningPhase` 枚举的 7 阶段未被当前实现驱动。
+
+- 已知偏差（需后续治理，当前不改代码）
+  - 课程元数据前后端不一致；`SEQUENCE_LESSONS` 与课程列表数量不对齐。
+  - 复习池不按 lesson 过滤，可能将其他课到期字母混入本课队列。
+  - 双层 3新1复插入导致节奏与冻结设计不完全一致。
+  - 多套题型/Phase 定义并存，可能导致新代码误用历史接口。
+
+- 文档使用提示
+  - 本节描述的是“首发版现状”，作为冻结记录；后续迭代需在明确治理计划后再调整权威定义。
+
 ## 1. 模块定位与边界
 
 ### 1.1 模块职责

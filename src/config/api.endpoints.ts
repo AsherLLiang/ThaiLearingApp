@@ -256,13 +256,14 @@ export const ALPHABET_ENDPOINTS = {
 
 // ==================== 模块权限 API ====================
 export const MODULE_ENDPOINTS = {
-  // ✅ CloudBase: 使用 learn-vocab 多 action 云函数（CHECK_ACCESS / GET_USER_PROGRESS 等）
+  // ✅ CloudBase: 使用 learn-vocab 多 action 云函数（CHECK_ACCESS）
   CHECK_ACCESS: {
     cloudbase: '/learn-vocab',
     java: '/api/modules/access'
   } as EndpointMap,
+  // 🔥 修复: GET_USER_PROGRESS 已迁移到 memory-engine
   GET_USER_PROGRESS: {
-    cloudbase: '/learn-vocab',
+    cloudbase: '/memory-engine',
     java: '/api/modules/progress'
   } as EndpointMap,
 };

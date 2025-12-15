@@ -72,6 +72,9 @@ async function submitRoundEvaluation(db, params) {
     };
 
     if (!existing.data || existing.data.length === 0) {
+      // 🔥 计算下一轮编号（如果当前轮通过）
+      const nextRound = passed && roundNumber < 3 ? roundNumber + 1 : roundNumber;
+
       // 没有进度记录时，插入一条带有 roundHistory 的默认记录
       await col.add({
         data: {
@@ -81,7 +84,7 @@ async function submitRoundEvaluation(db, params) {
           completedLessons: [],
           masteredLetterCount: 0,
           totalLetterCount: 80,
-          currentRound: roundNumber,
+          currentRound: nextRound, // 🔥 修复：使用 nextRound 而不是 roundNumber
           roundHistory: [roundEntry],
           createdAt: now,
           updatedAt: now,
@@ -98,9 +101,12 @@ async function submitRoundEvaluation(db, params) {
       );
       filtered.push(roundEntry);
 
+      // 🔥 计算下一轮编号（如果当前轮通过）
+      const nextRound = passed && roundNumber < 3 ? roundNumber + 1 : roundNumber;
+
       await col.doc(docId).update({
         data: {
-          currentRound: roundNumber,
+          currentRound: nextRound, // 🔥 写入下一轮编号
           roundHistory: filtered,
           updatedAt: now,
         },

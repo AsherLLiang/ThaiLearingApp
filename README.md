@@ -1,4 +1,8 @@
 # 🇹🇭 ThaiLearningApp - 泰语学习应用
+⚠️ AI Development Rules
+
+This project is governed by CLAUDE.md.
+All AI-assisted changes must comply with it.
 
 <div align="center">
 
