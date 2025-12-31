@@ -14,6 +14,9 @@ import { callCloudFunction } from '@/src/utils/apiClient';
 import { API_ENDPOINTS } from '@/src/config/api.endpoints';
 import { useUserStore } from './userStore';
 import { LESSON_METADATA } from '@/src/config/alphabet/lessonMetadata.config';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const COMPLETED_LESSONS_STORAGE_KEY = '@alphabet_completed_lessons';
 
 // ==================== 类型定义 ====================
 
@@ -280,11 +283,41 @@ export const useModuleAccessStore = create<ModuleAccessStore>()((set, get) => ({
             }
 
             if (result.success && result.data) {
+                // 🔥 Merge with local persisted completed lessons
+                let completedAlphabetLessons: string[] = [];
+                try {
+                    const stored = await AsyncStorage.getItem(COMPLETED_LESSONS_STORAGE_KEY);
+                    if (stored) {
+                        completedAlphabetLessons = JSON.parse(stored);
+                    }
+                } catch (e) {
+                    console.warn('⚠️ Failed to load local completed lessons:', e);
+                }
+
+                // If remote has it (unlikely), merge distinct? Or trust local?
+                // Rule: Local is the source of truth for this frontend-only field.
+                // But if backend sends it, we might want to union. 
+                // For now, assume backend sends undefined/empty.
+                const remoteCompleted = result.data.progress.completedAlphabetLessons || [];
+                const mergedCompleted = Array.from(new Set([...completedAlphabetLessons, ...remoteCompleted]));
+
+                // If local had nothing but remote did (e.g. cloud sync feature added later), we should update local storage too?
+                // Yes, harmless to sync back.
+                if (mergedCompleted.length > completedAlphabetLessons.length) {
+                    void AsyncStorage.setItem(COMPLETED_LESSONS_STORAGE_KEY, JSON.stringify(mergedCompleted));
+                }
+
                 set({
-                    userProgress: result.data.progress,
+                    userProgress: {
+                        ...result.data.progress,
+                        completedAlphabetLessons: mergedCompleted
+                    },
                     isLoading: false,
                 });
-                console.log('✅ 用户进度数据已更新:', result.data.progress);
+                console.log('✅ 用户进度数据已更新 (Merged):', {
+                    ...result.data.progress,
+                    completedAlphabetLessons: mergedCompleted
+                });
             } else {
                 console.warn('⚠️ 获取用户进度失败 (Primary & Fallback)，使用默认数据');
                 // Don't overwrite with default if we have stale data? 
@@ -376,6 +409,11 @@ export const useModuleAccessStore = create<ModuleAccessStore>()((set, get) => ({
                 letterCompleted: nextLetterCompleted,
                 letterProgress: nextLetterProgress,
             };
+
+            // 🔥 Persist to AsyncStorage (Fire and forget)
+            AsyncStorage.setItem(COMPLETED_LESSONS_STORAGE_KEY, JSON.stringify(completedAlphabetLessons)).catch(err => {
+                console.error('❌ Failed to persist completed alphabet lessons:', err);
+            });
 
             return {
                 userProgress: updated,

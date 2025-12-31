@@ -42,15 +42,15 @@ export function useAlphabetLearningEngine(lessonId: string) {
     queue,
     currentItem,
     currentIndex,
-    currentRound: storeCurrentRound, // 🔥 Bug 2 修复：从 Store 读取 currentRound
+    currentRound: storeCurrentRound, // 从 Store 读取 currentRound
     lessonMetadata,
     phonicsRule,
     initializeSession,
     submitRoundEvaluation: submitRoundToStore,
     next: nextInQueue,
     appendQueue,
-    setCurrentIndex, // 🔥 Bug 3 修复：引入 setCurrentIndex 方法
-    setCurrentRound: setStoreCurrentRound, // 🔥 Bug 2 修复：引入 setCurrentRound 方法
+    setCurrentIndex, // 引入 setCurrentIndex 方法
+    setCurrentRound: setStoreCurrentRound, // 引入 setCurrentRound 方法
   } = useAlphabetStore();
 
   const { currentUser } = useUserStore();
@@ -636,6 +636,26 @@ export function useAlphabetLearningEngine(lessonId: string) {
     await clearStoredSessionState();
   }, [clearStoredSessionState]);
 
+  // 🔥 新增: Skip (Bury) functionality for previous-review
+  const handleSkipYesterdayReview = useCallback(async () => {
+    // Only valid in previous-review phase
+    // 🔥 TODO-03: derivedPhase is legacy, check source directly
+    if (currentItem?.source !== 'previous-review') {
+      console.warn('⚠️ handleSkipYesterdayReview called outside of previous-review phase');
+      return;
+    }
+
+    console.log('⏭️ Skipping (Burying) review item:', currentItem.alphabetId);
+
+    // 1. Mark as Known (Correct) to "bury" it for this session quality-wise
+    // Using currentQuestionType or fallback to SOUND_TO_LETTER
+    await handleAnswer(true, currentQuestionType ?? QuestionType.SOUND_TO_LETTER);
+
+    // 2. Advance to next item immediately
+    console.log('⏭️ Item skipped, advancing...');
+    await handleNext();
+  }, [currentItem, currentQuestionType, handleAnswer, handleNext]);
+
   return {
     initialized,
     phase: derivedPhase,
@@ -656,5 +676,6 @@ export function useAlphabetLearningEngine(lessonId: string) {
     pendingRecoverySession,
     resolveRecovery: handleResolveRecovery,
     onFinishRound: handleFinishRound,
+    onSkipYesterdayReview: handleSkipYesterdayReview,
   };
 }

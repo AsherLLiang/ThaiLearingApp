@@ -106,13 +106,22 @@ export function AlphabetReviewView({
 
   // --- 2. Audio Logic ---
 
+  /* 
+   * Stop audio safely handling potential race conditions
+   * (e.g. concurrent calls where soundRef.current becomes null) 
+   */
   const stopAudio = useCallback(async () => {
-    if (!soundRef.current) return;
+    const sound = soundRef.current;
+    if (!sound) return;
+
+    // Immediately detach ref to prevent other calls from accessing this instance
+    soundRef.current = null;
+
     try {
-      await soundRef.current.stopAsync().catch(() => { });
-      await soundRef.current.unloadAsync().catch(() => { });
-    } finally {
-      soundRef.current = null;
+      await sound.stopAsync().catch(() => { });
+      await sound.unloadAsync().catch(() => { });
+    } catch (ignore) {
+      // Ignore errors during cleanup
     }
   }, []);
 
@@ -412,13 +421,19 @@ export function AlphabetReviewView({
             >
               {question.gameType === AlphabetGameType.LETTER_TO_SOUND ? (
                 // Use AudioLines for "Voice Wave" style
-                <AudioLines size={32} color={isSelected ? Colors.thaiGold : Colors.taupe} />
+                <View style={{ paddingBottom: 26 }}>
+                  <AudioLines size={32} color={isSelected ? Colors.thaiGold : Colors.taupe} />
+                </View>
               ) : (
-                <Text style={[
-                  styles.optionText,
-                  isCorrect && styles.optionTextCorrect,
-                  isWrong && styles.optionTextWrong
-                ]}>
+                <Text
+                  style={[
+                    styles.optionText,
+                    isCorrect && styles.optionTextCorrect,
+                    isWrong && styles.optionTextWrong
+                  ]}
+                  adjustsFontSizeToFit
+                  numberOfLines={1}
+                >
                   {displayValue}
                 </Text>
               )}
@@ -565,9 +580,9 @@ const styles = StyleSheet.create({
     fontSize: 42,
     color: Colors.ink,
     textAlign: 'center',
-    lineHeight: 56,
-    includeFontPadding: false,
     textAlignVertical: 'center',
+    includeFontPadding: false,
+    paddingBottom: 24, // Visual fix: Add bottom buffer to counteract font's top whitespace
   },
   optionTextCorrect: {
     color: '#2A9D8F',

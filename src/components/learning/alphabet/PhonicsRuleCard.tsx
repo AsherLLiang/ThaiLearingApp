@@ -22,25 +22,20 @@ import { Typography } from '@/src/constants/typography';
 interface PhonicsRuleCardProps {
   /** 拼读规则数据 */
   rule: PhonicsRule;
-  
+
   /** 完成回调(倒计时结束或用户点击继续) */
   onComplete: () => void;
-  
+
   /** 是否显示关闭按钮(可选,默认false) */
   showCloseButton?: boolean;
-  
+
   /** 关闭回调(可选) */
   onClose?: () => void;
 }
 
 // ==================== 主组件 ====================
 
-export function PhonicsRuleCard({
-  rule,
-  onComplete,
-  showCloseButton = false,
-  onClose,
-}: PhonicsRuleCardProps) {
+export function PhonicsRuleCard({ rule, onComplete, showCloseButton = false, onClose, }: PhonicsRuleCardProps) {
   const [timeLeft, setTimeLeft] = useState(rule.duration);
   const [isPlaying, setIsPlaying] = useState(false);
   const soundRef = useRef<Audio.Sound | null>(null);
@@ -61,7 +56,14 @@ export function PhonicsRuleCard({
 
   // ===== 音频播放 =====
   const handlePlayExample = useCallback(async () => {
-    if (!rule.interactiveExample?.audioUrl) return;
+    console.log('👆 [PhonicsRuleCard] Interactive Example Clicked');
+    console.log('📊 [PhonicsRuleCard] Data:', rule.interactiveExample);
+    console.log('🔗 [PhonicsRuleCard] Source Rule:', { id: rule.id, title: rule.title, lessonId: rule.lessonId });
+
+    if (!rule.interactiveExample?.audioUrl) {
+      console.warn('⚠️ [PhonicsRuleCard] No audioUrl found in interactiveExample');
+      return;
+    }
 
     try {
       setIsPlaying(true);
@@ -97,7 +99,7 @@ export function PhonicsRuleCard({
   useEffect(() => {
     return () => {
       if (soundRef.current) {
-        soundRef.current.unloadAsync().catch(() => {});
+        soundRef.current.unloadAsync().catch(() => { });
         soundRef.current = null;
       }
     };
@@ -110,7 +112,7 @@ export function PhonicsRuleCard({
     return (
       <View style={styles.chartContainer}>
         <Text style={styles.chartTitle}>声调规则表</Text>
-        
+
         {/* 表头 */}
         <View style={styles.chartRow}>
           {rule.visualChart.columns.map((col, index) => (
@@ -310,7 +312,7 @@ const styles = StyleSheet.create({
     color: Colors.taupe,
   },
   scrollView: {
-    flex: 1,
+    flexGrow: 0,
   },
   scrollContent: {
     paddingBottom: 16,
