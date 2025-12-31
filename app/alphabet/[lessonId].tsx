@@ -136,6 +136,7 @@ function AuthenticatedLessonFlow({ lessonId }: { lessonId: string }) {
     pendingRecoverySession,
     resolveRecovery,
     onFinishRound,
+    onSkipYesterdayReview,
   } = useAlphabetLearningEngine(lessonId);
 
   const handleBack = async () => {
@@ -161,6 +162,7 @@ function AuthenticatedLessonFlow({ lessonId }: { lessonId: string }) {
       onCompletePhonicsRule={onCompletePhonicsRule}
       pendingRecoverySession={pendingRecoverySession}
       resolveRecovery={resolveRecovery}
+      onSkipYesterdayReview={onSkipYesterdayReview}
     />
   );
 }

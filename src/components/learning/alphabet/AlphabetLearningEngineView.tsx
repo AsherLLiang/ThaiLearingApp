@@ -70,12 +70,14 @@ function RoundHeader({
   queueIndex,
   totalQueue,
   onBack,
+  onSkipYesterdayReview
 }: {
   currentRound: number;
   phase: Phase;
   queueIndex?: number;
   totalQueue?: number;
   onBack?: () => void;
+  onSkipYesterdayReview?: () => void;
 }) {
   return (
     <View
@@ -122,31 +124,36 @@ function RoundHeader({
             {getPhaseLabel(phase)}
           </Text>
         </View>
+
+        {/* Skip/Bury Button for previous-review */}
+        {phase === 'previous-review' && onSkipYesterdayReview && (
+          <TouchableOpacity
+            style={{
+              marginLeft: 8,
+              paddingHorizontal: 12,
+              paddingVertical: 4,
+              backgroundColor: '#FFF0F0',
+              borderRadius: 4,
+              borderWidth: 1,
+              borderColor: '#FFD0D0'
+            }}
+            onPress={onSkipYesterdayReview}
+          >
+            <Text style={{
+              fontSize: 12,
+              color: '#D00000',
+              fontWeight: '600'
+            }}>
+              Skip (Bury)
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
 }
 
-function DebugBanner({
-  phase,
-  round,
-  queueIndex,
-  total
-}: {
-  phase: Phase,
-  round: number,
-  queueIndex: number,
-  total: number
-}) {
-  if (!__DEV__) return null;
-  return (
-    <View style={{ position: 'absolute', top: 0, left: 0, right: 0, backgroundColor: 'rgba(255, 0, 0, 0.1)', padding: 4, zIndex: 999, alignItems: 'center' }}>
-      <Text style={{ fontSize: 10, color: 'red', fontWeight: 'bold' }}>
-        [DEBUG] Round: {round} | Phase: {phase} | Q: {(queueIndex ?? 0) + 1}/{total ?? '?'}
-      </Text>
-    </View>
-  );
-}
+
 
 export function AlphabetLearningEngineView({
   phase,
@@ -163,7 +170,7 @@ export function AlphabetLearningEngineView({
   phonicsRule,
   showPhonicsRuleCard,
   onCompletePhonicsRule,
-
+  onSkipYesterdayReview,
   pendingRecoverySession,
   resolveRecovery,
 
@@ -235,7 +242,7 @@ export function AlphabetLearningEngineView({
 
   return (
     <SafeAreaView style={{ flex: 1 }}>
-      <DebugBanner phase={phase} round={currentRound} queueIndex={queueIndex ?? 0} total={totalQueue ?? 0} />
+
 
       {/* 优先显示恢复弹窗 */}
       {pendingRecoverySession && resolveRecovery && (
@@ -245,7 +252,7 @@ export function AlphabetLearningEngineView({
         />
       )}
 
-      <RoundHeader currentRound={currentRound} phase={phase} queueIndex={queueIndex} totalQueue={totalQueue} />
+      <RoundHeader currentRound={currentRound} phase={phase} queueIndex={queueIndex} totalQueue={totalQueue} onSkipYesterdayReview={onSkipYesterdayReview} />
 
       {renderMainView()}
     </SafeAreaView>

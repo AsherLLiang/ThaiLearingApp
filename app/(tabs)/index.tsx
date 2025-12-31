@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { ScrollView, View, Text, Pressable, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Play, TrendingUp, Clock, Award, Star } from 'lucide-react-native';
+import { Play, TrendingUp, Clock, Award, Star, Wrench } from 'lucide-react-native';
 import { BlurView } from 'expo-blur';
 import { ThaiPatternBackground } from '@/src/components/common/ThaiPatternBackground';
 import { FloatingBubbles } from '@/src/components/common/FloatingBubbles';
@@ -76,6 +76,7 @@ export default function HomeScreen() {
         level: 'Intermediate 1', // TODO: Add to i18n
         progress: wordProgress,
         route: '/learning' as const, // Points to app/learning/index.tsx
+        module: 'word' as const,
         thaiText: 'คำศัพท์',
         translation: 'Expand your vocabulary',
       };
@@ -88,6 +89,7 @@ export default function HomeScreen() {
         level: 'Intermediate 2',
         progress: sentenceProgress,
         route: '/learning' as const, // Placeholder
+        module: 'sentence' as const,
         thaiText: 'ประโยค',
         translation: 'Master sentence structures',
       };
@@ -99,6 +101,7 @@ export default function HomeScreen() {
       level: 'Advanced',
       progress: userProgress.articleProgress || 0,
       route: '/learning' as const, // Placeholder
+      module: 'article' as const,
       thaiText: 'บทความ',
       translation: 'Read authentic articles',
     };
@@ -156,14 +159,10 @@ export default function HomeScreen() {
                   onPress={() => {
                     if (isHeroLocked) return;
 
-                    if (currentCourse.module) {
-                      router.push({
-                        pathname: currentCourse.route,
-                        params: { module: currentCourse.module }
-                      });
-                    } else {
-                      router.push(currentCourse.route);
-                    }
+                    router.push({
+                      pathname: currentCourse.route,
+                      params: { module: currentCourse.module }
+                    });
                   }}
                 >
                   <View style={styles.heroContent}>
@@ -244,6 +243,27 @@ export default function HomeScreen() {
               />
             </View>
           </View>
+          {/* Dev Playground Entry - Only visible in DEV */}
+          {__DEV__ && (
+            <Pressable
+              style={{
+                marginTop: 20,
+                padding: 12,
+                backgroundColor: Colors.ink,
+                borderRadius: 16,
+                alignItems: 'center',
+                flexDirection: 'row',
+                justifyContent: 'center',
+                gap: 8,
+              }}
+              onPress={() => router.push('/(dev)/playground')}
+            >
+              <Wrench size={16} color={Colors.thaiGold} />
+              <Text style={{ color: Colors.white, fontFamily: Typography.notoSerifBold, fontSize: 12 }}>
+                Open Dev Playground
+              </Text>
+            </Pressable>
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>
