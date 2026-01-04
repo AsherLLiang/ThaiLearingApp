@@ -13,6 +13,9 @@ const { createResponse } = require('../utils/response');
 async function getUserProgress(db, params) {
   const { userId } = params;
 
+  // 🔍 调试日志：打印收到的 userId
+  console.log('📥 [getUserProgress] 收到请求，userId:', userId);
+
   if (!userId) {
     return createResponse(false, null, 'Missing userId', 'INVALID_PARAMS');
   }
