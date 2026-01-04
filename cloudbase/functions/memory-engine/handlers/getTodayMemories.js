@@ -29,6 +29,14 @@ async function ensureUserAlphabetProgress(db, userId) {
 
   if (!existing.data || existing.data.length === 0) {
     const now = new Date().toISOString();
+
+    // 🔥 并发保护：二次检查防止重复记录
+    const checkAgain = await col.where({ userId }).limit(1).get();
+    if (checkAgain.data && checkAgain.data.length > 0) {
+      console.log('⚠️ [ensureUserAlphabetProgress] 记录已被并发创建, 跳过');
+      return;
+    }
+
     await col.add({
       data: {
         userId,
@@ -37,10 +45,13 @@ async function ensureUserAlphabetProgress(db, userId) {
         completedLessons: [],
         masteredLetterCount: 0,
         totalLetterCount: 80,
+        currentRound: 1,          // 🔥 新增：默认从第1轮开始
+        roundHistory: [],         // 🔥 新增：轮次历史记录
         createdAt: now,
         updatedAt: now,
       },
     });
+    console.log('✅ [ensureUserAlphabetProgress] 已创建默认进度记录');
   }
 }
 
@@ -116,7 +127,7 @@ async function getTodayMemories(db, params) {
     if (userProgress) {
       if (entityType === 'letter') {
         // 字母模块：忽略前端传入的 limit，只使用存储的 dailyLimit（如果有）
-        if (userProgress.dailyLimit) { 
+        if (userProgress.dailyLimit) {
           effectiveLimit = Math.min(userProgress.dailyLimit, MAX_LETTER_DAILY_LIMIT);
         }
         effectiveLimit = Math.min(effectiveLimit, MAX_LETTER_DAILY_LIMIT);
@@ -300,7 +311,7 @@ async function getTodayMemories(db, params) {
         null;
       const lessonIdFromLegacy =
         typeof firstEntity.lessonNumber === 'number' &&
-        firstEntity.lessonNumber > 0
+          firstEntity.lessonNumber > 0
           ? `lesson${firstEntity.lessonNumber}`
           : null;
 

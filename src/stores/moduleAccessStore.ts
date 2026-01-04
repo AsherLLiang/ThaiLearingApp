@@ -267,7 +267,7 @@ export const useModuleAccessStore = create<ModuleAccessStore>()((set, get) => ({
         const fetchProgress = async (endpoint: string) => {
             return await callCloudFunction<UserProgressResponse>(
                 'getUserProgress',
-                { userId },
+                { userId, entityType: 'letter' },  // 🔥 添加 entityType 参数
                 { endpoint }
             );
         };
