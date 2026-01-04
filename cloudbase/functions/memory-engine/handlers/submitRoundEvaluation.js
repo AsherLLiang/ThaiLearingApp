@@ -72,8 +72,17 @@ async function submitRoundEvaluation(db, params) {
     };
 
     if (!existing.data || existing.data.length === 0) {
-      // 🔥 计算下一轮编号（如果当前轮通过）
-      const nextRound = passed && roundNumber < 3 ? roundNumber + 1 : roundNumber;
+      // 🔥 修正：首次创建时的 nextRound 计算（防止跨课污染）
+      const nextRound = passed
+        ? (roundNumber < 3 ? roundNumber + 1 : 1)
+        : 1;
+
+      // 🔥 P0-B: 首次创建时也要判定 completedLessons
+      const initialCompletedLessons = (passed && roundNumber === 3 && lessonId)
+        ? [lessonId]
+        : [];
+
+      console.log(`🔍 [P0-B-init] roundNumber: ${roundNumber}, passed: ${passed}, lessonId: ${lessonId || 'N/A'}, initialCompleted: [${initialCompletedLessons.join(',')}], nextRound: ${nextRound}`);
 
       // 没有进度记录时，插入一条带有 roundHistory 的默认记录
       await col.add({
@@ -81,10 +90,10 @@ async function submitRoundEvaluation(db, params) {
           userId,
           letterProgress: 0.0,
           letterCompleted: false,
-          completedLessons: [],
+          completedLessons: initialCompletedLessons, // 🔥 P0-B: 初始值
           masteredLetterCount: 0,
           totalLetterCount: 80,
-          currentRound: nextRound, // 🔥 修复：使用 nextRound 而不是 roundNumber
+          currentRound: nextRound, // 🔥 使用修正后的 nextRound
           roundHistory: [roundEntry],
           createdAt: now,
           updatedAt: now,
@@ -101,13 +110,31 @@ async function submitRoundEvaluation(db, params) {
       );
       filtered.push(roundEntry);
 
-      // 🔥 计算下一轮编号（如果当前轮通过）
-      const nextRound = passed && roundNumber < 3 ? roundNumber + 1 : roundNumber;
+      // 🔥 P0-B: Round3 passed 时写入 completedLessons
+      let updatedCompletedLessons = Array.isArray(doc.completedLessons)
+        ? [...doc.completedLessons]
+        : [];
+
+      const completedLessonsBefore = [...updatedCompletedLessons];
+
+      if (passed && roundNumber === 3 && lessonId) {
+        if (!updatedCompletedLessons.includes(lessonId)) {
+          updatedCompletedLessons.push(lessonId);
+        }
+      }
+
+      console.log(`🔍 [P0-B] roundNumber: ${roundNumber}, passed: ${passed}, lessonId: ${lessonId || 'N/A'}, completedBefore: [${completedLessonsBefore.join(',')}], completedAfter: [${updatedCompletedLessons.join(',')}]`);
+
+      // 🔥 修正：nextRound 重置防止跨课污染
+      const nextRound = passed
+        ? (roundNumber < 3 ? roundNumber + 1 : 1)
+        : 1;
 
       await col.doc(docId).update({
         data: {
-          currentRound: nextRound, // 🔥 写入下一轮编号
+          currentRound: nextRound,
           roundHistory: filtered,
+          completedLessons: updatedCompletedLessons, // 🔥 P0-B: 写入 completedLessons
           updatedAt: now,
         },
       });

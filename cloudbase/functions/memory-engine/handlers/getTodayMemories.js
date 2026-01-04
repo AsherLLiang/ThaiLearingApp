@@ -154,7 +154,51 @@ async function getTodayMemories(db, params) {
     }
 
     // 3. 获取今日复习实体
-    const reviewMemories = await getTodayReviewEntities(db, userId, entityType, effectiveLimit);
+    let reviewMemories = await getTodayReviewEntities(db, userId, entityType, effectiveLimit);
+
+    // 🔥 P0-C: 显式获取 Round1 跨课程 previous-review（只做 round==1 且 lesson>1）
+    let explicitPreviousCount = 0;
+
+    if (entityType === 'letter' && roundNumber === 1 && params.lessonId && params.lessonId !== 'lesson1') {
+      try {
+        const currentLessonMeta = await getLessonMetadataFromDb(db, params.lessonId);
+        if (currentLessonMeta && currentLessonMeta.order && currentLessonMeta.order > 1) {
+          const prevLessonId = `lesson${currentLessonMeta.order - 1}`;
+
+          // 查询上一课的字母
+          const prevLettersResult = await db.collection('letters')
+            .where({ curriculumLessonIds: db.command.in([prevLessonId]) })
+            .limit(20)
+            .get();
+
+          const explicitPrevMemories = [];
+
+          // 🔥 获取这些字母的记忆状态
+          for (const letter of prevLettersResult.data) {
+            const mem = await getOrCreateMemory(db, userId, entityType, letter._id, false);
+            if (mem) {
+              // 🔥 细节校正3：浅拷贝避免副作用
+              const patched = {
+                ...mem,
+                reviewStage: Math.max(mem.reviewStage || 0, 1)
+              };
+              explicitPrevMemories.push(patched);
+            }
+          }
+
+          explicitPreviousCount = explicitPrevMemories.length;
+
+          // 🔥 合并到 reviewMemories（去重）
+          const existingIds = new Set(reviewMemories.map(m => m.entityId));
+          const uniquePrev = explicitPrevMemories.filter(m => !existingIds.has(m.entityId));
+          reviewMemories = [...uniquePrev, ...reviewMemories];
+
+          console.log(`🔍 [P0-C] lessonId: ${params.lessonId}, prevLessonId: ${prevLessonId}, explicitPrevCount: ${explicitPreviousCount}`);
+        }
+      } catch (err) {
+        console.warn('⚠️ [P0-C] 获取上一课程字母失败:', err);
+      }
+    }
 
     // 4. 获取新学习内容
     let newMemories = [];
