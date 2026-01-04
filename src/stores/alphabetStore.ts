@@ -279,11 +279,24 @@ export const useAlphabetStore = create<AlphabetStoreState>()(
 
           if (progressCol.success && progressCol.data?.progress) {
             const progress = progressCol.data.progress;
-            if (!options?.round && progress.currentRound) {
-              round = progress.currentRound;
-              console.log(`✅ 从后端读取到 currentRound: ${round}`);
-            } else if (!progress.currentRound) {
-              console.log(`⚠️ 后端未返回 currentRound，使用默认值: 1`);
+
+            // 🔥 P0-A: lesson-scoped round 推导（不再使用全局 currentRound）
+            if (!options?.round && lessonId) {
+              const roundHistory = progress.roundHistory || [];
+
+              // 过滤出当前课程且 passed 的 round 记录
+              const lessonHistoryRounds = roundHistory
+                .filter((r: any) => r.lessonId === lessonId && r.passed === true)
+                .map((r: any) => r.roundNumber);
+
+              const lastPassedRound = lessonHistoryRounds.length > 0
+                ? Math.max(...lessonHistoryRounds)
+                : 0;
+
+              const computedRound = Math.min(Math.max(lastPassedRound + 1, 1), 3);
+              round = computedRound;
+
+              console.log(`🔍 [P0-A] lessonId: ${lessonId}, backendCurrentRound: ${progress.currentRound || 'N/A'}, computedRound: ${computedRound}, lessonHistoryRounds: [${lessonHistoryRounds.join(',')}]`);
             }
 
             mode = progress.letterCompleted ? 'free-play' : 'learning';
@@ -336,35 +349,58 @@ export const useAlphabetStore = create<AlphabetStoreState>()(
             mapLetterToState(item, item.memoryState)
           );
 
-          // 🔥 修复 Bug 2: 根据 memoryState.isNew 分离字母
-          // - isNew === false: 上一课程或上一轮的复习字母
-          // - isNew === true: 本课程的新字母
-          const reviewLetters = learningItems.filter(
-            (item) => item.memoryState?.isNew === false
-          );
-          const newLetters = learningItems.filter(
-            (item) => item.memoryState?.isNew === true
+          // 🔥 P0-D: 按 lessonId 切分（不依赖 isNew）
+          // 确保四段结构永远存在，且符合产品规则
+          const currentLessonLetters = learningItems.filter(
+            (item) => lessonId && item.letter.curriculumLessonIds?.includes(lessonId)
           );
 
-          // 🔥 开发环境日志（仅在非生产环境输出）
-          if (__DEV__ || process.env.NODE_ENV !== 'production') {
-            console.log('📊 [buildQueue] 队列分析:', {
-              round,
-              mode,
-              total: learningItems.length,
-              reviewCount: reviewLetters.length,
-              newCount: newLetters.length,
-              reviewIds: reviewLetters.map(l => l.thaiChar),
-              newIds: newLetters.map(l => l.thaiChar),
-            });
+          const nonCurrentLessonLetters = learningItems.filter(
+            (item) => lessonId && !item.letter.curriculumLessonIds?.includes(lessonId)
+          );
+
+          let reviewLetters: AlphabetLearningState[];
+          let newLetters: AlphabetLearningState[];
+
+          if (round === 1) {
+            // Round1: previous = 非本课字母（跨课），new = 本课字母
+            reviewLetters = nonCurrentLessonLetters;
+            newLetters = currentLessonLetters;
+          } else {
+            // Round2/3: previous = 本课字母（同课复习），new = 本课字母（保证 new-learning/mini/final 存在）
+            reviewLetters = currentLessonLetters;
+            newLetters = currentLessonLetters;
           }
 
           const queue = buildAlphabetQueue({
-            lessonLetters: newLetters,           // 🔥 只传新字母
+            lessonLetters: newLetters,           // 🔥 保证 new-learning/mini/final 永远有内容
             round,
             mode,
-            previousRoundLetters: reviewLetters, // 🔥 传复习字母
+            previousRoundLetters: reviewLetters, // 🔥 Round1=跨课，Round2/3=本课
           });
+
+          // 🔥 开发环境日志 + 四段结构验证（在构建后统计）
+          if (__DEV__) {
+            const sourceCounts = queue.reduce((acc, item) => {
+              acc[item.source] = (acc[item.source] || 0) + 1;
+              return acc;
+            }, {} as Record<string, number>);
+
+            console.log('📊 [buildQueue] 队列分析:', {
+              round,
+              mode,
+              lessonId,
+              total: learningItems.length,
+              currentLessonCount: currentLessonLetters.length,
+              nonCurrentLessonCount: nonCurrentLessonLetters.length,
+              reviewCount: reviewLetters.length,
+              newCount: newLetters.length,
+              queueTotal: queue.length,
+              sourceCounts,  // 🔥 四段统计 {'previous-review': 5, 'new-learning': 12, ...}
+              reviewIds: reviewLetters.map(l => l.thaiChar).slice(0, 5),
+              newIds: newLetters.map(l => l.thaiChar).slice(0, 5),
+            });
+          }
 
           // 🐛 P0-3 DEBUG: 检查后端返回的队列是否包含三新一复逻辑
           console.log('=== 后端返回的队列分析 ===');

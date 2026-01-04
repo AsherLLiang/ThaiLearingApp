@@ -244,12 +244,12 @@ export const ALPHABET_ENDPOINTS = {
   } as EndpointMap,
 
   GET_TEST: {
-    cloudbase: 'alphabet',
+    cloudbase: '/alphabet',  // ✅ 修复：添加前导斜杠
     java: '/api/vocabulary/alphabets/test'
   } as EndpointMap,
 
   SUBMIT_TEST: {
-    cloudbase: 'alphabet',
+    cloudbase: '/alphabet',  // ✅ 修复：添加前导斜杠
     java: '/api/vocabulary/alphabets/test/submit'
   } as EndpointMap,
 };

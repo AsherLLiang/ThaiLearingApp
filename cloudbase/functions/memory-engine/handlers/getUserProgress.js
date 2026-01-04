@@ -76,10 +76,11 @@ async function getUserProgress(db, params) {
     // 4. 组装
     const result = {
       ...progress,
-      // 🔥 合并字母模块专属字段（currentRound, completedLessons）
+      // 🔥 合并字母模块专属字段（currentRound, completedLessons, roundHistory）
       ...(alphabetProgress ? {
         currentRound: alphabetProgress.currentRound,
-        completedLessons: alphabetProgress.completedLessons || []  // 🔥 新增字段
+        completedLessons: alphabetProgress.completedLessons || [],  // 🔥 新增字段
+        roundHistory: alphabetProgress.roundHistory || []  // 🔥 P0-A: 补充 roundHistory
       } : {}),
       statistics: {
         letter: {
@@ -102,6 +103,8 @@ async function getUserProgress(db, params) {
         article: progress.articleUnlocked
       }
     };
+
+    console.log('📊 [getUserProgress] roundHistory returned:', (alphabetProgress?.roundHistory || []).length);
 
     // 与前端约定：data.progress 为进度对象
     return createResponse(true, { progress: result }, '获取用户进度成功');
