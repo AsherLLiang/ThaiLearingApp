@@ -83,12 +83,10 @@ interface CheckAccessResponse {
 }
 
 /**
- * 用户进度响应（后端返回）
+ * 用户进度响应
  */
 interface UserProgressResponse {
-    progress: UserProgress & {
-        completedLessons?: string[];  // 🔥 后端返回字段（user_alphabet_progress.completedLessons）
-    };
+    progress: UserProgress;
 }
 
 // ==================== Store 定义 ====================
@@ -300,76 +298,62 @@ export const useModuleAccessStore = create<ModuleAccessStore>()((set, get) => ({
             }
 
             if (result.success && result.data) {
-                // 🔥 Step 3: 以后端数据为准，本地仅作缓存
-                const remoteCompleted = result.data.progress.completedLessons || [];
+                // 🔥 Merge with local persisted completed lessons
+                let completedAlphabetLessons: string[] = [];
+                try {
+                    const storageKey = getCompletedLessonsStorageKey(userId)
+                    const stored = await AsyncStorage.getItem(storageKey);
+                    if (stored) {
+                        completedAlphabetLessons = JSON.parse(stored);
+                    }
+                } catch (e) {
+                    console.warn('⚠️ Failed to load local completed lessons:', e);
+                }
 
-                // 🔥 更新本地缓存（用于离线时加速）
-                const storageKey = getCompletedLessonsStorageKey(userId);
-                AsyncStorage.setItem(storageKey, JSON.stringify(remoteCompleted)).catch(err => {
-                    console.warn('⚠️ Failed to cache completed lessons:', err);
-                });
+                // If remote has it (unlikely), merge distinct? Or trust local?
+                // Rule: Local is the source of truth for this frontend-only field.
+                // But if backend sends it, we might want to union. 
+                // For now, assume backend sends undefined/empty.
+                const remoteCompleted = result.data.progress.completedAlphabetLessons || [];
+                const mergedCompleted = Array.from(new Set([...completedAlphabetLessons, ...remoteCompleted]));
+
+                // If local had nothing but remote did (e.g. cloud sync feature added later), we should update local storage too?
+                // Yes, harmless to sync back.
+                if (mergedCompleted.length > completedAlphabetLessons.length) {
+                    const storageKey = getCompletedLessonsStorageKey(userId);
+                    void AsyncStorage.setItem(storageKey, JSON.stringify(mergedCompleted));
+                }
 
                 set({
                     userProgress: {
                         ...result.data.progress,
-                        completedAlphabetLessons: remoteCompleted  // 🔥 字段映射
+                        completedAlphabetLessons: mergedCompleted
                     },
                     isLoading: false,
                 });
-                console.log('✅ 用户进度数据已更新 (Backend-first):', {
+                console.log('✅ 用户进度数据已更新 (Merged):', {
                     ...result.data.progress,
-                    completedAlphabetLessons: remoteCompleted
+                    completedAlphabetLessons: mergedCompleted
                 });
             } else {
-                // 🔥 后端失败时，尝试从本地缓存加载（降级方案）
-                console.warn('⚠️ 获取用户进度失败 (Primary & Fallback)，尝试从本地缓存加载');
-                try {
-                    const storageKey = getCompletedLessonsStorageKey(userId);
-                    const cached = await AsyncStorage.getItem(storageKey);
-                    const cachedCompleted = cached ? JSON.parse(cached) : [];
-
-                    set({
-                        userProgress: {
-                            ...defaultProgress,
-                            completedAlphabetLessons: cachedCompleted
-                        },
-                        isLoading: false,
-                        error: result.error || 'Failed to fetch progress'
-                    });
-                    console.log('⚠️ 使用本地缓存数据:', cachedCompleted);
-                } catch (cacheError) {
-                    set({
-                        userProgress: defaultProgress,
-                        isLoading: false,
-                        error: result.error || 'Failed to fetch progress'
-                    });
-                }
+                console.warn('⚠️ 获取用户进度失败 (Primary & Fallback)，使用默认数据');
+                // Don't overwrite with default if we have stale data? 
+                // Actually, for safety, maybe we should? Or keep stale?
+                // Requirements mainly imply getting fresh data. 
+                // If failed, we likely shouldn't nuke existing state if it exists, but here we usually start from null/default.
+                set({
+                    userProgress: defaultProgress,
+                    isLoading: false,
+                    error: result.error || 'Failed to fetch progress'
+                });
             }
         } catch (error: any) {
             console.error('❌ getUserProgress error:', error);
-
-            // 🔥 异常时，尝试从本地缓存加载（降级方案）
-            try {
-                const storageKey = getCompletedLessonsStorageKey(userId);
-                const cached = await AsyncStorage.getItem(storageKey);
-                const cachedCompleted = cached ? JSON.parse(cached) : [];
-
-                set({
-                    error: error.message || '获取进度失败',
-                    userProgress: {
-                        ...defaultProgress,
-                        completedAlphabetLessons: cachedCompleted
-                    },
-                    isLoading: false,
-                });
-                console.log('⚠️ 异常时使用本地缓存:', cachedCompleted);
-            } catch (cacheError) {
-                set({
-                    error: error.message || '获取进度失败',
-                    userProgress: defaultProgress,
-                    isLoading: false,
-                });
-            }
+            set({
+                error: error.message || '获取进度失败',
+                userProgress: defaultProgress,
+                isLoading: false,
+            });
         }
     },
 
@@ -402,12 +386,6 @@ export const useModuleAccessStore = create<ModuleAccessStore>()((set, get) => ({
 
     // ===== 标记字母课程完成（前端本地）=====
     markAlphabetLessonCompleted: (lessonId: string) => {
-        const userId = useUserStore.getState().currentUser?.userId;
-        if (!userId) {
-            console.warn('⚠️ 用户未登录，无法标记课程完成');
-            return;
-        }
-
         const totalLessons = Object.keys(LESSON_METADATA).length;
         const coreLessons = 6; // 完成前 6 课视为“核心字母已学完”
 

@@ -76,8 +76,11 @@ async function getUserProgress(db, params) {
     // 4. 组装
     const result = {
       ...progress,
-      // 🔥 合并字母模块专属字段（currentRound）
-      ...(alphabetProgress ? { currentRound: alphabetProgress.currentRound } : {}),
+      // 🔥 合并字母模块专属字段（currentRound, completedLessons）
+      ...(alphabetProgress ? {
+        currentRound: alphabetProgress.currentRound,
+        completedLessons: alphabetProgress.completedLessons || []  // 🔥 新增字段
+      } : {}),
       statistics: {
         letter: {
           total: 44,
