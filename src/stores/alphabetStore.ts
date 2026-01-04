@@ -336,14 +336,34 @@ export const useAlphabetStore = create<AlphabetStoreState>()(
             mapLetterToState(item, item.memoryState)
           );
 
-          const shouldIncludePrevious = mode === 'learning' && round > 1;
-          const previousRoundLetters = shouldIncludePrevious ? learningItems : [];
+          // 🔥 修复 Bug 2: 根据 memoryState.isNew 分离字母
+          // - isNew === false: 上一课程或上一轮的复习字母
+          // - isNew === true: 本课程的新字母
+          const reviewLetters = learningItems.filter(
+            (item) => item.memoryState?.isNew === false
+          );
+          const newLetters = learningItems.filter(
+            (item) => item.memoryState?.isNew === true
+          );
+
+          // 🔥 开发环境日志（仅在非生产环境输出）
+          if (__DEV__ || process.env.NODE_ENV !== 'production') {
+            console.log('📊 [buildQueue] 队列分析:', {
+              round,
+              mode,
+              total: learningItems.length,
+              reviewCount: reviewLetters.length,
+              newCount: newLetters.length,
+              reviewIds: reviewLetters.map(l => l.thaiChar),
+              newIds: newLetters.map(l => l.thaiChar),
+            });
+          }
 
           const queue = buildAlphabetQueue({
-            lessonLetters: learningItems,
+            lessonLetters: newLetters,           // 🔥 只传新字母
             round,
             mode,
-            previousRoundLetters,
+            previousRoundLetters: reviewLetters, // 🔥 传复习字母
           });
 
           // 🐛 P0-3 DEBUG: 检查后端返回的队列是否包含三新一复逻辑
@@ -365,9 +385,9 @@ export const useAlphabetStore = create<AlphabetStoreState>()(
           // 统计新字母和复习字母的分布
           // 🔥 TODO-03: 统一使用 'new-learning'
           const newLettersInQueue = queue.filter((item) => item.source === 'new-learning');
-          const reviewLetters = queue.filter((item) => item.source !== 'new-learning');
+          const reviewLettersInQueue = queue.filter((item) => item.source !== 'new-learning');
           console.log('新字母数量:', newLettersInQueue.length);
-          console.log('复习字母数量:', reviewLetters.length);
+          console.log('复习字母数量:', reviewLettersInQueue.length);
 
           set({
             phase: LearningPhase.IDLE,

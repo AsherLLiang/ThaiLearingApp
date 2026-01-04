@@ -113,6 +113,8 @@ exports.main = async (event, context) => {
         completedLessons: [],
         masteredLetterCount: 0,
         totalLetterCount: 80,
+        currentRound: 1,          // 🔥 新增：默认从第1轮开始
+        roundHistory: [],         // 🔥 新增：轮次历史记录
         createdAt: registrationDate,
         updatedAt: registrationDate,
       }
