@@ -54,7 +54,7 @@ export function useAlphabetLearningEngine(lessonId: string) {
   } = useAlphabetStore();
 
   const { currentUser } = useUserStore();
-  const { markAlphabetLessonCompleted, userProgress } = useModuleAccessStore();
+  const { userProgress } = useModuleAccessStore();
   const userId = currentUser?.userId ?? 'test-user';
 
   const [initialized, setInitialized] = useState(false);
@@ -584,12 +584,14 @@ export function useAlphabetLearningEngine(lessonId: string) {
       // 2. Log
       console.log(`✅ Round ${currentRound} Submit Success.`);
 
-      // 🔥 TODO-04: Alphabet → moduleAccessStore 接线
-      // 仅在 learning 模式 + Round3 完成 + 通过 时，标记课程完成
+      // 🔥 Step 5: Round3 完成后刷新用户进度（从后端获取最新 completedLessons）
       if (currentRound === 3 && passed) {
-        console.log('📚 Lesson completed! Marking in moduleAccessStore...');
-        markAlphabetLessonCompleted(lessonId);
-        console.log('✅ Lesson marked as completed in moduleAccessStore');
+        console.log('📚 Round3 completed! Refreshing user progress from backend...');
+
+        // 🔥 刷新进度（会从后端获取最新的 completedLessons）
+        await useModuleAccessStore.getState().getUserProgress();
+
+        console.log('✅ User progress refreshed from backend');
       }
 
       // 3. 🔥 推进到下一轮（Round1 → Round2 → Round3）
@@ -619,7 +621,7 @@ export function useAlphabetLearningEngine(lessonId: string) {
       setExplicitPhase('round-completed');
     }
 
-  }, [currentRound, queue.length, wrongAnswers, userId, lessonId, submitRoundToStore, clearStoredSessionState, setStoreCurrentRound, userProgress, markAlphabetLessonCompleted, setCurrentRound, setExplicitPhase]);
+  }, [currentRound, queue.length, wrongAnswers, userId, lessonId, submitRoundToStore, clearStoredSessionState, setStoreCurrentRound, userProgress, setCurrentRound, setExplicitPhase]);
 
   // REMOVED: handleStartNextRound. 
   // User must exit to Lesson page and restart to trigger next round init.
