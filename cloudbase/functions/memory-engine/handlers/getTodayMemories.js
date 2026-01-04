@@ -97,6 +97,9 @@ async function getTodayMemories(db, params) {
   const start = Date.now();
   const { userId, entityType, limit = 30, includeNew = true, roundNumber } = params;
 
+  // 🔍 调试日志：打印收到的 userId
+  console.log('📥 [getTodayMemories] 收到请求，userId:', userId, ', entityType:', entityType);
+
   if (!userId || !entityType) {
     return createResponse(false, null, 'Missing userId or entityType', 'INVALID_PARAMS');
   }

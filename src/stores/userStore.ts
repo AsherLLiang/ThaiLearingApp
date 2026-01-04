@@ -117,6 +117,9 @@ export const useUserStore = create<UserState>()(
               error: null,
             });
 
+            // 🔍 调试日志：注册成功后打印 userId
+            console.log('✅ [注册成功] currentUser.userId:', user.userId);
+
             return true;
 
           } else {
@@ -184,6 +187,9 @@ export const useUserStore = create<UserState>()(
               isLoading: false,
               error: null,
             });
+
+            // 🔍 调试日志：登录成功后打印 userId
+            console.log('✅ [登录成功] currentUser.userId:', user.userId);
 
             return true;
           } else {
