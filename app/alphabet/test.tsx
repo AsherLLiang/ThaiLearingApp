@@ -263,8 +263,34 @@ export default function AlphabetTestScreen() {
 
         try {
             setSubmitting(true);
+
+            // 🐛 调试：打印所有答案和正确答案
+            console.log('=== 判分调试 ===');
+            questions.forEach((q, idx) => {
+                const userAnswer = answers[q.id];
+                // LETTER_TO_SOUND: 比较 option._id 与 targetLetter._id
+                const correctAnswer = q.gameType === AlphabetGameType.LETTER_TO_SOUND
+                    ? q.targetLetter._id
+                    : q.correctAnswer;
+                const isCorrect = userAnswer === correctAnswer;
+                console.log(`Q${idx + 1} [${q.gameType}]:`, {
+                    userAnswer,
+                    correctAnswer,
+                    isCorrect,
+                    targetLetter: q.targetLetter.thaiChar
+                });
+            });
+
             // 本地判分
-            const correctCount = questions.filter(q => answers[q.id] === q.correctAnswer).length;
+            const correctCount = questions.filter(q => {
+                const userAnswer = answers[q.id];
+                // LETTER_TO_SOUND: 比较 option._id 与 targetLetter._id
+                if (q.gameType === AlphabetGameType.LETTER_TO_SOUND) {
+                    return userAnswer === q.targetLetter._id;
+                }
+                // SOUND_TO_LETTER: 比较 thaiChar 与 correctAnswer
+                return userAnswer === q.correctAnswer;
+            }).length;
             const passed = correctCount >= 17;
 
             console.log(`判分结果： ${correctCount}/20, 通过： ${passed}`);
@@ -380,7 +406,13 @@ export default function AlphabetTestScreen() {
                         {/* 🆕 选项渲染 */}
                         <View style={styles.optionsContainer}>
                             {q.options?.map((option, optIndex) => {
-                                const isSelected = answers[q.id] === option.thaiChar;
+                                // 🐛 修复：使用唯一标识符避免多选
+                                // LETTER_TO_SOUND: 使用 option._id（唯一）
+                                // SOUND_TO_LETTER: 使用 option.thaiChar
+                                const comparisonValue = q.gameType === AlphabetGameType.LETTER_TO_SOUND
+                                    ? option._id
+                                    : option.thaiChar;
+                                const isSelected = answers[q.id] === comparisonValue;
 
                                 // SOUND_TO_LETTER: 显示泰文字符
                                 if (q.gameType === AlphabetGameType.SOUND_TO_LETTER) {
@@ -411,8 +443,9 @@ export default function AlphabetTestScreen() {
                                             if (audioUrl) {
                                                 playAudio(audioUrl);
                                             }
-                                            // 选择答案
-                                            selectAnswer(q.id, option.thaiChar);
+
+                                            // 🐛 修复：使用唯一的 option._id 避免多选
+                                            selectAnswer(q.id, option._id);
                                         }}
                                     >
                                         <View style={[styles.radioCircle, isSelected && styles.radioSelected]} />
