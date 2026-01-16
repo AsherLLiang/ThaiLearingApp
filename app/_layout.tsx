@@ -1,9 +1,10 @@
 import { Stack, useRouter, useSegments, useRootNavigationState } from 'expo-router';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useUserStore } from '@/src/stores/userStore';
+import { useModuleAccessStore } from '@/src/stores/moduleAccessStore';
 import '../global.css';
 import { useState } from 'react';
 
@@ -15,7 +16,9 @@ export default function RootLayout() {
   const router = useRouter();
   const navigationState = useRootNavigationState();
   const { isAuthenticated } = useUserStore();
+  const { checkAccess, getUserProgress } = useModuleAccessStore();
   const [navReady, setNavReady] = useState(false);
+  const didInitDevAccessRef = useRef(false);
 
   const [fontsLoaded, fontError] = useFonts({
     // Font loading temporarily disabled - font files not found
@@ -49,6 +52,22 @@ export default function RootLayout() {
       router.replace('/(tabs)');
     }
   }, [isAuthenticated, segments, fontsLoaded, fontError, navReady, router]);
+
+  useEffect(() => {
+    if (!__DEV__) return;
+    if (!isAuthenticated) return;
+    if (didInitDevAccessRef.current) return;
+    didInitDevAccessRef.current = true;
+
+    (async () => {
+      try {
+        await getUserProgress();
+        await checkAccess('word');
+      } catch (error) {
+        console.warn('⚠️ Dev access warmup failed:', error);
+      }
+    })();
+  }, [isAuthenticated, checkAccess, getUserProgress]);
 
   if (!fontsLoaded && !fontError) {
     return null;

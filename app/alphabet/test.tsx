@@ -9,6 +9,11 @@ import { Colors } from '@/src/constants/colors';
 import { Typography } from '@/src/constants/typography';
 import { ThaiPatternBackground } from '@/src/components/common/ThaiPatternBackground';
 import { useTranslation } from 'react-i18next';
+import { generateQuestion } from '@/src/utils/lettersQuestionGenerator';
+import { AlphabetGameType } from '@/src/entities/types/alphabetGameTypes';
+import { Letter } from '@/src/entities/types/letter.types';
+import { TextStyle } from 'react-native';
+
 
 // ------------------------------------------------------------------
 // Types
@@ -17,6 +22,7 @@ interface TestQuestion {
     id: string;
     question: string;
     options: string[];
+    correctAnswer: string;
 }
 
 interface UserAnswer {
@@ -31,6 +37,64 @@ interface TestResponse {
 interface SubmitResponse {
     passed: boolean;
     score?: number;
+}
+
+// ------------------------------------------------------------------
+// Pure Helper: Test Generator
+// ------------------------------------------------------------------
+
+/**
+ * 纯函数：根据字母池生成 20 道测试题
+ * 
+ * 逻辑：
+ * 1. 打乱字母池
+ * 2. 确保凑够 20 个题目源 (不足则循环补充)
+ * 3. 转换为 UI 展示用的 TestQuestion 格式
+ */
+
+export function generateTestQuestions(allLetters: Letter[]): TestQuestion[] {
+    // 防御性编程：如果没有字母或其他异常，返回空数组
+    if (!allLetters || allLetters.length === 0) return [];
+    // TODO 1: 创建副本并洗牌 (Shuffle)
+    const pool = [...allLetters].sort(() => Math.random() - 0.5);
+    // TODO 2: 截取或循环补齐到 20 个 (Target Letters)
+    const TARGET_COUNT = 20;
+    const targetLetters: Letter[] = [];
+    let i = 0;
+    while (targetLetters.length < TARGET_COUNT) {
+        // 取模运算：即使 i 超过 pool.length，也能循环回到开头取值
+        targetLetters.push(pool[i % pool.length]);
+        i++;
+    }
+    // TODO 3: Generate Questions & Map to UI Model
+    return targetLetters.map(
+        (letter, index) => {
+            const queueItem = {
+                letter,
+                letterId: letter._id,
+                gameType: Math.random() > 0.5 ? AlphabetGameType.SOUND_TO_LETTER
+                    : AlphabetGameType.LETTER_TO_SOUND
+            }
+            // 提示：调用 generateQuestion(queueItem, allLetters)
+            const algoQuestion = generateQuestion(queueItem, allLetters);
+            let questionText = '';
+            let optionsDetails: string[] = [];
+
+            if (algoQuestion.gameType === AlphabetGameType.SOUND_TO_LETTER) {
+                questionText = `Which letter matches this sound?`;
+                optionsDetails = algoQuestion.options?.map(l => l.thaiChar) || [];
+            } else {
+                questionText = `Which sound matches this letter?`;
+                optionsDetails = algoQuestion.options?.map(l => l.nameEnglish || l.initialSound) || [];
+            }
+            return{
+                id:`${algoQuestion.id}-${index}`,
+                question:questionText,
+                options:optionsDetails,
+                correctAnswer:algoQuestion.correctAnswer
+            };
+        }
+    )
 }
 
 // ------------------------------------------------------------------

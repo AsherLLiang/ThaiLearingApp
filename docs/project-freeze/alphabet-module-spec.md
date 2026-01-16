@@ -1,8 +1,13 @@
-# 泰语字母模块最终规格说明（Alphabet Module Spec, Freeze V2.0.1）
+# 泰语字母模块最终规格说明（Alphabet Module Spec, Final v3.0）
 
-> 目录：`docs/project-freeze/alphabet-module-spec.md`  
-> 适用范围：**字母模块前端 + memory-engine 中与字母相关的全部逻辑**  
-> 目标：让任何开发者在不通读全部代码的前提下，仅凭本规格 + 相关类型定义，即可实现 / 重构 / 扩展字母模块的所有功能，而不会破坏全局架构。
+> **状态**: Frozen（冻结）  
+> **版本**: v3.0  
+> **最后更新**: 2026-01-05  
+> **目录**: `docs/project-freeze/alphabet-module-spec.md`  
+> **适用范围**: Alphabet 模块全部代码（前端 + 后端 memory-engine）  
+> **权威性声明**: 本文件是 Alphabet 模块的**唯一权威规范**，优先于所有历史代码、历史文档、AI 建议  
+> **修订摘要**: v3.0 合并了 FINAL_FACTS、IMPLEMENTATION_SKELETON、P0修复规范，落地 lesson-scoped round、completedLessons 权威来源、四段队列结构、isNew 语义边界等最终规则  
+> **目标**: 让任何开发者在不通读全部代码的前提下，仅凭本规格 + 相关类型定义，即可实现 / 重构 / 扩展字母模块的所有功能，而不会破坏全局架构
 
 ---
 
@@ -1532,3 +1537,463 @@ async function syncAlphabetRoundResults(state: AlphabetSessionState) {
 
 至此，字母模块的记忆策略已冻结：  
 **前端负责题目脚本、错题统计与质量聚合；后端只负责持久化 SM‑2 状态与跨天调度。**
+
+---
+
+## 📌 v3.0 新增章节（2026-01-05 P0修复后补充）
+
+> **说明**: 以下章节基于 P0 级 Bug 修复合并而来，包含 lesson-scoped round、completedLessons 权威来源、isNew 语义边界、free-play 规则、AsyncStorage规则等最终规则。这些规则**优先于**文档前面部分的任何冲突描述。
+
+---
+
+## 12. lesson-scoped Round 推导规则（P0-A 修复）
+
+### 12.1 问题背景
+
+**历史错误**（已废弃）：
+- 前端直接读取 `progress.currentRound` 并传给 `getTodayMemories`
+- 导致 Lesson2 从 Round2 开始（因为Lesson1 Round1 passed 后 currentRound 被写为2）
+
+**最终规则**：
+- Round 必须按 **lesson-scoped** 推导，不受其他课程影响
+- 公式：`computedRound = Math.min(Math.max(lastPassedRound + 1, 1), 3)`
+- 其中 `lastPassedRound` = 当前 lessonId 在 roundHistory 中 passed=true 的最大 roundNumber
+
+### 12.2 实现要点（前端）
+
+**文件**: `src/stores/alphabetStore.ts`  
+**位置**: `initializeSession` 方法中
+
+```typescript
+// 🔥 P0-A: lesson-scoped round 推导（不再使用全局 currentRound）
+if (!options?.round && lessonId) {
+  const roundHistory = progress.roundHistory || [];
+  
+  // 过滤出当前课程且 passed 的 round 记录
+  const lessonHistoryRounds = roundHistory
+    .filter((r: any) => r.lessonId === lessonId && r.passed === true)
+    .map((r: any) => r.roundNumber);
+  
+  const lastPassedRound = lessonHistoryRounds.length > 0 
+    ? Math.max(...lessonHistoryRounds) 
+    : 0;
+  
+  const computedRound = Math.min(Math.max(lastPassedRound + 1, 1), 3);
+  round = computedRound;
+  
+  console.log(`🔍 [P0-A] lessonId: ${lessonId}, backendCurrentRound: ${progress.currentRound || 'N/A'}, computedRound: ${computedRound}, lessonHistoryRounds: [${lessonHistoryRounds.join(',')}]`);
+}
+```
+
+### 12.3 验证规则
+
+- Lesson1 Round1 passed → 进入 Lesson2 → `computedRound` **必须**为 1（不受 Lesson1 影响）
+- Lesson2 Round1 passed → 继续 Lesson2 → `computedRound` **必须**为 2
+- 任何 lesson 的 Round3 passed → `computedRound` **必须**重置为 1（下次进入该 lesson 时）
+
+---
+
+## 13. completedLessons 权威来源与课程解锁（P0-B 修复）
+
+### 13.1 唯一写入时机（强制）
+
+```typescript
+mode === 'learning'
+  AND roundNumber === 3
+  AND passed === true
+```
+
+**禁止**在以下情况写入：
+- free-play 模式
+- Round1/Round2（即使 passed）
+- Round3 但 passed=false
+
+### 13.2 后端实现（submitRoundEvaluation.js）
+
+```javascript
+// 🔥 P0-B: Round3 passed 时写入 completedLessons
+let updatedCompletedLessons = Array.isArray(doc.completedLessons) 
+  ? [...doc.completedLessons] 
+  : [];
+
+if (passed && roundNumber === 3 && lessonId) {
+  if (!updatedCompletedLessons.includes(lessonId)) {
+    updatedCompletedLessons.push(lessonId);
+  }
+}
+
+await col.doc(docId).update({
+  data: {
+    completedLessons: updatedCompletedLessons,
+    // ...其他字段
+  },
+});
+```
+
+### 13.3 课程解锁判定公式
+
+**文件**: `app/alphabet/index.tsx`
+
+```typescript
+const isLessonUnlocked = (lessonIndex: number) => {
+  if (lessonIndex === 0) return true; // Lesson1 永远解锁
+  
+  const prevLessonId = lessons[lessonIndex - 1].id;
+  return completedAlphabetLessons.includes(prevLessonId);
+};
+```
+
+**权威来源**：
+- ✅ 后端返回的 `progress.completedLessons`
+- ❌ 禁止使用 `alphabetStore.completedCount`（会话态，不准确）
+
+### 13.4 nextRound 重置规则（防止跨课污染）
+
+```javascript
+// submitRoundEvaluation.js
+const nextRound = passed
+  ? (roundNumber < 3 ? roundNumber + 1 : 1)  // Round3 passed 重置为 1
+  : 1;                                       // failed 也重置为 1
+```
+
+**理由**: 避免 `currentRound` 全局污染导致 Lesson2 从 Round2 开始
+
+---
+
+## 14. 四段队列结构与 previous-review 来源（P0-C/D 修复）
+
+### 14.1 四段结构（所有 round 必须包含）
+
+| 段落 | 名称 | 是否允许为空 | 用途 |
+|------|------|--------------|------|
+| 1 | `previous-review` | ✅ 允许（仅 Lesson1 Round1） | 上一轮/上一课复习 |
+| 2 | `new-learning` | ❌ 必须有内容 | 新字母学习 |
+| 3 | `mini-review` | ❌ 必须有内容 | 每3个新字母回放 |
+| 4 | `final-review` | ❌ 必须有内容 | 全量复习 |
+
+### 14.2 previous-review 数据来源规则
+
+| Round | Lesson | previous-review 来源 | 实现方式 |
+|-------|--------|---------------------|----------|
+| Round1 | Lesson1 | **空数组** | 前端: `reviewLetters = []` |
+| Round1 | Lesson2+ | **Lesson(N-1) 字母** | 后端显式注入 + 前端按 lessonId 切分 |
+| Round2/3 | 任意 | **当前 Lesson 字母** | 前端按 lessonId 切分（同一批字母复用） |
+
+### 14.3 后端显式注入（P0-C，仅 Round1 且 lesson>1）
+
+**文件**: `cloudbase/functions/memory-engine/handlers/getTodayMemories.js`
+
+```javascript
+// 🔥 P0-C: 显式获取 Round1 跨课程 previous-review
+if (entityType === 'letter' && roundNumber === 1 && params.lessonId && params.lessonId !== 'lesson1') {
+  const currentLessonMeta = await getLessonMetadataFromDb(db, params.lessonId);
+  if (currentLessonMeta && currentLessonMeta.order && currentLessonMeta.order > 1) {
+    const prevLessonId = `lesson${currentLessonMeta.order - 1}`;
+    
+    // 查询上一课的字母
+    const prevLettersResult = await db.collection('letters')
+      .where({ curriculumLessonIds: db.command.in([prevLessonId]) })
+      .limit(20)
+      .get();
+    
+    const explicitPrevMemories = [];
+    
+    for (const letter of prevLettersResult.data) {
+      const mem = await getOrCreateMemory(db, userId, entityType, letter._id, false);
+      if (mem) {
+        // 🔥 浅拷贝避免副作用，强制 reviewStage >= 1
+        const patched = { 
+          ...mem, 
+          reviewStage: Math.max(mem.reviewStage || 0, 1) 
+        };
+        explicitPrevMemories.push(patched);
+      }
+    }
+    
+    // 合并到 reviewMemories（去重）
+    const existingIds = new Set(reviewMemories.map(m => m.entityId));
+    const uniquePrev = explicitPrevMemories.filter(m => !existingIds.has(m.entityId));
+    reviewMemories = [...uniquePrev, ...reviewMemories];
+    
+    console.log(`🔍 [P0-C] lessonId: ${params.lessonId}, prevLessonId: ${prevLessonId}, explicitPrevCount: ${explicitPrevMemories.length}`);
+  }
+}
+```
+
+**关键点**：
+- `reviewStage >= 1` 确保 `isNew = false`
+- 仅影响本次返回，不持久化到 DB
+- 去重防止重复字母
+
+### 14.4 前端按 lessonId 切分（P0-D）
+
+**文件**: `src/stores/alphabetStore.ts`
+
+```typescript
+// 🔥 P0-D: 按 lessonId 切分（不依赖 isNew）
+const currentLessonLetters = learningItems.filter(
+  (item) => lessonId && item.letter.curriculumLessonIds?.includes(lessonId)
+);
+
+const nonCurrentLessonLetters = learningItems.filter(
+  (item) => lessonId && !item.letter.curriculumLessonIds?.includes(lessonId)
+);
+
+let reviewLetters: AlphabetLearningState[];
+let newLetters: AlphabetLearningState[];
+
+if (round === 1) {
+  // Round1: previous = 非本课字母（跨课），new = 本课字母
+  reviewLetters = nonCurrentLessonLetters;
+  newLetters = currentLessonLetters;
+} else {
+  // Round2/3: previous = 本课字母（同课复习），new = 本课字母（保证四段）
+  reviewLetters = currentLessonLetters;
+  newLetters = currentLessonLetters;
+}
+
+const queue = buildAlphabetQueue({
+  lessonLetters: newLetters,
+  round,
+  mode,
+  previousRoundLetters: reviewLetters,
+});
+```
+
+**Round2/3 队列重复说明**：
+- `reviewLetters` 和 `newLetters` 都指向 `currentLessonLetters`
+- 同一字母会在 `previous-review` 和 `new-learning` 中重复出现
+- ✅ **允许**这种重复（为保证四段结构存在）
+- ⚠️ 队列总长度会增加，需观察用户完成时长
+
+---
+
+## 15. isNew 数据语义边界（P0-D 补充）
+
+### 15.1 精确定义
+
+- `memoryState.isNew`：表示**记忆状态的新旧**
+  - `true`：该字母在 `memory_status` 中无记录或 `reviewStage === 0`
+  - `false`：该字母已有学习记录且 `reviewStage > 0`
+
+### 15.2 语义边界（禁止混淆）
+
+❌ **`isNew` 不等价于** "是否为本课新字母"  
+❌ **`isNew` 不等价于** "是否应进入 previous-review"  
+✅ **`isNew` 仅表示** "该字母是否有学习历史"
+
+### 15.3 正确用法 vs 错误用法
+
+**✅ 正确用法**：判断是否跨课复习
+```typescript
+const hasNonNew = queue.some(item => item.memoryState?.isNew === false);
+if (!hasNonNew) setPhase('today-learning'); // 跳过 yesterday-review
+```
+
+**❌ 错误用法**（已禁用）：用于分组 previous/new
+```typescript
+// 这会导致 Round1 的 previous-review 为空（因为上一课字母的 isNew 可能为 true）
+const reviewLetters = learningItems.filter(item => item.memoryState?.isNew === false);
+const newLetters = learningItems.filter(item => item.memoryState?.isNew === true);
+```
+
+**✅ 正确替代方案**：按 `curriculumLessonIds` 切分（见 14.4 节）
+
+---
+
+## 16. free-play 模式规则（合并自 IMPLEMENTATION_SKELETON）
+
+### 16.1 唯一判定条件
+
+```typescript
+mode = user_alphabet_progress.letterCompleted === true
+  ? 'free-play'
+  : 'learning'
+```
+
+❌ **禁止**使用 round/phase/进度百分比推断 mode  
+✅ `letterCompleted` 是唯一合法来源
+
+### 16.2 free-play 语义
+
+- free-play ≠ "重复进入已完成课程"
+- free-play = "Alphabet 教学整体结束，进入只读复习状态"
+- free-play 是**全局状态**，不是**课程状态**
+
+### 16.3 禁止写入规则（强制）
+
+free-play 模式下**禁止**写入以下任何字段：
+
+❌ `currentRound`  
+❌ `roundHistory`  
+❌ `completedLessons`  
+❌ `letterProgress`  
+❌ `letterCompleted`  
+❌ 任何解锁字段
+
+**实现要点**（前端）：
+```typescript
+// useAlphabetLearningEngine.ts: submitRoundResults
+if (mode === 'learning') {
+  // 正常写入
+  await submitRoundToStore({ ... });
+  if (currentRound === 3 && passed) {
+    markAlphabetLessonCompleted(lessonId);
+  }
+} else {
+  // free-play: 只清除 session，不写任何进度
+  setPhase('round-completed');
+}
+```
+
+### 16.4 未完成 Alphabet 时的行为规则
+
+**场景**: 用户只完成了 Lesson1~5，第6课已解锁，`letterCompleted === false`
+
+**冻结行为**（必须遵守）：
+
+1. 用户进入任何已解锁课程 → `mode = 'learning'`（不进入 `free-play`）
+2. 用户进入已 Round3 完成的旧课程 → 仍按 `learning` 模式运行
+   - `previous-review` 仅来自该课程自身
+   - ❌ **禁止**跨课程取字母
+3. 不得产生任何污染：
+   - ❌ 不影响下一课的 `previous-review`
+   - ❌ 不影响课程解锁顺序
+
+---
+
+## 17. AsyncStorage 规则（v3.0 新增）
+
+### 17.1 userId-scope 规则（强制）
+
+✅ **必须**所有缓存 key 包含 `userId`
+```typescript
+const key = `alphabet_progress_${userId}`;
+```
+
+❌ **禁止**使用全局 key（如 `alphabet_completedLessons`）
+
+### 17.2 旧全局 key 迁移/删除
+
+```typescript
+const oldData = await AsyncStorage.getItem('alphabet_completedLessons');
+if (oldData) {
+  await AsyncStorage.setItem(`alphabet_completedLessons_${userId}`, oldData);
+  await AsyncStorage.removeItem('alphabet_completedLessons');
+}
+```
+
+### 17.3 logout 时的缓存清理策略
+
+**推荐策略**：
+- ✅ 保留 userId-scope 缓存（下次登录同账号时复用）
+- ✅ 清除 session 级别缓存（如 `alphabet_session_${userId}`）
+- ❌ 不清除持久化进度缓存（减少网络请求）
+
+**可选严格策略**：
+- 如需严格隐私保护，logout 时清除所有 userId-scope 缓存
+- 下次登录时重新从后端同步
+
+---
+
+## 18. 关键日志/插桩建议（DEV/短期）
+
+### 18.1 日志目的
+
+- ✅ 验证 P0 修复是否生效
+- ✅ 定位 previous-review 来源问题
+- ✅ 确认 round 推导正确性
+- ⚠️ 所有日志仅用于开发/测试阶段
+
+### 18.2 必要日志点（≤8 条）
+
+#### Log 1: lesson-scoped round 推导
+**文件**: `alphabetStore.ts`  
+```typescript
+console.log(`🔍 [P0-A] lessonId: ${lessonId}, computedRound: ${computedRound}, lessonHistoryRounds: [${lessonHistoryRounds.join(',')}]`);
+```
+
+#### Log 2: 跨课程 previous-review 注入
+**文件**: `getTodayMemories.js`  
+```javascript
+console.log(`🔍 [P0-C] lessonId: ${params.lessonId}, prevLessonId: ${prevLessonId}, explicitPrevCount: ${explicitPreviousCount}`);
+```
+
+#### Log 3: 前端 lessonId 切分结果
+**文件**: `alphabetStore.ts`  
+```typescript
+console.log('📊 [buildQueue] sourceCounts:', sourceCounts); // {'previous-review': 5, 'new-learning': 12, ...}
+```
+
+#### Log 4: completedLessons 写入
+**文件**: `submitRoundEvaluation.js`  
+```javascript
+console.log(`🔍 [P0-B] completedAfter: [${updatedCompletedLessons.join(',')}]`);
+```
+
+#### Log 5-8: getUserProgress roundHistory、nextRound 重置、free-play 判定、Phase 切换
+详见 v2.1 规范第 8.2 节。
+
+### 18.3 移除计划
+
+- ✅ 验证通过后（约 2 周内）
+- ✅ 移除所有带 `🔍 [P0-*]` 标记的日志
+- ✅ 保留关键错误日志（`console.error`）
+
+---
+
+## 19. 强制执行清单（AI / 开发者必读）
+
+在修改 Alphabet 模块任何代码前，**必须**确认：
+
+- [ ] 我已完整阅读本冻结规范
+- [ ] 我的修改符合四段队列结构
+- [ ] 我的修改不依赖 `isNew` 分组 previous/new
+- [ ] 我的修改使用 lesson-scoped round 推导
+- [ ] 我的修改在 Round3 passed 时写入 completedLessons
+- [ ] 我的修改在 free-play 模式下不写入任何进度
+- [ ] 我的修改使用 AsyncStorage userId-scope key
+
+若任意一项为 "否"，**立即停止**并重新审查设计。
+
+---
+
+## 20. 文档优先级与冲突解决（v3.0 最终）
+
+### 20.1 文档优先级
+
+1. **本文件 v3.0** (`alphabet-module-spec.md`)
+2. ~~ALPHABET_MODULE_IMPLEMENTATION_SKELETON.md~~（已归档）
+3. ~~ALPHABET_MODULE_FINAL_FACTS.md~~（已归档）
+4. 历史代码
+5. AI 建议
+
+### 20.2 冲突解决原则
+
+- 文档内部冲突：**第 12-20 节（v3.0 新增）优先于前面章节**
+- 若代码与本文件冲突：**修改代码**
+- 若需修改本文件：**必须通过正式评审并更新版本号至 v3.1+**
+
+### 20.3 旧文档归档说明
+
+以下文档已合并到本文件，**不再具备规范效力**：
+
+- `docs/ALPHABET_MODULE_FINAL_FACTS.md` → 已归档至 `docs/OLD/`
+- `docs/ALPHABET_MODULE_IMPLEMENTATION_SKELETON.md` → 已归档至 `docs/OLD/`
+- `.gemini/.../alphabet_module_freeze_spec_v2.1.md` → 临时文件，已删除
+
+**禁止引用**以上文档。如有冲突，以本文件为准。
+
+---
+
+## 21. 版本历史
+
+| 版本 | 日期 | 修订内容 |
+|------|------|----------|
+| v3.0 | 2026-01-05 | **重大更新**: 合并 FINAL_FACTS、IMPLEMENTATION_SKELETON、P0修复规范。新增第12-20节：lesson-scoped round、completedLessons权威、四段队列、isNew语义、free-play规则、AsyncStorage规则、日志建议。冲突解决：废弃全局currentRound、isNew分组、Round2/3两段结构等历史错误 |
+| v2.0.1 | 2025-12-XX | 初版详细规格，包含代码文件职责、调用链、Phase流程图、数据库schema |
+
+---
+
+**本文件（v3.0）即为 Alphabet 模块的唯一权威规范。**
+

@@ -131,5 +131,16 @@ export default {
     description: 'Learn 44 consonants and 32 vowels,掌握 standard pronunciation',
     continue: 'Continue Learning',
     start: 'Start Learning',
+  },
+  alphabetTest: {
+    title: 'Alphabet Test',
+    description: 'Test your alphabet knowledge',
+    start: 'Start Test',
+    submit: 'Submit',
+    score: 'Score',
+    passed: 'Pass',
+    failed: 'Fail',
+    retry: 'Retry',
+    backToHome: 'Back to Home',
   }
 };
