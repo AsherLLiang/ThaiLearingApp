@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { use, useEffect, useState } from 'react';
 import { View, Text, ScrollView, Pressable, ActivityIndicator, StyleSheet, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -13,18 +13,17 @@ import { useTranslation } from 'react-i18next';
 import { generateQuestion } from '@/src/utils/lettersQuestionGenerator';
 import { AlphabetGameType } from '@/src/entities/types/alphabetGameTypes';
 import { Letter } from '@/src/entities/types/letter.types';
+import { AlphabetQuestion } from '@/src/entities/types/alphabet.types';
+import { Audio } from 'expo-av';
 import { TextStyle } from 'react-native';
+import { getLetterAudioUrl } from '@/src/utils/alphabet/audioHelper';
+import * as FileSystem from 'expo-file-system/legacy';
 
 
 // ------------------------------------------------------------------
 // Types
 // ------------------------------------------------------------------
-interface TestQuestion {
-    id: string;
-    question: string;
-    options: string[];
-    correctAnswer: string;
-}
+
 
 interface UserAnswer {
     questionId: string;
@@ -32,7 +31,7 @@ interface UserAnswer {
 }
 
 interface TestResponse {
-    questions: TestQuestion[];
+    questions: AlphabetQuestion[];
 }
 
 interface SubmitResponse {
@@ -53,7 +52,7 @@ interface SubmitResponse {
  * 3. 转换为 UI 展示用的 TestQuestion 格式
  */
 
-export function generateTestQuestions(allLetters: Letter[]): TestQuestion[] {
+export function generateTestQuestions(allLetters: Letter[]): AlphabetQuestion[] {
     // 防御性编程：如果没有字母或其他异常，返回空数组
     if (!allLetters || allLetters.length === 0) return [];
     // TODO 1: 创建副本并洗牌 (Shuffle)
@@ -68,33 +67,22 @@ export function generateTestQuestions(allLetters: Letter[]): TestQuestion[] {
         i++;
     }
     // TODO 3: Generate Questions & Map to UI Model
-    return targetLetters.map(
-        (letter, index) => {
-            const queueItem = {
-                letter,
-                letterId: letter._id,
-                gameType: Math.random() > 0.5 ? AlphabetGameType.SOUND_TO_LETTER
-                    : AlphabetGameType.LETTER_TO_SOUND
-            }
-            // 提示：调用 generateQuestion(queueItem, allLetters)
-            const algoQuestion = generateQuestion(queueItem, allLetters);
-            let questionText = '';
-            let optionsDetails: string[] = [];
-
-            if (algoQuestion.gameType === AlphabetGameType.SOUND_TO_LETTER) {
-                questionText = `Which letter matches this sound?`;
-                optionsDetails = algoQuestion.options?.map(l => l.thaiChar) || [];
-            } else {
-                questionText = `Which sound matches this letter?`;
-                optionsDetails = algoQuestion.options?.map(l => l.nameEnglish || l.initialSound) || [];
-            }
-            return {
-                id: `${algoQuestion.id}-${index}`,
-                question: questionText,
-                options: optionsDetails,
-                correctAnswer: algoQuestion.correctAnswer
-            };
+    return targetLetters.map((letter, index) => {
+        const queueItem = {
+            letter,
+            letterId: letter._id,
+            gameType: Math.random() > 0.5
+                ? AlphabetGameType.SOUND_TO_LETTER
+                : AlphabetGameType.LETTER_TO_SOUND
         }
+        // 提示：调用 generateQuestion(queueItem, allLetters)
+        const algoQuestion = generateQuestion(queueItem, allLetters);
+
+        return {
+            ...algoQuestion,
+            id: `${algoQuestion.id}-${index}`
+        };
+    }
     )
 }
 
@@ -108,8 +96,117 @@ export default function AlphabetTestScreen() {
     // State
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
-    const [questions, setQuestions] = useState<TestQuestion[]>([]);
+    const [questions, setQuestions] = useState<AlphabetQuestion[]>([]);
     const [answers, setAnswers] = useState<Record<string, string>>({});
+    const [sound, setSound] = useState<Audio.Sound | null>(null);
+
+    // 简化的音频播放（参考 AlphabetReviewView）
+    const playAudio = async (audioUrl: string) => {
+        try {
+            // 停止并卸载之前的音频
+            if (sound) {
+                try {
+                    await sound.stopAsync();
+                    await sound.unloadAsync();
+                } catch (e) {
+                    // 忽略清理错误
+                }
+            }
+
+            // 直接加载并播放
+            const { sound: newSound } = await Audio.Sound.createAsync(
+                { uri: audioUrl },
+                { shouldPlay: true }
+            );
+
+            setSound(newSound);
+        } catch (error) {
+            console.error('Failed to play audio:', error);
+        }
+    };
+
+    //清理音频
+    useEffect(() => {
+        return () => {
+            if (sound) {
+                sound.unloadAsync();
+            }
+        };
+    }, [sound]);
+
+    // 🎵 后台音频预下载（参考 alphabetStore）
+    const toHttpUrl = (path?: string | null): string => {
+        if (!path) return '';
+        if (path.startsWith('http://') || path.startsWith('https://')) {
+            return path;
+        }
+        let finalPath = path;
+        if (!/\.mp3($|\?)/.test(finalPath)) {
+            finalPath = `${finalPath}.mp3`;
+        }
+        return `https://636c-cloud1-1gjcyrdd7ab927c6-1387301748.tcb.qcloud.la/alphabet/${finalPath}`;
+    };
+
+    const predownloadAudio = async (letters: Letter[]) => {
+        try {
+            const cacheDir = `${FileSystem.cacheDirectory}alphabet-audio/`;
+            const dirInfo = await FileSystem.getInfoAsync(cacheDir);
+            if (!dirInfo.exists) {
+                await FileSystem.makeDirectoryAsync(cacheDir, { intermediates: true });
+            }
+
+            const updatedLetters = new Map<string, Letter>();
+
+            for (const letter of letters) {
+                const updatedLetter = { ...letter };
+
+                // 下载所有音频字段
+                const fields: Array<{ key: keyof Letter; localKey: keyof Letter }> = [
+                    { key: 'fullSoundUrl', localKey: 'fullSoundLocalPath' },
+                    { key: 'syllableSoundUrl', localKey: 'syllableSoundLocalPath' },
+                    { key: 'letterPronunciationUrl', localKey: 'letterPronunciationLocalPath' },
+                ];
+
+                for (const field of fields) {
+                    const url = letter[field.key] as string | undefined;
+                    if (!url) continue;
+
+                    const httpUrl = toHttpUrl(url);
+                    if (!httpUrl) continue;
+
+                    const fileName = encodeURIComponent(httpUrl);
+                    const localPath = `${cacheDir}${fileName}`;
+
+                    try {
+                        const info = await FileSystem.getInfoAsync(localPath);
+                        if (!info.exists) {
+                            await FileSystem.downloadAsync(httpUrl, localPath);
+                        }
+                        (updatedLetter as any)[field.localKey] = localPath;
+                    } catch (err) {
+                        console.warn(`Failed to download ${httpUrl}:`, err);
+                    }
+                }
+
+                updatedLetters.set(letter._id, updatedLetter);
+            }
+
+            // 更新 questions 中的 Letter 对象
+            setQuestions(prevQuestions =>
+                prevQuestions.map(q => ({
+                    ...q,
+                    targetLetter: updatedLetters.get(q.targetLetter._id) || q.targetLetter,
+                    options: q.options?.map(opt =>
+                        updatedLetters.get(opt._id) || opt
+                    )
+                }))
+            );
+
+            console.log('✅ Audio predownload completed');
+        } catch (error) {
+            console.error('Failed to predownload audio:', error);
+        }
+    };
 
     // 1️⃣ Fetch Test Data on Mount
     useEffect(() => {
@@ -130,6 +227,13 @@ export default function AlphabetTestScreen() {
                 // 🆕 使用生成器函数在前端生成 20 道题
                 const generatedQuestions = generateTestQuestions(result.data.letters);
                 setQuestions(generatedQuestions);
+
+                // 🎵 后台异步下载音频（不阻塞页面显示）
+                (async () => {
+                    if (result.data?.letters) {
+                        await predownloadAudio(result.data.letters);
+                    }
+                })();
             } else {
                 Alert.alert('Error', 'Failed to load letters.');
             }
@@ -241,21 +345,81 @@ export default function AlphabetTestScreen() {
             <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
                 {questions.map((q, index) => (
                     <View key={q.id} style={styles.questionCard}>
-                        <Text style={styles.questionText}>{index + 1}. {q.question}</Text>
-
+                        {/* 题号 */}
+                        <Text style={styles.questionNumber}>Question {index + 1}/20</Text>
+                        {/* 🆕 根据题型显示不同内容 */}
+                        {q.gameType === AlphabetGameType.SOUND_TO_LETTER ? (
+                            // 听音选字：显示播放按钮
+                            <View style={styles.audioQuestionContainer}>
+                                <Text style={styles.questionText}>
+                                    Which letter matches this sound?
+                                </Text>
+                                <Pressable
+                                    style={styles.playButton}
+                                    onPress={() => {
+                                        const audioUrl = getLetterAudioUrl(q.targetLetter, 'letter');
+                                        if (audioUrl) {
+                                            playAudio(audioUrl);
+                                        }
+                                    }}
+                                >
+                                    <Text style={styles.playButtonText}>🔊 Play Sound</Text>
+                                </Pressable>
+                            </View>
+                        ) : (
+                            // 看字选音：显示泰文字母
+                            <View style={styles.letterQuestionContainer}>
+                                <Text style={styles.questionText}>
+                                    Which sound matches this letter?
+                                </Text>
+                                <Text style={styles.targetLetter}>
+                                    {q.targetLetter.thaiChar}
+                                </Text>
+                            </View>
+                        )}
+                        {/* 🆕 选项渲染 */}
                         <View style={styles.optionsContainer}>
-                            {q.options.map((opt) => {
-                                const isSelected = answers[q.id] === opt;
+                            {q.options?.map((option, optIndex) => {
+                                const isSelected = answers[q.id] === option.thaiChar;
+
+                                // SOUND_TO_LETTER: 显示泰文字符
+                                if (q.gameType === AlphabetGameType.SOUND_TO_LETTER) {
+                                    return (
+                                        <Pressable
+                                            key={option._id}
+                                            style={[styles.optionButton, isSelected && styles.optionSelected]}
+                                            onPress={() => selectAnswer(q.id, option.thaiChar)}
+                                        >
+                                            <View style={[styles.radioCircle, isSelected && styles.radioSelected]} />
+                                            <Text style={[styles.optionText, isSelected && styles.optionTextSelected]}>
+                                                {option.thaiChar}
+                                            </Text>
+                                        </Pressable>
+                                    );
+                                }
+
+                                // LETTER_TO_SOUND: 显示播放按钮
                                 return (
                                     <Pressable
-                                        key={opt}
-                                        style={[styles.optionButton, isSelected && styles.optionSelected]}
-                                        onPress={() => selectAnswer(q.id, opt)}
+                                        key={option._id}
+                                        style={[styles.audioOptionButton, isSelected && styles.audioOptionSelected]}
+                                        onPress={() => {
+                                            // 使用 audioHelper 获取正确的音频路径
+                                            const audioUrl = getLetterAudioUrl(option, 'letter');
+
+                                            // 播放音频
+                                            if (audioUrl) {
+                                                playAudio(audioUrl);
+                                            }
+                                            // 选择答案
+                                            selectAnswer(q.id, option.thaiChar);
+                                        }}
                                     >
                                         <View style={[styles.radioCircle, isSelected && styles.radioSelected]} />
-                                        <Text style={[styles.optionText, isSelected && styles.optionTextSelected]}>
-                                            {opt}
-                                        </Text>
+                                        <View style={styles.audioOptionContent}>
+                                            <Text style={styles.audioOptionLabel}>选项 {optIndex + 1}</Text>
+                                            <Text style={styles.audioOptionIcon}>🔊</Text>
+                                        </View>
                                     </Pressable>
                                 );
                             })}
@@ -325,6 +489,65 @@ const styles = StyleSheet.create({
     scrollContent: {
         padding: 24,
         gap: 24,
+    },
+    audioQuestionContainer: {
+        alignItems: 'center',
+        marginBottom: 16,
+    },
+    letterQuestionContainer: {
+        alignItems: 'center',
+        marginBottom: 16,
+    },
+    targetLetter: {
+        fontSize: 48,
+        fontFamily: Typography.notoSerifBold,
+        color: Colors.ink,
+        marginTop: 12,
+    },
+    playButton: {
+        backgroundColor: Colors.thaiGold,
+        paddingVertical: 12,
+        paddingHorizontal: 24,
+        borderRadius: 8,
+        marginTop: 12,
+    },
+    playButtonText: {
+        fontSize: 16,
+        fontFamily: Typography.notoSerifBold,
+        color: Colors.white,
+    },
+    questionNumber: {
+        fontSize: 12,
+        fontFamily: Typography.notoSerifRegular,
+        color: Colors.taupe,
+        marginBottom: 8,
+    },
+    audioOptionButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 12,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: '#E0E0E0',
+        backgroundColor: '#FAFAFA',
+    },
+    audioOptionSelected: {
+        borderColor: Colors.thaiGold,
+        backgroundColor: '#FFF9E6',
+    },
+    audioOptionContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        flex: 1,
+    },
+    audioOptionLabel: {
+        fontFamily: Typography.notoSerifRegular,
+        fontSize: 14,
+        color: Colors.ink,
+    },
+    audioOptionIcon: {
+        fontSize: 20,
     },
     questionCard: {
         backgroundColor: Colors.white,
