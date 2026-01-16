@@ -1,5 +1,5 @@
 // app/(tabs)/courses.tsx
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { View, Text, StyleSheet, ScrollView, TextInput, ImageSourcePropType, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -66,15 +66,31 @@ export default function CoursesScreen() {
 
   const { currentCourseSource, startCourse } = useVocabularyStore();
   const { hasDailyLimit } = useLearningPreferenceStore();
-  const { userProgress, getUserProgress } = useModuleAccessStore();
+  const { userProgress, getUserProgress, checkAccess, accessCache } = useModuleAccessStore();
   const [modalVisible, setModalVisible] = useState(false);
   const [pendingCourse, setPendingCourse] = useState<CourseWithImage | null>(null);
+  const didDevAccessCheckRef = useRef(false);
 
   useEffect(() => {
     if (!userProgress) {
       getUserProgress().catch((err) => console.warn('Failed to fetch user progress', err));
     }
   }, [userProgress, getUserProgress]);
+
+  useEffect(() => {
+    if (!__DEV__) return;
+    if (didDevAccessCheckRef.current) return;
+    didDevAccessCheckRef.current = true;
+
+    const uniqueModules = Array.from(new Set(COURSES.map(getModuleType)))
+      .filter((moduleType) => moduleType !== 'letter');
+
+    uniqueModules.forEach((moduleType) => {
+      checkAccess(moduleType).catch((error) => {
+        console.warn('⚠️ Dev module access check failed:', moduleType, error);
+      });
+    });
+  }, [checkAccess]);
 
   const getModuleType = (course: CourseWithImage): ModuleType => {
     switch (course.category) {
@@ -124,7 +140,9 @@ export default function CoursesScreen() {
       const moduleType = getModuleType(course);
 
       // 🔒 Double Check: UI Should be disabled, but logic must be safe
-      const isLocked = moduleType !== 'letter' && !useModuleAccessStore.getState().checkAccessLocally(moduleType);
+      const { checkAccessLocally, accessCache: cachedAccess } = useModuleAccessStore.getState();
+      const devOverrideUnlocked = __DEV__ && cachedAccess.get(moduleType) === true;
+      const isLocked = moduleType !== 'letter' && !devOverrideUnlocked && !checkAccessLocally(moduleType);
       if (isLocked) {
         console.warn('Course locked, double-check start prevented');
         return;
@@ -245,8 +263,9 @@ export default function CoursesScreen() {
           const progress = getCourseProgress(course);
 
           // 🔒 Calculation: Alphabet always unlocked, others check store
-          const { checkAccessLocally } = useModuleAccessStore.getState();
-          const isLocked = moduleType !== 'letter' && !checkAccessLocally(moduleType);
+          const { checkAccessLocally, accessCache: cachedAccess } = useModuleAccessStore.getState();
+          const devOverrideUnlocked = __DEV__ && cachedAccess.get(moduleType) === true;
+          const isLocked = moduleType !== 'letter' && !devOverrideUnlocked && !checkAccessLocally(moduleType);
 
           // 字母课程：使用 AlphabetCourseCard，直接进入 /alphabet 流程
           if (course.category === 'letter') {

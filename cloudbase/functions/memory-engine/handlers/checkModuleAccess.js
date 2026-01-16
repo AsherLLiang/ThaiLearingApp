@@ -9,7 +9,9 @@ const { createResponse } = require('../utils/response');
 
 async function checkModuleAccessHandler(db, params) {
 
-  if (DEV_FORCE_UNLOCK) {
+  const devForceUnlock = process.env.FORCE_UNLOCK === 'true';
+  console.log('🔧 FORCE_UNLOCK 当前值:', process.env.FORCE_UNLOCK, '=>', devForceUnlock);
+  if (devForceUnlock) {
     return createResponse(true, {
       allowed: true,
       moduleType: params.moduleType,

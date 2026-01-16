@@ -131,5 +131,16 @@ export default {
     description: '学习44个辅音和32个元音，掌握标准发音',
     continue: '继续学习',
     start: '开始学习',
+  },
+  alphabetTest: {
+    title: '字母测试',
+    description: '测试你的字母掌握情况',
+    start: '开始测试',
+    submit: '提交',
+    score: '得分',
+    passed: '通过',
+    failed: '未通过',
+    retry: '重新测试',
+    backToHome: '返回首页',
   }
 };
