@@ -1,58 +1,44 @@
-// ✅ 提交字母测试并判定是否通过
+// ✅ 提交字母测试结果（Route A：前端判分）
 const { createResponse } = require('../utils/response');
 const passLetterTest = require('./passLetterTest');
 
-async function submitLetterTest(db, userId, answers) {
+/**
+ * 提交字母测试结果
+ * @param {Object} db - 数据库实例
+ * @param {Object} data - 请求数据 { userId, passed }
+ */
+async function submitLetterTest(db, data) {
+    // 1. 校验参数
+    const { userId, passed } = data || {};
 
-    if (!userId || !Array.isArray(answers)) {
-        return createResponse(false, null, '参数错误', 'INVALID_PARAMS');
+    if (!userId) {
+        return createResponse(false, null, 'userId 参数缺失', 'INVALID_PARAMS');
     }
 
-    // ✅ 取出标准答案（按 _id 对应）
-    const ids = answers.map(a => a._id);
+    if (typeof passed !== 'boolean') {
+        return createResponse(false, null, 'passed 参数必须为布尔值', 'INVALID_PARAMS');
+    }
 
-    const res = await db.collection('letter_test_bank')
-        .where({
-            _id: db.command.in(ids)
-        })
-        .get();
+    // 2. 如果未通过，直接返回（不写数据库）
+    if (!passed) {
+        return createResponse(true, {
+            passed: false,
+            message: '未通过测试，不记录进度'
+        }, '测试未通过');
+    }
 
-    const answerMap = {};
-    res.data.forEach(q => {
-        answerMap[q._id] = q.initialSound;
-    });
-
-    // ✅ 判分
-    let correct = 0;
-    const total = answers.length;
-
-    answers.forEach(item => {
-        if (answerMap[item._id] === item.answer) {
-            correct++;
-        }
-    });
-
-    const score = correct / total;
-
-    // ✅ ✅ ✅ 通过条件：80%
-    if (score >= 0.8) {
-        const passResult = await passLetterTest(db, userId);
+    // 3. 如果通过，调用 passLetterTest 写入解锁记录
+    try {
+        await passLetterTest(db, { userId });
 
         return createResponse(true, {
             passed: true,
-            score,
-            correct,
-            total
-        }, '字母测试通过，已解锁');
+            message: '恭喜通过字母测试！所有模块已解锁。'
+        }, '测试通过');
+    } catch (error) {
+        console.error('[submitLetterTest] passLetterTest 失败：', error);
+        return createResponse(false, null, '写入进度失败', 'DB_ERROR');
     }
-
-    // ❌ 未通过
-    return createResponse(false, {
-        passed: false,
-        score,
-        correct,
-        total
-    }, '测试未通过，请继续学习', 'LETTER_TEST_FAILED');
 }
 
 module.exports = submitLetterTest;

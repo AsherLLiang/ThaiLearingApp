@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { callCloudFunction } from '@/src/utils/apiClient';
 import { useModuleAccessStore } from '@/src/stores/moduleAccessStore';
+import { useUserStore } from '@/src/stores/userStore';
 import { API_ENDPOINTS } from '@/src/config/api.endpoints';
 import { Colors } from '@/src/constants/colors';
 import { Typography } from '@/src/constants/typography';
@@ -87,11 +88,11 @@ export function generateTestQuestions(allLetters: Letter[]): TestQuestion[] {
                 questionText = `Which sound matches this letter?`;
                 optionsDetails = algoQuestion.options?.map(l => l.nameEnglish || l.initialSound) || [];
             }
-            return{
-                id:`${algoQuestion.id}-${index}`,
-                question:questionText,
-                options:optionsDetails,
-                correctAnswer:algoQuestion.correctAnswer
+            return {
+                id: `${algoQuestion.id}-${index}`,
+                question: questionText,
+                options: optionsDetails,
+                correctAnswer: algoQuestion.correctAnswer
             };
         }
     )
@@ -118,17 +119,19 @@ export default function AlphabetTestScreen() {
     const fetchTest = async () => {
         try {
             setLoading(true);
-            // 调用后端云函数：获取测试题
-            const result = await callCloudFunction<TestResponse>(
-                'getLetterTest',
+            // 🆕 调用新的 getAllLetters 接口获取字母池
+            const result = await callCloudFunction<{ letters: Letter[] }>(
+                'getAllLetters',
                 {},
                 { endpoint: API_ENDPOINTS.ALPHABET.GET_TEST }
             );
 
-            if (result.success && result.data?.questions) {
-                setQuestions(result.data.questions);
+            if (result.success && result.data?.letters) {
+                // 🆕 使用生成器函数在前端生成 20 道题
+                const generatedQuestions = generateTestQuestions(result.data.letters);
+                setQuestions(generatedQuestions);
             } else {
-                Alert.alert('Error', 'Failed to load test questions.');
+                Alert.alert('Error', 'Failed to load letters.');
             }
         } catch (error) {
             console.error('Fetch test error:', error);
@@ -156,42 +159,51 @@ export default function AlphabetTestScreen() {
 
         try {
             setSubmitting(true);
+            // 本地判分
+            const correctCount = questions.filter(q => answers[q.id] === q.correctAnswer).length;
+            const passed = correctCount >= 17;
 
-            const formattedAnswers: UserAnswer[] = Object.entries(answers).map(([qid, ans]) => ({
-                questionId: qid,
-                answer: ans
-            }));
+            console.log(`判分结果： ${correctCount}/20, 通过： ${passed}`);
+            //如果没通过，直接提示失败，不调用后端
+            if (!passed) {
+                Alert.alert(
+                    'Test Failed',
+                    `You got ${correctCount}/20 correct. You need at least 17 to pass.`,
+                    [{ text: 'Try again' }]
+                )
+                setSubmitting(false);
+                return;     //提前返回，不执行后续网络请求
+            }
 
             // 调用后端云函数：提交答案
+            const userId = useUserStore.getState().currentUser?.userId;
+
+            if (!userId) {
+                Alert.alert('Error', 'User not logged in');
+                setSubmitting(false);
+                return;
+            }
+
             const result = await callCloudFunction<SubmitResponse>(
                 'submitLetterTest',
-                { answers: formattedAnswers },
+                { userId, passed: true },
                 { endpoint: API_ENDPOINTS.ALPHABET.SUBMIT_TEST }
             );
 
             if (result.success) {
-                if (result.data?.passed) {
-                    // 🎉 Test Passed
-                    Alert.alert(
-                        'Congratulations!',
-                        'You have passed the test. All modules are now unlocked.',
-                        [{
-                            text: 'Go to Courses',
-                            onPress: async () => {
-                                // 🔒 关键步骤：刷新用户权限状态以解锁前端
-                                await useModuleAccessStore.getState().getUserProgress();
-                                router.replace('/courses'); // 替换路由，防止回退
-                            }
-                        }]
-                    );
-                } else {
-                    // ❌ Test Failed
-                    Alert.alert(
-                        'Test Failed',
-                        'You did not reach the passing score. Please try again or continue learning.',
-                        [{ text: 'OK' }]
-                    );
-                }
+                // 🎉 Test Passed
+                Alert.alert(
+                    'Congratulations!',
+                    'You have passed the test. All modules are now unlocked.',
+                    [{
+                        text: 'Got it',
+                        onPress: async () => {
+                            await useModuleAccessStore.getState().getUserProgress();
+                            router.replace('/courses');
+                        }
+                    }]
+                )
+
             } else {
                 Alert.alert('Error', result.error || 'Submission failed.');
             }

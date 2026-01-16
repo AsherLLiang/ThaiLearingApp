@@ -8,6 +8,7 @@ const { createResponse } = require('./utils/response');
 const getLetterTest = require('./handlers/getLetterTest');
 const submitLetterTest = require('./handlers/submitLetterTest');
 const passLetterTest = require('./handlers/passLetterTest');
+const getAllLetters = require('./handlers/getAllLetters');
 
 exports.main = async (event, context) => {
 
@@ -28,10 +29,14 @@ exports.main = async (event, context) => {
         }
     }
 
-    const { action, userId, answers } = requestData;
+    const { action, data } = requestData;
 
     try {
         switch (action) {
+
+            // ✅ 0️⃣ 获取所有字母（用于前端生成测试题）
+            case 'getAllLetters':
+                return await getAllLetters(db);
 
             // ✅ 1️⃣ 获取字母测试题（固定题）
             case 'getLetterTest':
@@ -39,11 +44,11 @@ exports.main = async (event, context) => {
 
             // ✅ 2️⃣ 提交字母测试并判定
             case 'submitLetterTest':
-                return await submitLetterTest(db, userId, answers);
+                return await submitLetterTest(db, data);
 
             // ✅ 3️⃣ 直接通过字母测试（调试/特殊逻辑用）
             case 'passLetterTest':
-                return await passLetterTest(db, userId);
+                return await passLetterTest(db, data);
 
             default:
                 return createResponse(false, null, '未知 action', 'INVALID_ACTION');
