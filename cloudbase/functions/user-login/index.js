@@ -47,12 +47,14 @@ exports.main = async (event, context) => {
         email: email.toLowerCase()
       })
       .get();
+    console.log('User result:', userResult);
 
     if (userResult.data.length === 0) {
       return {
         success: false,
         error: 'Invalid email or password',
         code: 'INVALID_CREDENTIALS'
+        
       };
     }
 

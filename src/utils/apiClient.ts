@@ -160,13 +160,13 @@ class ApiClient {
         };
       }
 
-      // 返回成功响应
+      // Return a successful response
       if (__DEV__) {
         console.log('✅ Response data:', responseData);
       }
 
       return {
-        success: true,
+        success: responseData.success,
         data: responseData.data || responseData,
       };
 

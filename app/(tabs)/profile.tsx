@@ -98,8 +98,8 @@ export default function ProfileScreen() {
               <Text style={styles.avatarText}>L</Text>
             </View>
           </View>
-          <Text style={styles.displayName}>{currentUser?.displayName || 'Liang JianYu'}</Text>
-          <Text style={styles.subtitle}>信息技术 · 硕士在读</Text>
+          <Text style={styles.displayName}>{currentUser?.displayName || 'Unknow'}</Text>
+          <Text style={styles.subtitle}>显示当前登录邮箱</Text>
         </Animated.View>
 
         {/* Achievements Section */}
