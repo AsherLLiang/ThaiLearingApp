@@ -1995,5 +1995,38 @@ console.log(`🔍 [P0-B] completedAfter: [${updatedCompletedLessons.join(',')}]`
 
 ---
 
+## 22. 当前模块状态与未来工作（2026-01-17 更新）
+
+> **状态**: 模块基本跑通，进入优化阶段  
+> **最后更新**: 2026-01-17
+
+### 22.1 已完成工作
+
+#### 测试页面重构（app/alphabet/test.tsx）
+- 客户端题目生成 + 本地判分
+- 后台音频预加载（使用 expo-file-system）
+- 答案格式修复（避免多选 bug）
+
+#### 后端简化
+- submitLetterTest: 移除判分逻辑
+- passLetterTest: 实现 upsert 逻辑
+
+### 22.2 已知问题
+
+#### 音频播放 Bug（P1）
+部分字母无声音，怀疑音频文件路径与字母字段不匹配。
+
+### 22.3 待优化项
+
+- 测试页面 UI 优化（P2）
+- 复习题优化（P2）
+
+### 22.4 未来增强
+
+- 真实泰语发音替换（P3）
+- 泰语拼读显示（P3，参考 PRONUNCIATION_RESTORATION_MODULE_SPEC_FROZEN_v1.0.md）
+
+---
+
 **本文件（v3.0）即为 Alphabet 模块的唯一权威规范。**
 
