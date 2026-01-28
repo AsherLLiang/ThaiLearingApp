@@ -34,6 +34,12 @@ export default function DevLayout() {
                     presentation: 'modal', // 模态展示感觉更像独立的 Debug 环境
                 }}
             />
+            <Stack.Screen
+                name="audio-cache-test"
+                options={{
+                    title: 'Audio Cache Test',
+                }}
+            />
         </Stack>
     );
 }

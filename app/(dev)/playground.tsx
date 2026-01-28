@@ -30,6 +30,26 @@ export default function PlaygroundScreen() {
                 </Text>
             </View>
 
+            {/* Tools Section */}
+            <View style={styles.section}>
+                <View style={styles.sectionHeader}>
+                    <Text style={styles.sectionTitle}>Tools</Text>
+                    <Text style={styles.categoryBadge}>Utility</Text>
+                </View>
+                <View style={styles.card}>
+                    <TouchableOpacity
+                        style={styles.item}
+                        onPress={() => router.push('/(dev)/audio-cache-test')}
+                    >
+                        <View style={styles.itemIcon}>
+                            <FlaskConical size={16} color={Colors.thaiGold} />
+                        </View>
+                        <Text style={styles.itemText}>Audio Cache Test</Text>
+                        <ChevronRight size={16} color={Colors.taupe} />
+                    </TouchableOpacity>
+                </View>
+            </View>
+
             {COMPONENT_REGISTRY.map((component) => (
                 <View key={component.id} style={styles.section}>
                     <View style={styles.sectionHeader}>
