@@ -457,7 +457,7 @@ function AlphabetSession() {
             if (sessionStarted || isLoading) return;
             const userId = currentUser?.userId || 'user_123';
             await initializeSession(userId, {
-              limit: dailyLimits.letter || 30,
+                limit: dailyLimits.letter || 30,
             });
             setSessionStarted(true);
         };
