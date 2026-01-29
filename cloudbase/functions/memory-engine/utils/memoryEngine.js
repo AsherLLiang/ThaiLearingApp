@@ -2,13 +2,18 @@
  * 统一记忆引擎核心模块
  * 支持字母/单词/句子的统一记忆管理
  * 
- * 修复：wx-server-sdk 不支持 getOne()，改用 get() + data[0]
  */
 
 const { calculateSM2Optimized } = require('./sm2');
 
 /**
  * 创建新的记忆记录
+ * @param {Object} db - 数据库实例
+ * @param {string} userId - 用户ID
+ * @param {string} entityType - 实体类型
+ * @param {string} entityId - 实体ID
+ * @param {boolean} isLocked - 是否锁定
+ * @returns {Promise<Object>} - 记忆记录
  */
 async function createMemoryRecord(db, userId, entityType, entityId, isLocked = false) {
 
@@ -70,8 +75,13 @@ async function createMemoryRecord(db, userId, entityType, entityId, isLocked = f
 }
 
 /**
- * 获取或创建记忆记录
- * 修复：使用 get() 代替 getOne()
+ * 获取（如有）或调用 createMemoryRecord 创建新记录
+ * @param {Object} db - 数据库实例
+ * @param {string} userId - 用户ID
+ * @param {string} entityType - 实体类型
+ * @param {string} entityId - 实体ID
+ * @param {boolean} isLocked - 是否锁定
+ * @returns {Promise<Object>} - 记忆记录
  */
 async function getOrCreateMemory(db, userId, entityType, entityId, isLocked = false) {
     // 1. 尝试查询现有记录
@@ -94,6 +104,12 @@ async function getOrCreateMemory(db, userId, entityType, entityId, isLocked = fa
 
 /**
  * 更新记忆状态(答题后调用)
+ * @param {Object} db - 数据库实例
+ * @param {string} userId - 用户ID
+ * @param {string} entityType - 实体类型
+ * @param {string} entityId - 实体ID
+ * @param {string} quality - 答题质量
+ * @returns {Promise<Object>} - 更新后的记忆记录
  */
 async function updateMemoryAfterReview(db, userId, entityType, entityId, quality) {
     console.log('【测试】updateMemoryAfterReview 被调用了！', { userId, quality });
@@ -218,6 +234,11 @@ async function updateMemoryAfterReview(db, userId, entityType, entityId, quality
 
 /**
  * 获取今日待复习的实体
+ * @param {Object} db - 数据库实例
+ * @param {string} userId - 用户ID
+ * @param {string} entityType - 实体类型
+ * @param {number} limit - 限制数量
+ * @returns {Promise<Array>} - 待复习实体列表
  */
 async function getTodayReviewEntities(db, userId, entityType, limit = 20) {
     const now = new Date();
@@ -327,6 +348,9 @@ async function getTodayReviewEntities(db, userId, entityType, limit = 20) {
 
 /**
  * 初始化用户的学习进度记录
+ * @param {Object} db - 数据库实例
+ * @param {string} userId - 用户ID
+ * @returns {Promise<Object>} - 初始化后的学习进度记录
  */
 async function initUserProgress(db, userId) {
     const now = new Date();
@@ -354,7 +378,10 @@ async function initUserProgress(db, userId) {
 
 /**
  * 检查模块访问权限
- * 修复：使用 get() + data[0]
+ * @param {Object} db - 数据库实例
+ * @param {string} userId - 用户ID
+ * @param {string} moduleType - 模块类型
+ * @returns {Promise<Object>} - 检查结果
  */
 async function checkModuleAccess(db, userId, moduleType) {
     const forceUnlock = process.env.FORCE_UNLOCK === 'true';

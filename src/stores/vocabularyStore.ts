@@ -29,6 +29,9 @@ import {
     QUALITY_SCORE_MAP,
     ATTEMPTS_INCREMENT_MAP,
 } from '@/src/entities/enums/QualityScore.enum';
+import { resolveVocabPath } from '@/src/utils/vocab/vocabAudioHelper';
+import { downloadAudioBatch } from '@/src/utils/audioCache';
+import { WorkletsModule } from 'react-native-worklets';
 
 interface VocabularyStore {
     // ===== 学习会话状态 =====
@@ -88,24 +91,45 @@ export const useVocabularyStore = create<VocabularyStore>()(
                     );
 
                     console.log('🔍 API 响应:', result);
-
+                    
+                    /**
+                     * 检查 Result 是否成功，且 items 是否存在
+                     * 如果成功，且 items 存在，且 items 长度大于 0
+                     * 则将返回的数据使用 map 方法转换成 VocabularyLearningState[]
+                     * 用于后续的学习会话（复习/学习）
+                     */
                     if (result.success && (result.data as any)?.items?.length > 0) {
                         const data = result.data as any;
                         const reviewQueue: VocabularyLearningState[] = data.items.map(
                             (item: any) => ({
-                                vocabularyId: item._id,
-                                thaiWord: item.entity.thaiWord,
-                                pronunciation: item.entity.pronunciation,
-                                meaning: item.entity.meaning,
-                                exampleSentence: item.entity.exampleSentence,
-                                audioPath: item.entity.audioPath,
-                                currentAttempts: 0,
-                                requiredAttempts: 3,
-                                qualityHistory: [],
-                                isCompleted: false,
-                                timestamp: new Date().toISOString(),
+                                vocabularyId: item._id,                   // 单词 ID
+                                thaiWord: item.entity.thaiWord,           // 单词
+                                pronunciation: item.entity.pronunciation, // 发音
+                                meaning: item.entity.meaning,             // 意义
+                                exampleSentence: item.entity.exampleSentence, // 例句
+                                audioPath: item.entity.audioPath,         // 音频路径
+                                currentAttempts: 0,                       // 当前尝试次数
+                                requiredAttempts: 3,                      // 最小尝试次数
+                                qualityHistory: [],                       // 质量历史
+                                isCompleted: false,                       // 是否完成
+                                timestamp: new Date().toISOString(),       // 时间戳
                             })
                         );
+
+                        //静默预加载逻辑 Silent preloading logic
+                        // 1. 提取所有单词的 audioPath 并转成完整 URL
+                        const audioUrls = reviewQueue.map(
+                            word => resolveVocabPath(word.audioPath)).filter(
+                                (url): url is string => !!url && url.length > 0) ;// 过滤掉空链接
+                        console.log(`[Preload] 🚀 触发静默下载: ${audioUrls.length} 个音频`);
+                         
+                        // 2. 调用批量下载 (注意：没有 await！让它在后台跑)
+                        downloadAudioBatch(audioUrls).catch(
+                            e => {
+                                console.error('静默下载失败:', e);
+                            }
+                        );
+
 
                         set({
                             phase: LearningPhase.IDLE,

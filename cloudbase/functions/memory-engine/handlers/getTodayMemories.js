@@ -22,6 +22,7 @@ const MAX_GENERIC_DAILY_LIMIT = 200; // 其他模块的兜底上限，防止无�
  *
  * @param {Object} db
  * @param {string} userId
+ * @returns {Promise<void>}
  */
 async function ensureUserAlphabetProgress(db, userId) {
   const col = db.collection('user_alphabet_progress');
@@ -63,6 +64,7 @@ async function ensureUserAlphabetProgress(db, userId) {
  *
  * @param {Object} db
  * @param {string} userId
+ * @returns {Promise<void>}
  */
 async function ensureUserVocabularyProgress(db, userId) {
   const col = db.collection('user_vocabulary_progress');
@@ -92,6 +94,7 @@ async function ensureUserVocabularyProgress(db, userId) {
 /**
  * @param {Object} db - 数据库实例
  * @param {Object} params - 请求参数
+ * @returns {Promise<Object>} - 响应对象
  */
 async function getTodayMemories(db, params) {
   const start = Date.now();
@@ -173,11 +176,11 @@ async function getTodayMemories(db, params) {
 
           const explicitPrevMemories = [];
 
-          // 🔥 获取这些字母的记忆状态
+          // 获取这些字母的记忆状态
           for (const letter of prevLettersResult.data) {
             const mem = await getOrCreateMemory(db, userId, entityType, letter._id, false);
             if (mem) {
-              // 🔥 细节校正3：浅拷贝避免副作用
+              // 浅拷贝避免副作用
               const patched = {
                 ...mem,
                 reviewStage: Math.max(mem.reviewStage || 0, 1)
@@ -188,7 +191,7 @@ async function getTodayMemories(db, params) {
 
           explicitPreviousCount = explicitPrevMemories.length;
 
-          // 🔥 合并到 reviewMemories（去重）
+          // 合并到 reviewMemories（去重）
           const existingIds = new Set(reviewMemories.map(m => m.entityId));
           const uniquePrev = explicitPrevMemories.filter(m => !existingIds.has(m.entityId));
           reviewMemories = [...uniquePrev, ...reviewMemories];
