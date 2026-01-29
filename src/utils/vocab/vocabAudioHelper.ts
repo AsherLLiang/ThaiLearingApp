@@ -5,23 +5,31 @@ import { Vocabulary } from '@/src/entities/types/vocabulary.types';
 const BASE_URL = 'https://636c-cloud1-1gjcyrdd7ab927c6-1387301748.tcb.qcloud.la/vocabulary/';
 const CACHE_FOLDER = `${FileSystem.cacheDirectory}audio/`;
 /**
- * 获取单词的最佳播放链接
+ * 拼接完整云端 URL
  * 策略：
- * 1. 拼接完整云端 URL
- * 2. 检查本地是否有缓存
- * 3. 有则返回 file:// (极速)，无则返回 https:// (在线)
- * 
- * 注意：此函数 *不* 触发下载，只做检查。下载应由 downloadAudioBatch 在并在后台处理。
+ * 如果数据库里存的是完整链接则直接用，否则拼接 BASE_URL
  */
-export async function getVocabAudioUrl(vocab: Vocabulary): Promise<string> {
+export function resolveVocabPath(path: string | undefined): string {
+    if (!path) {
+        return '';
+    }
+    return path.startsWith('http') ? path : `${BASE_URL}${path}`;
+}
+/**
+ * 获取缓存的音频 URI (Get Cached Audio URI)
+ * 策略：
+ * 1. 调用resolveVocabPath拼接完整远程 URL
+ * 2. 预测本地路径
+ * 3. 检查本地缓存
+ * @param vocab 
+ * @returns localUri | remoteUrl
+ */
+export async function getVocabAudioUrl(vocab: { audioPath?: string }): Promise<string> {
     if (!vocab.audioPath) {
         return '';
     }
     // 1. 拼接完整远程 URL
-    // 如果数据库里存的是完整链接则直接用，否则拼接 BASE_URL
-    const remoteUrl = vocab.audioPath.startsWith('http')
-        ? vocab.audioPath
-        : `${BASE_URL}${vocab.audioPath}`;
+    const remoteUrl = resolveVocabPath(vocab.audioPath);
     // 2. 预测本地路径
     const fileName = remoteUrl.split('/').pop() || `temp_${Date.now()}.mp3`;
     const localUri = `${CACHE_FOLDER}${fileName}`;
