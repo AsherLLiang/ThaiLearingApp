@@ -109,8 +109,8 @@
 
 - **统一入口**：每次进入 `/learning?module=word&source=XXX` 都启动一次“词汇学习会话”；  
 - **先复习后新学**：优先处理 `getTodayWords` 返回的复习项，再分配新词；  
-- **会话内多题型**：同一个单词在一次会话中可以出现多道题，但最终只产生一次质量值；  
-- **失败补救**：每个单词至少出现一次答对记录才算“本次会话通过”；否则记为 `陌生`。
+- **辅助性测试**：会话中的题目（选择/拼写）仅用于**帮助记忆与巩固**，答题对错**不直接决定**最终评分；  
+- **用户自选评分**：每个单词学习/复习结束后，必须由用户显式选择“陌生/模糊/记得”，以此作为 SM-2 算法的输入。
 
 ### 3.2 当日目标与队列构建
 
@@ -227,25 +227,20 @@ export interface VocabularySessionState {
 
 拼写题（5/6）暂规划为**后续迭代**，当前规格只要求预留类型与数据结构。
 
-### 4.3 题型与质量评分关系
-
-- 每道题结束后，Store 只记录：
-
-```ts
-answerQuestion(vocabularyId, isCorrect, questionType, { usedHint });
-```
-
-- 会话结束时，对每个单词聚合：
-
-```ts
-type MasteryLevel = '陌生' | '模糊' | '记得';
-
-function computeMasteryFromStats(stats: VocabularyPerWordStats): MasteryLevel {
-  if (stats.wrongCount === 0 && !stats.usedHint) return '记得';
-  if (stats.wrongCount <= 1) return '模糊';
-  return '陌生';
-}
-```
+### 4.3 题型与质量评分关系（Self-Selection）
+ 
+**逻辑变更说明**：
+原本设计的“根据答错次数自动计算 Mastery”方案已废弃。现采用**用户自评模式**。
+ 
+- **流程**：
+  1. 用户进行题目练习（题型仅作为记忆辅助）；
+  2. 练习结束（或翻转卡片）后，系统询问用户对该词的掌握情况；
+  3. 用户点击 **“陌生”、“模糊”、“记得”** 按钮。
+ 
+- **数据流**：
+  - Store 暂时存储用户的选择：`perWordStats.userRating = '记得'`；
+  - `finishSession` 时直接将该 Rating 提交给后端 `updateMastery`。
+  - 答题的 `isCorrect` / `stats.wrongCount` 仅用于本地错题本统计，**不参与** SM-2 分数计算。
 
 ### 4.4 本地错题本与 AI 协同（MVP）
 

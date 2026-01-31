@@ -76,7 +76,7 @@ async function createMemoryRecord(db, userId, entityType, entityId, isLocked = f
 }
 
 /**
- * 获取（如有）或调用 createMemoryRecord 创建新记录
+ * 获取已有的memory_status记录，若没有则调用 createMemoryRecord 创建新记录
  * @param {Object} db - 数据库实例
  * @param {string} userId - 用户ID
  * @param {string} entityType - 实体类型
