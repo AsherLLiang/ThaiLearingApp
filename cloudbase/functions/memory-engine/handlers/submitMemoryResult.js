@@ -34,13 +34,7 @@ const BATCH_SIZE = 5;
  */
 async function submitMemoryResult(db, params) {
   const start = Date.now();
-  const {
-    userId,
-    entityType,
-    entityId,
-    quality,
-    results
-  } = params || {};
+  const { userId, entityType, entityId, quality, results } = params || {};
 
   // 1. 基本校验：必须有 userId
   if (!userId) {
