@@ -258,8 +258,9 @@ export async function callCloudFunction<T>(
   data: Record<string, any>,
   options?: CloudFunctionOptions
 ): Promise<ApiResponse<T>> {
-  // 默认使用 learn-vocab 云函数入口（与旧 cloudFunctionAdapter 保持兼容）
-  const endpoint = options?.endpoint ?? '/learn-vocab';
+  // DEPRECATED DEFAULT: '/learn-vocab' was removed.
+  // Ideally, callers should always provide options.endpoint, but falling back to memory-engine is safer now.
+  const endpoint = options?.endpoint ?? '/memory-engine';
 
   try {
     // 统一的请求体结构：{ action, data }
