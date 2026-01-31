@@ -8,27 +8,48 @@ import { Typography } from '@/src/constants/typography';
 import { WordData } from './NewWordView';
 
 interface ReviewWordViewProps {
-    word: WordData;
+    word: WordData; // 复习的单词数据
+    // 用户回答结果的回调函数。
+    // quality 参数代表掌握程度: 'know' (认识), 'unsure' (模糊), 'forgot' (忘记)
+    // 这个回调通常用于更新后台的 SRS (Spaced Repetition System) 数据
     onAnswer: (quality: 'know' | 'unsure' | 'forgot') => void;
-    onNext: () => void;
+    onNext: () => void; // 进入下一个单词的回调
 }
 
+/**
+ * ReviewWordView 组件
+ * 
+ * 这是一个用于“旧词复习”环节的视图组件。
+ * 
+ * 主要逻辑流程：
+ * 1. 初始状态下（isRevealed=false），只显示单词本身（泰语+发音）和一个辅助例句。
+ * 2. 单词的详细释义被模糊处理，强制用户进行回忆。
+ * 3. 底部提供三个按钮：忘记、模糊、认识，供用户自评。
+ * 4. 用户点击任一评分按钮后：
+ *    - 调用 onAnswer 提交评分结果。
+ *    - 设置 isRevealed=true，揭示被模糊的释义内容。
+ *    - 底部按钮变为“下一个”。
+ * 5. 用户阅读释义确认后，点击“下一个”继续。
+ */
 export const ReviewWordView: React.FC<ReviewWordViewProps> = ({ word, onAnswer, onNext }) => {
     const { t } = useTranslation();
+    // 控制释义内容是否已揭示
     const [isRevealed, setIsRevealed] = useState(false);
 
+    // 处理用户点击评分按钮
     const handleReveal = (quality: 'know' | 'unsure' | 'forgot') => {
-        setIsRevealed(true);
-        onAnswer(quality);
+        setIsRevealed(true); // 揭示答案
+        onAnswer(quality);   // 提交评分结果 (SRS算法会根据此调整下次复习时间)
     };
 
-    // Extract the first example sentence for the context view
+    // 提取第一个例句作为上下文提示
+    // 在这里我们只取数组中的第一个用于展示
     const exampleSentence = word.definitions.examples[0];
 
     return (
         <View style={styles.container}>
             <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-                {/* Top Section: Word & Phonetic */}
+                {/* 顶部区域：单词卡片与发音 */}
                 <View style={styles.topSection}>
                     <Text style={styles.thaiWord}>{word.thai}</Text>
 
@@ -40,29 +61,34 @@ export const ReviewWordView: React.FC<ReviewWordViewProps> = ({ word, onAnswer, 
                     </View>
                 </View>
 
-                {/* Context Sentence */}
+                {/* 上下文提示区域：展示例句 */}
+                {/* 如果存在例句，显示在此处帮助用户根据上下文回忆 */}
                 {exampleSentence && (
                     <View style={styles.contextContainer}>
                         <Text style={styles.contextThai}>
-                            {/* Simple logic to bold the word in the sentence if possible, otherwise just show sentence */}
+                            {/* 暂时简单展示泰语整句，后续可优化为高亮关键词 */}
                             {exampleSentence.thai}
                         </Text>
                         <Text style={styles.contextMeaning}>{exampleSentence.meaning}</Text>
                     </View>
                 )}
 
-                {/* Blurred Content Area */}
+                {/* 模糊内容区域：答案与详细释义 */}
                 <View style={styles.blurredAreaContainer}>
+                    {/* 实际内容层 */}
                     <View style={styles.blurredContent}>
+                        {/* 含义头部 */}
                         <View style={styles.meaningHeader}>
                             <Text style={styles.mainMeaning}>{word.meaning}</Text>
                             <View style={styles.typeTag}>
                                 <Text style={styles.typeText}>{word.type}</Text>
                             </View>
                         </View>
+                        {/* 基础英文/详细定义 */}
                         <Text style={styles.definitionText}>{word.definitions.basic}</Text>
                     </View>
 
+                    {/* 模糊遮罩层：仅在 isRevealed 为 false 时覆盖 */}
                     {!isRevealed && (
                         <BlurView intensity={60} style={StyleSheet.absoluteFill} tint="dark">
                             <View style={styles.blurOverlay} />
@@ -71,9 +97,10 @@ export const ReviewWordView: React.FC<ReviewWordViewProps> = ({ word, onAnswer, 
                 </View>
             </ScrollView>
 
-            {/* Bottom Buttons */}
+            {/* 底部操作栏 */}
             <View style={styles.bottomBar}>
                 {!isRevealed ? (
+                    // 未揭示时：展示三个自评按钮 (忘记 / 模糊 / 认识)
                     <View style={styles.buttonGrid}>
                         <Pressable
                             style={[styles.actionButton, styles.btnForgot]}
@@ -97,6 +124,7 @@ export const ReviewWordView: React.FC<ReviewWordViewProps> = ({ word, onAnswer, 
                         </Pressable>
                     </View>
                 ) : (
+                    // 已揭示时：展示“下一个”按钮
                     <Pressable style={styles.nextButton} onPress={onNext}>
                         <Text style={styles.nextButtonText}>{t('learning.next')}</Text>
                     </Pressable>
@@ -274,3 +302,4 @@ const styles = StyleSheet.create({
         color: Colors.white,
     },
 });
+

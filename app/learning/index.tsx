@@ -7,7 +7,7 @@ import { X } from 'lucide-react-native';
 import { ThaiPatternBackground } from '@/src/components/common/ThaiPatternBackground';
 import { Colors } from '@/src/constants/colors';
 import { Typography } from '@/src/constants/typography';
-import { NewWordView, WordData } from '@/src/components/learning/NewWordView';
+import { NewWordView, WordData } from '@/src/components/learning/vocabulary/NewWordView';
 import { ReviewWordView } from '@/src/components/learning/ReviewWordView';
 import { AlphabetLearningView } from '@/src/components/learning/alphabet/AlphabetLearningView';
 import { AlphabetReviewView } from '@/src/components/learning/alphabet/AlphabetReviewView';
