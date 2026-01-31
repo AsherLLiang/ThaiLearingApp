@@ -19,10 +19,23 @@ const MAX_GENERIC_DAILY_LIMIT = 200; // 其他模块的兜底上限，防止无�
 /**
  * 懒初始化：字母进度表
  * 兼容旧用户：如果 user_alphabet_progress 中没有记录，则插入一条默认记录
- *
+ * 给字母模块提供进度表
+ * col.add({
+      data: {
+        userId,
+        letterProgress: 0.0,
+        letterCompleted: false,
+        completedLessons: [],
+        masteredLetterCount: 0,
+        totalLetterCount: 80,
+        currentRound: 1,          
+        roundHistory: [],        
+        createdAt: now,
+        updatedAt: now,
+      },
  * @param {Object} db
  * @param {string} userId
- * @returns {Promise<void>}
+ * 
  */
 async function ensureUserAlphabetProgress(db, userId) {
   const col = db.collection('user_alphabet_progress');
@@ -59,12 +72,28 @@ async function ensureUserAlphabetProgress(db, userId) {
 /**
  * 懒初始化：用户词汇进度表（传统进度表）
  * 说明：
+ * 给单词模块提供进度表
+ * col.add({
+      data: {
+        userId,
+        vocabularyId: null,
+        mastery: null,
+        reviewCount: 0,
+        lastReviewed: null,
+        nextReviewDate: null,
+        intervalDays: 0,
+        // 占位记录默认标记为 skipped，避免影响 getTodayWords 等查询逻辑
+        skipped: true,
+        easinessFactor: 2.5,
+        createdAt: now,
+        updatedAt: now,
+      },
+    });
  * - 该集合原本按单词一条记录，这里只为旧用户插入一条「占位记录」
  * - 使用 skipped: true，避免影响 getTodayWords 等查询逻辑
  *
  * @param {Object} db
  * @param {string} userId
- * @returns {Promise<void>}
  */
 async function ensureUserVocabularyProgress(db, userId) {
   const col = db.collection('user_vocabulary_progress');

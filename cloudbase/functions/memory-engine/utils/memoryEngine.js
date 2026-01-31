@@ -27,26 +27,27 @@ async function createMemoryRecord(db, userId, entityType, entityId, isLocked = f
     const nextReviewAt = isLocked ? null : new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString();
 
     const memoryRecord = {
-        userId,
-        entityType,
-        entityId,
-        masteryLevel: 0.0,
-        reviewStage: 0,
-        easinessFactor: 2.5,
-        intervalDays: 1,
-        lastReviewAt: null,
-        nextReviewAt,
-        correctCount: 0,
-        wrongCount: 0,
-        streakCorrect: 0,
+        userId,               // 用户ID
+        entityType,           // 实体类型
+        entityId,             // 实体ID
+        masteryLevel: 0.0,    // 掌握度
+        reviewStage: 0,       // 0: 初始状态，1: 已复习
+        easinessFactor: 2.5,  // 易度因子,SM-2 算法的标准初始难度（2.5表示中等难度）
+        intervalDays: 1,      // 间隔天数
+        lastReviewAt: null,   // 上次复习时间
+        nextReviewAt,         // 下次复习时间
+        correctCount: 0,      // 正确次数
+        wrongCount: 0,        // 错误次数
+        streakCorrect: 0,     // 连续正确次数
         isLocked,
         createdAt: now.toISOString(),
         updatedAt: now.toISOString()
     };
 
     try {
-        // 尝试插入
-        const result = await db.collection('memory_status').add(memoryRecord);
+        // 数据库写入记忆状态
+        // NOTE:数据库中存在memory_status和user_vocabulary两个集合，后续得查清楚这两个集合是否是处理同一个记忆状态的集合
+        const result = await db.collection('memory_status').add(memoryRecord);//数据库中存在
 
         console.log('[createMemoryRecord] 创建成功:', { userId, entityType, entityId });
 
@@ -350,7 +351,7 @@ async function getTodayReviewEntities(db, userId, entityType, limit = 20) {
  * 初始化用户的学习进度记录
  * @param {Object} db - 数据库实例
  * @param {string} userId - 用户ID
- * @returns {Promise<Object>} - 初始化后的学习进度记录
+ * @returns {progressRecord} - 初始化后的学习进度记录
  */
 async function initUserProgress(db, userId) {
     const now = new Date();

@@ -257,10 +257,11 @@ export const ALPHABET_ENDPOINTS = {
 // ==================== 模块权限 API ====================
 export const MODULE_ENDPOINTS = {
   // ✅ CloudBase: 使用 learn-vocab 多 action 云函数（CHECK_ACCESS）
-  CHECK_ACCESS: {
-    cloudbase: '/learn-vocab',
-    java: '/api/modules/access'
-  } as EndpointMap,
+  // DEPRECATED: Migrated to memory-engine
+  // CHECK_ACCESS: {
+  //   cloudbase: '/learn-vocab',
+  //   java: '/api/modules/access'
+  // } as EndpointMap,
   // 🔥 修复: GET_USER_PROGRESS 已迁移到 memory-engine
   GET_USER_PROGRESS: {
     cloudbase: '/memory-engine',
@@ -270,35 +271,39 @@ export const MODULE_ENDPOINTS = {
 
 // ==================== 单词学习 API ====================
 export const VOCABULARY_ENDPOINTS = {
-  // ✅ CloudBase: 使用 learn-vocab 多 action 云函数（getTodayWords / updateMastery / getVocabularyList 等）
-  GET_TODAY_WORDS: {
-    cloudbase: '/learn-vocab',
-    java: '/api/vocabulary/today'
-  } as EndpointMap,
-  UPDATE_MASTERY: {
-    cloudbase: '/learn-vocab',
-    java: '/api/vocabulary/mastery'
-  } as EndpointMap,
-  GET_VOCABULARY_LIST: {
-    cloudbase: '/learn-vocab',
-    java: '/api/vocabulary/list'
-  } as EndpointMap,
-  TOGGLE_SKIP_WORD: {
-    cloudbase: '/learn-vocab',
-    java: '/api/vocabulary/skip'
-  } as EndpointMap,
-  GET_SKIPPED_WORDS: {
-    cloudbase: '/learn-vocab',
-    java: '/api/vocabulary/skipped'
-  } as EndpointMap,
-  GET_VOCABULARY_DETAIL: {
-    cloudbase: '/learn-vocab',
-    java: '/api/vocabulary/:id'
-  } as EndpointMap,
-  GET_REVIEW_STATISTICS: {
-    cloudbase: '/learn-vocab',
-    java: '/api/vocabulary/statistics'
-  } as EndpointMap,
+  // /*
+  //  * DEPRECATED: Learn-Vocab cloud function has been removed.
+  //  * All vocabulary learning logic should now use memory-engine.
+  //  */
+  // // ✅ CloudBase: 使用 learn-vocab 多 action 云函数（getTodayWords / updateMastery / getVocabularyList 等）
+  // GET_TODAY_WORDS: {
+  //   cloudbase: '/learn-vocab',
+  //   java: '/api/vocabulary/today'
+  // } as EndpointMap,
+  // UPDATE_MASTERY: {
+  //   cloudbase: '/learn-vocab',
+  //   java: '/api/vocabulary/mastery'
+  // } as EndpointMap,
+  // GET_VOCABULARY_LIST: {
+  //   cloudbase: '/learn-vocab',
+  //   java: '/api/vocabulary/list'
+  // } as EndpointMap,
+  // TOGGLE_SKIP_WORD: {
+  //   cloudbase: '/learn-vocab',
+  //   java: '/api/vocabulary/skip'
+  // } as EndpointMap,
+  // GET_SKIPPED_WORDS: {
+  //   cloudbase: '/learn-vocab',
+  //   java: '/api/vocabulary/skipped'
+  // } as EndpointMap,
+  // GET_VOCABULARY_DETAIL: {
+  //   cloudbase: '/learn-vocab',
+  //   java: '/api/vocabulary/:id'
+  // } as EndpointMap,
+  // GET_REVIEW_STATISTICS: {
+  //   cloudbase: '/learn-vocab',
+  //   java: '/api/vocabulary/statistics'
+  // } as EndpointMap,
 };
 
 // ==================== 统一记忆引擎 API ====================
