@@ -7,7 +7,7 @@
 const { calculateSM2Optimized } = require('./sm2');
 
 /**
- * 创建新的记忆记录
+ * 创建新的记忆记录,并写入 memory_status 集合,不做导出
  * @param {Object} db - 数据库实例
  * @param {string} userId - 用户ID
  * @param {string} entityType - 实体类型
@@ -45,9 +45,8 @@ async function createMemoryRecord(db, userId, entityType, entityId, isLocked = f
     };
 
     try {
-        // 数据库写入记忆状态
-        // NOTE:数据库中存在memory_status和user_vocabulary两个集合，后续得查清楚这两个集合是否是处理同一个记忆状态的集合
-        const result = await db.collection('memory_status').add(memoryRecord);//数据库中存在
+        // 数据库写入记忆状态到 memory_status 集合
+        const result = await db.collection('memory_status').add(memoryRecord);// 入记忆状态到 memory_status 集合
 
         console.log('[createMemoryRecord] 创建成功:', { userId, entityType, entityId });
 
@@ -258,94 +257,6 @@ async function getTodayReviewEntities(db, userId, entityType, limit = 20) {
     return result.data || [];
 }
 
-/**
- * 检查并解锁下一阶段学习
- */
-// async function checkAndUnlockNextStage(db, userId) {
-
-//   if (process.env.FORCE_UNLOCK === 'true') {
-//     return {
-//       allowed: true,
-//       progress: 100,
-//       stage: "all",
-//       message: '【调试模式】强制解锁'
-//     };
-//   }
-
-//   // 修复：使用 get() + data[0]
-//   const progressResult = await db.collection('user_progress')
-//     .where({ userId })
-//     .get();
-
-//   if (!progressResult.data || progressResult.data.length === 0) {
-//     await initUserProgress(db, userId);
-//     return {
-//       unlocked: false,
-//       stage: 'letter',
-//       message: '初始化学习进度成功'
-//     };
-//   }
-
-//   const progress = progressResult.data[0];
-
-//   if (!progress.letterCompleted) {
-//     const letterMemories = await db.collection('memory_status')
-//       .where({
-//         userId,
-//         entityType: 'letter'
-//       })
-//       .get();
-
-//     const totalLetters = 44;
-//     const masteredLetters = letterMemories.data.filter(m => m.masteryLevel >= 0.7).length;
-//     const letterProgress = masteredLetters / totalLetters;
-
-//     if (letterProgress >= 0.95) {
-//       await db.collection('user_progress').where({ userId }).update({
-//         data: {
-//           letterCompleted: true,
-//           letterProgress: 1.0,
-//           wordUnlocked: true,
-//           currentStage: 'word',
-//           updatedAt: new Date().toISOString()
-//         }
-//       });
-
-//       await db.collection('memory_status')
-//         .where({
-//           userId,
-//           entityType: 'word',
-//           isLocked: true
-//         })
-//         .update({
-//           data: {
-//             isLocked: false,
-//             nextReviewAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
-//           }
-//         });
-
-//       return {
-//         unlocked: true,
-//         stage: 'word',
-//         message: '恭喜!字母学习完成,单词学习已解锁!'
-//       };
-//     }
-
-//     return {
-//       unlocked: false,
-//       stage: 'letter',
-//       progress: letterProgress,
-//       remaining: Math.ceil((0.95 - letterProgress) * totalLetters),
-//       message: `还需掌握 ${Math.ceil((0.95 - letterProgress) * totalLetters)} 个字母`
-//     };
-//   }
-
-//   return {
-//     unlocked: false,
-//     stage: progress.currentStage,
-//     message: '继续加油!'
-//   };
-// }
 
 /**
  * 初始化用户的学习进度记录
@@ -514,7 +425,7 @@ async function checkModuleAccess(db, userId, moduleType) {
 }
 
 module.exports = {
-    createMemoryRecord,
+    //createMemoryRecord,
     getOrCreateMemory,
     updateMemoryAfterReview,
     getTodayReviewEntities,

@@ -14,7 +14,7 @@ const collections = {
     sentences: db.collection('sentences'),
     memory_status: db.collection('memory_status'),
     user_progress: db.collection('user_progress'),
-    user_vocabulary_progress: db.collection('user_vocabulary_progress')
+    user_alphabets_progress: db.collection('user_alphabets_progress')
 };
 
 module.exports = {
