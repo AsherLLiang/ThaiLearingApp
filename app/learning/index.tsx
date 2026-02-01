@@ -7,236 +7,19 @@ import { X } from 'lucide-react-native';
 import { ThaiPatternBackground } from '@/src/components/common/ThaiPatternBackground';
 import { Colors } from '@/src/constants/colors';
 import { Typography } from '@/src/constants/typography';
-import { NewWordView, WordData } from '@/src/components/learning/vocabulary/NewWordView';
-import { ReviewWordView } from '@/src/components/learning/ReviewWordView';
 import { AlphabetLearningView } from '@/src/components/learning/alphabet/AlphabetLearningView';
 import { AlphabetReviewView } from '@/src/components/learning/alphabet/AlphabetReviewView';
+import { VocabularyAssessmentView } from '@/src/components/learning/vocabulary/VocabularyAssessmentView';
+import { VocabularyQuizView } from '@/src/components/learning/vocabulary/VocabularyQuizView';
 import { useVocabularyStore } from '@/src/stores/vocabularyStore';
 import { useLearningPreferenceStore } from '@/src/stores/learningPreferenceStore';
 import { useAlphabetStore } from '@/src/stores/alphabetStore';
 import { LearningPhase } from '@/src/entities/enums/LearningPhase.enum';
 import { useUserStore } from '@/src/stores/userStore';
 
-
-// --- Mock Data ---
-
-const MOCK_OLD_WORDS: WordData[] = [
-    {
-        id: 'old1',
-        thai: 'กิน',
-        phonetic: 'Kin',
-        type: '动词',
-        meaning: '吃',
-        definitions: {
-            basic: '吃，食用',
-            examples: [
-                { thai: 'กินข้าวหรือยัง', meaning: '吃饭了吗？' },
-                { thai: 'ชอบกินเผ็ด', meaning: '喜欢吃辣' }
-            ],
-            usage: {
-                grammar: [],
-                diff: '无',
-                mistakes: '口语常用，正式场合可用 รับประทาน',
-                similar: 'ทาน (更礼貌)'
-            }
-        }
-    },
-    {
-        id: 'old2',
-        thai: 'นอน',
-        phonetic: 'Non',
-        type: '动词',
-        meaning: '睡',
-        definitions: {
-            basic: '睡觉，躺',
-            examples: [
-                { thai: 'นอนหลับฝันดี', meaning: '睡个好觉 (晚安)' },
-                { thai: 'ขี้เกียจนอนตื่นสาย', meaning: '懒得睡懒觉' }
-            ],
-            usage: {
-                grammar: [],
-                diff: '无',
-                mistakes: '无',
-                similar: 'หลับ (睡着)'
-            }
-        }
-    },
-    {
-        id: 'old3',
-        thai: 'ไป',
-        phonetic: 'Pai',
-        type: '动词',
-        meaning: '去',
-        definitions: {
-            basic: '去，往，离开',
-            examples: [
-                { thai: 'ไปไหน', meaning: '去哪里？' },
-                { thai: 'ไปทำงาน', meaning: '去工作' }
-            ],
-            usage: {
-                grammar: [],
-                diff: '可作趋向补语',
-                mistakes: '无',
-                similar: '无'
-            }
-        }
-    },
-    {
-        id: 'old4',
-        thai: 'มา',
-        phonetic: 'Ma',
-        type: '动词',
-        meaning: '来',
-        definitions: {
-            basic: '来，来到',
-            examples: [
-                { thai: 'มาจากไหน', meaning: '来自哪里？' },
-                { thai: 'มานี่', meaning: '来这里' }
-            ],
-            usage: {
-                grammar: [],
-                diff: '可作趋向补语',
-                mistakes: '无',
-                similar: '无'
-            }
-        }
-    },
-    {
-        id: 'old5',
-        thai: 'รัก',
-        phonetic: 'Rak',
-        type: '动词',
-        meaning: '爱',
-        definitions: {
-            basic: '爱，喜爱',
-            examples: [
-                { thai: 'ฉันรักคุณ', meaning: '我爱你' },
-                { thai: 'รักชาติ', meaning: '爱国' }
-            ],
-            usage: {
-                grammar: [],
-                diff: '无',
-                mistakes: '无',
-                similar: 'ชอบ (喜欢)'
-            }
-        }
-    }
-];
-
-const MOCK_NEW_WORDS: WordData[] = [
-    {
-        id: 'new1',
-        thai: 'ทำงาน',
-        phonetic: 'Tham Ngan',
-        type: '动词',
-        meaning: '工作',
-        definitions: {
-            basic: '工作，干活',
-            examples: [
-                { thai: 'วันนี้ทำงานไหม', meaning: '今天工作吗？' },
-                { thai: 'ทำงานหนัก', meaning: '工作努力/辛苦' }
-            ],
-            usage: {
-                grammar: [],
-                diff: '无',
-                mistakes: '无',
-                similar: 'งาน (名词: 工作)'
-            }
-        }
-    },
-    {
-        id: 'new2',
-        thai: 'เรียน',
-        phonetic: 'Rian',
-        type: '动词',
-        meaning: '学习',
-        definitions: {
-            basic: '学习，读书',
-            examples: [
-                { thai: 'เรียนภาษาไทย', meaning: '学泰语' },
-                { thai: 'ไปโรงเรียน', meaning: '去学校' }
-            ],
-            usage: {
-                grammar: [],
-                diff: '侧重于在学校学习或上课',
-                mistakes: '自学通常用 ศึกษา',
-                similar: 'ศึกษา (研究/进修)'
-            }
-        }
-    },
-    {
-        id: 'new3',
-        thai: 'เล่น',
-        phonetic: 'Len',
-        type: '动词',
-        meaning: '玩',
-        definitions: {
-            basic: '玩，游戏，演奏',
-            examples: [
-                { thai: 'เล่นเกม', meaning: '玩游戏' },
-                { thai: 'พูดเล่น', meaning: '开玩笑 (说玩)' }
-            ],
-            usage: {
-                grammar: [],
-                diff: '范围很广，可指玩耍、演奏乐器、开玩笑等',
-                mistakes: '无',
-                similar: 'เที่ยว (去玩/旅游)'
-            }
-        }
-    },
-    {
-        id: 'new4',
-        thai: 'พูด',
-        phonetic: 'Phut',
-        type: '动词',
-        meaning: '说',
-        definitions: {
-            basic: '说，讲',
-            examples: [
-                { thai: 'พูดภาษาไทยได้ไหม', meaning: '会说泰语吗？' },
-                { thai: 'พูดช้าๆ หน่อย', meaning: '请说慢一点' }
-            ],
-            usage: {
-                grammar: [],
-                diff: '侧重于说话的动作',
-                mistakes: '无',
-                similar: 'บอก (告诉)'
-            }
-        }
-    },
-    {
-        id: 'new5',
-        thai: 'อ่าน',
-        phonetic: 'Aan',
-        type: '动词',
-        meaning: '读',
-        definitions: {
-            basic: '阅读，念',
-            examples: [
-                { thai: 'อ่านหนังสือ', meaning: '读书' },
-                { thai: 'อ่านออกเสียง', meaning: '朗读' }
-            ],
-            usage: {
-                grammar: [],
-                diff: '无',
-                mistakes: '无',
-                similar: 'ศึกษา (学习/研究)'
-            }
-        }
-    }
-];
-
-// --- Types ---
-
 type SessionMode = 'REVIEW' | 'LEARN_NEW';
-// 与后端保持一致，字母模块使用 'letter'
 type ModuleVariant = 'letter' | 'word';
 
-interface QueueItem {
-    word: WordData;
-    type: 'review' | 'new';
-    repetitionsLeft: number;
-}
 
 export default function LearningSession() {
     const params = useLocalSearchParams();
@@ -269,84 +52,22 @@ export default function LearningSession() {
 function WordSession() {
     const { t } = useTranslation();
     const router = useRouter();
-    const [queue, setQueue] = useState<QueueItem[]>([]);
-    const [currentIndex, setCurrentIndex] = useState(0);
-    const [mode, setMode] = useState<SessionMode>('REVIEW');
-    const [isSessionComplete, setIsSessionComplete] = useState(false);
-    const { dailyLimits } = useLearningPreferenceStore();
 
-    // Initialize Session
-    useEffect(() => {
-        const dailyLimit = dailyLimits.word || 20;
-        const reviewCap = Math.min(MOCK_OLD_WORDS.length, Math.max(1, Math.floor(dailyLimit / 2)));
-        const limitedReview = MOCK_OLD_WORDS.slice(0, reviewCap);
+    // ⭐ 使用真正的 Store 状态
+    const {
+        phase,
+        currentChunk,
+        currentIndex,
+        chunkPhase,
+        totalSessionWords,
+        completedCount,
+        rateCurrentWord,
+        submitQuizResult
+    } = useVocabularyStore();
 
-        const remaining = Math.max(1, dailyLimit - limitedReview.length);
-        const limitedNew = MOCK_NEW_WORDS.slice(0, Math.min(MOCK_NEW_WORDS.length, remaining));
+    const currentItem = currentChunk[currentIndex];
 
-        const reviewItems: QueueItem[] = limitedReview.map(w => ({
-            word: w,
-            type: 'review',
-            repetitionsLeft: 3,
-        }));
-
-        const newItems: QueueItem[] = limitedNew.map(w => ({
-            word: w,
-            type: 'new',
-            repetitionsLeft: 3,
-        }));
-
-        setQueue([...reviewItems, ...newItems]);
-    }, [dailyLimits.word]);
-
-    const currentItem = queue[currentIndex];
-
-    // Determine current mode based on item type
-    useEffect(() => {
-        if (currentItem) {
-            if (currentItem.type === 'review' && mode !== 'REVIEW') {
-                setMode('REVIEW');
-            } else if (currentItem.type === 'new' && mode !== 'LEARN_NEW') {
-                setMode('LEARN_NEW');
-            }
-        }
-    }, [currentItem, mode]);
-
-    const handleNext = () => {
-        if (!currentItem) return;
-
-        const nextQueue = [...queue];
-        const currentQueueItem = nextQueue[currentIndex];
-
-        // Decrease repetitions
-        currentQueueItem.repetitionsLeft -= 1;
-
-        if (currentQueueItem.repetitionsLeft > 0) {
-            nextQueue.push({ ...currentQueueItem });
-        }
-
-        if (currentIndex < nextQueue.length - 1) {
-            setQueue(nextQueue);
-            setCurrentIndex(prev => prev + 1);
-        } else {
-            setIsSessionComplete(true);
-        }
-    };
-
-    const handleSkipReview = () => {
-        const newQueue = queue.filter(item => item.type === 'new');
-
-        if (newQueue.length === 0) {
-            Alert.alert(t('learning.noNewWordsTitle'), t('learning.noNewWordsMessage'));
-            router.back();
-            return;
-        }
-
-        setQueue(newQueue);
-        setCurrentIndex(0);
-        setMode('LEARN_NEW');
-    };
-
+    // 处理退出
     const handleClose = () => {
         Alert.alert(
             t('learning.endSessionTitle'),
@@ -358,7 +79,19 @@ function WordSession() {
         );
     };
 
-    if (isSessionComplete) {
+    // 1. 加载中状态
+    if (phase === LearningPhase.VOCAB_LOADING || (!currentItem && phase !== LearningPhase.VOCAB_COMPLETED)) {
+        return (
+            <SafeAreaView style={styles.container}>
+                <View style={styles.centerContent}>
+                    <Text>{t('common.loading')}</Text>
+                </View>
+            </SafeAreaView>
+        );
+    }
+
+    // 2. 完成状态
+    if (phase === LearningPhase.VOCAB_COMPLETED) {
         return (
             <SafeAreaView style={styles.container}>
                 <View style={styles.completeContainer}>
@@ -371,15 +104,8 @@ function WordSession() {
         );
     }
 
-    if (!currentItem) {
-        return (
-            <SafeAreaView style={styles.container}>
-                <Text>{t('common.loading')}</Text>
-            </SafeAreaView>
-        );
-    }
-
-    const progress = Math.round(((currentIndex) / queue.length) * 100);
+    // 计算总进度 (基于已完成的单词总数)
+    const progress = totalSessionWords > 0 ? Math.round((completedCount / totalSessionWords) * 100) : 0;
 
     return (
         <SafeAreaView edges={['top', 'bottom']} style={styles.container}>
@@ -395,31 +121,23 @@ function WordSession() {
                     <View style={[styles.progressBarFill, { width: `${progress}%` }]} />
                 </View>
 
-                {mode === 'REVIEW' ? (
-                    <Pressable onPress={handleSkipReview}>
-                        <Text style={styles.skipText}>{t('learning.skipReview')}</Text>
-                    </Pressable>
-                ) : (
-                    <View style={{ width: 60 }} />
-                )}
+                {/* 右侧占位，保持进度条居中 */}
+                <View style={{ width: 44 }} />
             </View>
 
             {/* Main Content */}
             <View style={styles.content}>
-                {currentItem.type === 'review' ? (
-                    <ReviewWordView
-                        key={`${currentItem.word.id}-review-${currentIndex}`}
-                        word={currentItem.word}
-                        onAnswer={(quality) => {
-                            console.log(`Answered ${quality} for ${currentItem.word.thai}`);
-                        }}
-                        onNext={handleNext}
+                {chunkPhase === 'ASSESSMENT' ? (
+                    <VocabularyAssessmentView
+                        key={`assess-${currentItem.id}`}
+                        vocabulary={currentItem.entity}
+                        onRate={rateCurrentWord}
                     />
                 ) : (
-                    <NewWordView
-                        key={`${currentItem.word.id}-new-${currentIndex}`}
-                        word={currentItem.word}
-                        onNext={handleNext}
+                    <VocabularyQuizView
+                        key={`quiz-${currentItem.id}`}
+                        vocabulary={currentItem.entity}
+                        onResult={submitQuizResult}
                     />
                 )}
             </View>

@@ -413,7 +413,7 @@ async function getTodayMemories(db, params) {
         // ...entity: 展开运算符
         // 将数据库中查询到的单词/字母的所有原始字段（如 thaiWord, meaning, audioPath 等）
         // 原封不动地复制到返回结果中，前端直接使用这些字段。
-        ...entity,
+        entity: { ...entity },
         memoryState: {
           masteryLevel: memory.masteryLevel,     // 熟练度
           reviewStage: memory.reviewStage,       // 复习阶段

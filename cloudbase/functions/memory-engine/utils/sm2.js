@@ -15,6 +15,7 @@ const { MasteryLevel, SM2_PARAMS, EARLY_INTERVALS } = require('./constants');
 
 /**
  * 将掌握程度映射到 SM-2 Quality 值
+ * @version 2.0.0 增加对数字和数字字符串的支持，确保 1-5 范围。
  * 
  * SM-2 Quality 定义:
  * 0 - 完全不记得
@@ -24,10 +25,20 @@ const { MasteryLevel, SM2_PARAMS, EARLY_INTERVALS } = require('./constants');
  * 4 - 正确回答，有些犹豫
  * 5 - 正确回答，毫无困难
  * 
- * @param {string} mastery - 掌握程度
+ * @param {string|number} mastery - 掌握程度
  * @returns {number} Quality值 (1-5)
  */
 function masteryToQuality(mastery) {
+    // 1. 如果输入已经是 1-5 的数字（或可解析为 1-5 的数字字符串）
+    const numericQuality = parseInt(mastery, 10);
+    if (!isNaN(numericQuality) && numericQuality >= 1 && numericQuality <= 5) {
+        return numericQuality;
+    }
+    // 2. 特殊处理 0 或 6 等越界情况
+    if (!isNaN(numericQuality)) {
+        return numericQuality < 1 ? 1 : 5;
+    }
+    // 3. 兼容旧版中文字符串
     switch (mastery) {
         case MasteryLevel.UNFAMILIAR:
             return 1;  // 完全不记得
@@ -36,7 +47,7 @@ function masteryToQuality(mastery) {
         case MasteryLevel.REMEMBERED:
             return 5;  // 完全记得
         default:
-            return 1;
+            return 1;// 默认视为陌生
     }
 }
 
@@ -48,11 +59,11 @@ function masteryToQuality(mastery) {
  * 2. "模糊"时缩短间隔而非维持不变
  * 3. "陌生"时完全重置复习进度
  * 
- * @param {string} mastery - 掌握程度: 忘记/模糊/认识
+ * @param {string|number} mastery - 掌握程度: 忘记/模糊/认识
  * @param {number} currentInterval - 当前复习间隔（天）
  * @param {number} easinessFactor - 简易度因子（1.3-2.5+）
  * @param {number} reviewCount - 已复习次数
- * @returns {Object} 算法计算结果
+ * @returns {number} Quality值 (1-5)
  * 
  * @example
  * const result = calculateSM2Optimized('认识', 2, 2.5, 1);
