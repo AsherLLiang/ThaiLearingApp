@@ -111,7 +111,7 @@ async function submitMemoryResult(db, params) {
 
       batchResults
         .filter(Boolean)
-        .forEach((res) => updatedMemories.push(res));
+        .forEach((res) => updatedMemories.push(res));//<--- res 的全称为 result，这里是将 res push 到 updatedMemories 数组中
     }
 
     if (updatedMemories.length === 0) {

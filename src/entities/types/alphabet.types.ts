@@ -223,35 +223,6 @@ export enum LearningPhase {
     COMPLETED = 'COMPLETED'         // 完成
 }
 
-/**
- * QualityScore - 质量评分映射
- */
-export enum QualityButton {
-    AGAIN = 'AGAIN',                // 完全忘记
-    HARD = 'HARD',                  // 困难
-    GOOD = 'GOOD',                  // 良好
-    EASY = 'EASY'                   // 简单
-}
-
-/**
- * 质量评分映射表
- */
-export const QUALITY_SCORE_MAP: Record<QualityButton, number> = {
-    [QualityButton.AGAIN]: 1,
-    [QualityButton.HARD]: 3,
-    [QualityButton.GOOD]: 4,
-    [QualityButton.EASY]: 5,
-};
-
-/**
- * 尝试次数增量映射表
- */
-export const ATTEMPTS_INCREMENT_MAP: Record<QualityButton, number> = {
-    [QualityButton.AGAIN]: 0,       // 不增加
-    [QualityButton.HARD]: 1,        // +1
-    [QualityButton.GOOD]: 1,        // +1
-    [QualityButton.EASY]: 2,        // +2 (跳过一次)
-};
 
 // ==================== Phase 2 错题统计 ====================
 

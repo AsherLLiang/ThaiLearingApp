@@ -13,7 +13,7 @@ export enum LearningPhase {
   // ===== 初始状态 =====
   IDLE = 'IDLE',
   LOADING = 'LOADING',
-  
+
   // ===== 7阶段学习流程 =====
   YESTERDAY_REVIEW = 'yesterday-review',
   YESTERDAY_REMEDY = 'yesterday-remedy',
@@ -22,12 +22,19 @@ export enum LearningPhase {
   TODAY_FINAL_REVIEW = 'today-final-review',
   TODAY_REMEDY = 'today-remedy',
   ROUND_EVALUATION = 'round-evaluation',
-  
+
   // ===== 测试相关(用于课程测试) =====
   TEST_PROMPT = 'test-prompt',
   TESTING = 'testing',
   TEST_RESULT = 'test-result',
-  
+
+  // ===== 单词模块专用 =====
+  VOCAB_IDLE = 'vocab-idle',
+  VOCAB_LOADING = 'vocab-loading',
+  VOCAB_LEARNING = 'vocab-learning', // 学习中
+  VOCAB_REVIEW = 'vocab-review',     // 复习中  
+  VOCAB_COMPLETED = 'vocab-completed',
+
   // ===== 完成状态 =====
   FINISHED = 'finished',
   COMPLETED = 'COMPLETED',
@@ -37,7 +44,7 @@ export enum LearningPhase {
  * Phase 类型(用于类型守卫)
  * 对应AlphabetLearningEngineView中使用的字符串字面量
  */
-export type Phase = 
+export type Phase =
   | 'yesterday-review'
   | 'yesterday-remedy'
   | 'today-learning'
@@ -130,11 +137,11 @@ export function getNextPhase(currentPhase: Phase): Phase | null {
     'round-evaluation',
     'finished',
   ];
-  
+
   const currentIndex = phaseSequence.indexOf(currentPhase);
   if (currentIndex === -1 || currentIndex === phaseSequence.length - 1) {
     return null;
   }
-  
+
   return phaseSequence[currentIndex + 1];
 }
