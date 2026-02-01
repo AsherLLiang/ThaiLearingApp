@@ -4,7 +4,7 @@
  * 
  */
 
-const { calculateSM2Optimized } = require('./sm2');
+const { calculateSM2Optimized, masteryToQuality } = require('./sm2');
 
 /**
  * 创建新的记忆记录,并写入 memory_status 集合,不做导出
@@ -124,12 +124,8 @@ async function updateMemoryAfterReview(db, userId, entityType, entityId, quality
 
         // 2. 映射质量到SM-2评分
         console.log('步骤2: 映射质量');
-        const qualityMap = {
-            '陌生': 1,
-            '模糊': 3,
-            '记得': 5
-        };
-        const sm2Quality = qualityMap[quality] || 3;
+
+        const sm2Quality = masteryToQuality(quality);
         console.log('SM-2质量:', sm2Quality);
 
         // 3. 计算新的SM-2参数
@@ -140,7 +136,6 @@ async function updateMemoryAfterReview(db, userId, entityType, entityId, quality
             easinessFactor: memory.easinessFactor,
             reviewStage: memory.reviewStage
         });
-
         const sm2Result = calculateSM2Optimized(
             quality,
             memory.intervalDays,
@@ -153,9 +148,9 @@ async function updateMemoryAfterReview(db, userId, entityType, entityId, quality
         // 4. 更新掌握度
         console.log('步骤4: 计算新掌握度');
         let newMasteryLevel = memory.masteryLevel;
-        if (quality === '记得') {
+        if (sm2Quality >= 4) {
             newMasteryLevel = Math.min(1.0, memory.masteryLevel + 0.15);
-        } else if (quality === '模糊') {
+        } else if (sm2Quality >= 2) {
             newMasteryLevel = Math.max(0.0, memory.masteryLevel + 0.05);
         } else {
             newMasteryLevel = Math.max(0.0, memory.masteryLevel - 0.2);
@@ -164,9 +159,9 @@ async function updateMemoryAfterReview(db, userId, entityType, entityId, quality
 
         // 5. 更新连胜和计数
         console.log('步骤5: 计算连胜');
-        const newStreakCorrect = quality === '记得' ? memory.streakCorrect + 1 : 0;
-        const newCorrectCount = quality === '记得' ? memory.correctCount + 1 : memory.correctCount;
-        const newWrongCount = quality === '陌生' ? memory.wrongCount + 1 : memory.wrongCount;
+        const newStreakCorrect = sm2Quality >= 4 ? memory.streakCorrect + 1 : 0;
+        const newCorrectCount = sm2Quality >= 4 ? memory.correctCount + 1 : memory.correctCount;
+        const newWrongCount = sm2Quality < 2 ? memory.wrongCount + 1 : memory.wrongCount;
 
         // 6. 计算下次复习时间
         console.log('步骤6: 计算下次复习时间');

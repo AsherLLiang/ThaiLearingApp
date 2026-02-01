@@ -2,7 +2,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { apiClient } from '@/src/utils/apiClient';
+import { apiClient, callCloudFunction } from '@/src/utils/apiClient';
 import { API_ENDPOINTS } from '@/src/config/api.endpoints';
 import { useUserStore } from './userStore';
 import { useModuleAccessStore, type ModuleType } from './moduleAccessStore';
@@ -99,14 +99,15 @@ export const useVocabularyStore = create<VocabularyStore>()(
                     const { currentCourseSource } = get();
                     const targetSource = source || currentCourseSource;
 
-                    const endpoint = API_ENDPOINTS.MEMORY.GET_TODAY_MEMORIES;
-                    const result = await apiClient.post<TodayVocabularyResponse>(
-                        endpoint,
+                    const result = await callCloudFunction<TodayVocabularyResponse>(
+                        "getTodayMemories",
                         {
                             userId,
                             limit,
+                            entityType: 'word',
                             source: targetSource
-                        }
+                        },
+                        { endpoint: API_ENDPOINTS.MEMORY.GET_TODAY_MEMORIES.cloudbase }
                     );
 
                     console.log('🔍 API 响应:', result);
@@ -338,10 +339,10 @@ export const useVocabularyStore = create<VocabularyStore>()(
             startCourse: async (source: string, moduleType: ModuleType = 'word') => {
                 // 🔒 Strict Safety Net: 验证是否有权限访问该模块
                 const allowed = useModuleAccessStore.getState().checkAccessLocally(moduleType);
-                if (!allowed) {
-                    console.warn(`🚫 Access Denied: Module '${moduleType}' is locked. Cannot start course '${source}'.`);
-                    return; // ⛔️ 强制中断，不执行任何切换逻辑
-                }
+                // if (!allowed) {
+                //     console.warn(`🚫 Access Denied: Module '${moduleType}' is locked. Cannot start course '${source}'.`);
+                //     return; // ⛔️ 强制中断，不执行任何切换逻辑
+                // }
 
                 const { currentCourseSource, progress, courseProgressMap } = get();
                 const userId = useUserStore.getState().currentUser?.userId;
