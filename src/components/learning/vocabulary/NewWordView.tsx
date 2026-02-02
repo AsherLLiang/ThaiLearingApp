@@ -9,27 +9,10 @@ import { BlurRevealer } from '@/src/components/common/BlurRevealer';
 
 // 定义单词数据的接口结构
 // 包含了单词的ID、泰语原文、发音、词性、含义以及详细的定义（基础定义、例句、用法等）
-export interface WordData {
-    id: string;
-    thai: string;        // 泰语单词
-    phonetic: string;    // 音标/发音
-    type: string;        // 词性 (如: 名词, 动词)
-    meaning: string;     // 主要中文含义
-    definitions: {
-        basic: string;   // 基础英文/详细定义
-        examples: { thai: string; meaning: string }[]; // 例句列表
-        usage: {
-            // 语法点列表
-            grammar: { label: string; content: string; example?: string }[];
-            diff: string;      // 与中文的区别
-            mistakes: string;  // 常见错误
-            similar: string;   // 近义词辨析
-        };
-    };
-}
+import { Vocabulary } from '@/src/entities/types/vocabulary.types';
 
 interface NewWordViewProps {
-    word: WordData;   // 当前要学习的单词数据
+    vocabulary: Vocabulary;   // 当前要学习的单词数据
     onNext: () => void; // 点击“下一步”时的回调函数
 }
 
@@ -48,7 +31,7 @@ type TabType = 'basic' | 'examples' | 'usage';
  * 4. 用户可以通过底部的 Tabs 切换查看：基础定义、例句、用法。
  * 5. 学习完成后，点击“下一个”继续。
  */
-export const NewWordView: React.FC<NewWordViewProps> = ({ word, onNext }) => {
+export const NewWordView: React.FC<NewWordViewProps> = ({ vocabulary, onNext }) => {
     const { t } = useTranslation();
     // 控制释义内容是否已揭示。false=模糊遮盖, true=清晰显示
     const [isRevealed, setIsRevealed] = useState(false);
@@ -60,6 +43,11 @@ export const NewWordView: React.FC<NewWordViewProps> = ({ word, onNext }) => {
         setIsRevealed(true);
     };
 
+    // 辅助数据获取
+    const analysis = vocabulary.analysis;
+    const exampleSentences = vocabulary.exampleSentences || {};
+    const examples = Object.values(exampleSentences);
+
     return (
         <View style={styles.container}>
             <View style={styles.content}>
@@ -67,14 +55,14 @@ export const NewWordView: React.FC<NewWordViewProps> = ({ word, onNext }) => {
                 <View style={styles.cardContainer}>
                     <View style={styles.wordCard}>
                         {/* 泰语单词大字展示 */}
-                        <Text style={styles.thaiWord}>{word.thai}</Text>
+                        <Text style={styles.thaiWord}>{vocabulary.thaiWord}</Text>
 
                         {/* 发音区域：喇叭图标 + 音标 */}
                         <View style={styles.phoneticRow}>
                             <Pressable style={styles.audioButton}>
                                 <Volume2 size={20} color={Colors.thaiGold} />
                             </Pressable>
-                            <Text style={styles.phoneticText}>{word.phonetic}</Text>
+                            <Text style={styles.phoneticText}>{vocabulary.pronunciation}</Text>
                         </View>
                     </View>
                 </View>
@@ -83,9 +71,9 @@ export const NewWordView: React.FC<NewWordViewProps> = ({ word, onNext }) => {
                 <View style={styles.detailsContainer}>
                     {/* 含义头部：主要中文义项 + 词性标签 */}
                     <View style={styles.meaningHeader}>
-                        <Text style={styles.mainMeaning}>{word.meaning}</Text>
+                        <Text style={styles.mainMeaning}>{vocabulary.meaning}</Text>
                         <View style={styles.typeTag}>
-                            <Text style={styles.typeText}>{word.type}</Text>
+                            <Text style={styles.typeText}>{vocabulary.partOfSpeech}</Text>
                         </View>
                     </View>
 
@@ -126,18 +114,19 @@ export const NewWordView: React.FC<NewWordViewProps> = ({ word, onNext }) => {
                         >
                             {/* Tab内容 1: 基础定义 */}
                             {activeTab === 'basic' && (
-                                <Text style={styles.bodyText}>{word.definitions.basic}</Text>
+                                <Text style={styles.bodyText}>{analysis?.part_of_speech || vocabulary.meaning}</Text>
                             )}
 
                             {/* Tab内容 2: 例句列表 */}
                             {activeTab === 'examples' && (
                                 <View style={styles.examplesList}>
-                                    {word.definitions.examples.map((ex, index) => (
+                                    {examples.map((ex, index) => (
                                         <View key={index} style={styles.exampleItem}>
-                                            <Text style={styles.exampleThai}>{ex.thai}</Text>
-                                            <Text style={styles.exampleMeaning}>{ex.meaning}</Text>
+                                            <Text style={styles.exampleThai}>{ex.泰语}</Text>
+                                            <Text style={styles.exampleMeaning}>{ex.中文}</Text>
                                         </View>
                                     ))}
+                                    {examples.length === 0 && <Text style={styles.bodyText}>暂无例句</Text>}
                                 </View>
                             )}
 
@@ -145,26 +134,42 @@ export const NewWordView: React.FC<NewWordViewProps> = ({ word, onNext }) => {
                             {activeTab === 'usage' && (
                                 <View style={styles.usageContent}>
                                     {/* 语法部分 */}
-                                    <Text style={styles.sectionTitle}>{t('learning.grammarExamples')}</Text>
-                                    {word.definitions.usage.grammar.map((g, i) => (
-                                        <View key={i} style={styles.grammarItem}>
-                                            <Text style={styles.grammarLabel}>{g.label}:</Text>
-                                            <Text style={styles.grammarContent}>{g.content}</Text>
-                                            {g.example && <Text style={styles.grammarExample}>{g.example}</Text>}
-                                        </View>
-                                    ))}
+                                    {vocabulary.usage?.语法示例 && (
+                                        <>
+                                            <Text style={styles.sectionTitle}>{t('learning.grammarExamples')}</Text>
+                                            <View style={styles.grammarItem}>
+                                                <Text style={styles.grammarLabel}>{vocabulary.usage.语法示例.结构}:</Text>
+                                                <Text style={styles.grammarContent}>{vocabulary.usage.语法示例.解释}</Text>
+                                                {vocabulary.usage.语法示例.使用技巧 && <Text style={styles.grammarExample}>{vocabulary.usage.语法示例.使用技巧}</Text>}
+                                            </View>
+                                        </>
+                                    )}
 
                                     {/* 区别部分 */}
-                                    <Text style={[styles.sectionTitle, styles.mt4]}>{t('learning.diffWithChinese')}</Text>
-                                    <Text style={styles.bodyText}>{word.definitions.usage.diff}</Text>
+                                    {vocabulary.usage?.与中文差异 && (
+                                        <>
+                                            <Text style={[styles.sectionTitle, styles.mt4]}>{t('learning.diffWithChinese')}</Text>
+                                            <Text style={styles.bodyText}>{vocabulary.usage.与中文差异}</Text>
+                                        </>
+                                    )}
 
                                     {/* 易错点 */}
-                                    <Text style={[styles.sectionTitle, styles.mt4]}>{t('learning.commonMistakes')}</Text>
-                                    <Text style={styles.bodyText}>{word.definitions.usage.mistakes}</Text>
+                                    {analysis?.common_mistakes?.发音易错点 && (
+                                        <>
+                                            <Text style={[styles.sectionTitle, styles.mt4]}>{t('learning.commonMistakes')}</Text>
+                                            <Text style={styles.bodyText}>{analysis.common_mistakes.发音易错点}</Text>
+                                        </>
+                                    )}
 
                                     {/* 近义词辨析 */}
-                                    <Text style={[styles.sectionTitle, styles.mt4]}>{t('learning.similarWordsDiff')}</Text>
-                                    <Text style={styles.bodyText}>{word.definitions.usage.similar}</Text>
+                                    {analysis?.common_mistakes?.相似词汇区别 && (
+                                        <>
+                                            <Text style={[styles.sectionTitle, styles.mt4]}>{t('learning.similarWordsDiff')}</Text>
+                                            <Text style={styles.bodyText}>{analysis.common_mistakes.相似词汇区别}</Text>
+                                        </>
+                                    )}
+
+                                    {(!vocabulary.usage && !analysis?.common_mistakes) && <Text style={styles.bodyText}>暂无用法详解</Text>}
                                 </View>
                             )}
                             {/* 底部留白，防止内容被按钮遮挡 */}

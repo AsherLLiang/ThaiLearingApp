@@ -17,9 +17,7 @@ interface BuildAlphabetQueueParams {
 
 const MINI_REVIEW_CHUNK = 3;
 
-export function buildAlphabetQueue(
-  params: BuildAlphabetQueueParams
-): AlphabetQueueItem[] {
+export function buildAlphabetQueue(params: BuildAlphabetQueueParams): AlphabetQueueItem[] {
   const { lessonLetters, round, mode, previousRoundLetters = [] } = params;
   const queue: AlphabetQueueItem[] = [];
 
