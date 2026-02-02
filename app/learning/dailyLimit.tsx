@@ -31,7 +31,7 @@ export default function DailyLimitSetupScreen() {
         setProgressDailyLimit(moduleType, limit);
 
         if (courseSource) {
-            await startCourse(courseSource);
+            await startCourse(courseSource, limit);
         }
 
         router.replace({

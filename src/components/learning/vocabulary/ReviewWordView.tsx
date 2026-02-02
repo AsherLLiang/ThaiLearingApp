@@ -5,14 +5,13 @@ import { Volume2 } from 'lucide-react-native';
 import { BlurView } from 'expo-blur';
 import { Colors } from '@/src/constants/colors';
 import { Typography } from '@/src/constants/typography';
-import { WordData } from './NewWordView';
+import { Vocabulary } from '@/src/entities/types/vocabulary.types';
 
 interface ReviewWordViewProps {
-    word: WordData; // 复习的单词数据
+    vocabulary: Vocabulary; // 复习的单词数据
     // 用户回答结果的回调函数。
-    // quality 参数代表掌握程度: 'know' (认识), 'unsure' (模糊), 'forgot' (忘记)
-    // 这个回调通常用于更新后台的 SRS (Spaced Repetition System) 数据
-    onAnswer: (quality: 'know' | 'unsure' | 'forgot') => void;
+    // isCorrect: 是否答对, score: 质量评分 (1-5)
+    onAnswer: (isCorrect: boolean, score: number) => void;
     onNext: () => void; // 进入下一个单词的回调
 }
 
@@ -31,7 +30,7 @@ interface ReviewWordViewProps {
  *    - 底部按钮变为“下一个”。
  * 5. 用户阅读释义确认后，点击“下一个”继续。
  */
-export const ReviewWordView: React.FC<ReviewWordViewProps> = ({ word, onAnswer, onNext }) => {
+export const ReviewWordView: React.FC<ReviewWordViewProps> = ({ vocabulary, onAnswer, onNext }) => {
     const { t } = useTranslation();
     // 控制释义内容是否已揭示
     const [isRevealed, setIsRevealed] = useState(false);
@@ -39,37 +38,47 @@ export const ReviewWordView: React.FC<ReviewWordViewProps> = ({ word, onAnswer, 
     // 处理用户点击评分按钮
     const handleReveal = (quality: 'know' | 'unsure' | 'forgot') => {
         setIsRevealed(true); // 揭示答案
-        onAnswer(quality);   // 提交评分结果 (SRS算法会根据此调整下次复习时间)
+
+        let isCorrect = true;
+        let score = 5;
+
+        if (quality === 'forgot') {
+            isCorrect = false;
+            score = 1;
+        } else if (quality === 'unsure') {
+            isCorrect = true;
+            score = 3;
+        }
+
+        onAnswer(isCorrect, score);   // 提交结果
     };
 
     // 提取第一个例句作为上下文提示
-    // 在这里我们只取数组中的第一个用于展示
-    const exampleSentence = word.definitions.examples[0];
+    const exampleSentences = vocabulary.exampleSentences || {};
+    const exampleSentence = Object.values(exampleSentences)[0];
 
     return (
         <View style={styles.container}>
             <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
                 {/* 顶部区域：单词卡片与发音 */}
                 <View style={styles.topSection}>
-                    <Text style={styles.thaiWord}>{word.thai}</Text>
+                    <Text style={styles.thaiWord}>{vocabulary.thaiWord}</Text>
 
                     <View style={styles.phoneticRow}>
                         <Pressable style={styles.audioButton}>
                             <Volume2 size={20} color={Colors.thaiGold} />
                         </Pressable>
-                        <Text style={styles.phoneticText}>{word.phonetic}</Text>
+                        <Text style={styles.phoneticText}>{vocabulary.pronunciation}</Text>
                     </View>
                 </View>
 
                 {/* 上下文提示区域：展示例句 */}
-                {/* 如果存在例句，显示在此处帮助用户根据上下文回忆 */}
                 {exampleSentence && (
                     <View style={styles.contextContainer}>
                         <Text style={styles.contextThai}>
-                            {/* 暂时简单展示泰语整句，后续可优化为高亮关键词 */}
-                            {exampleSentence.thai}
+                            {exampleSentence.泰语}
                         </Text>
-                        <Text style={styles.contextMeaning}>{exampleSentence.meaning}</Text>
+                        <Text style={styles.contextMeaning}>{exampleSentence.中文}</Text>
                     </View>
                 )}
 
@@ -79,13 +88,13 @@ export const ReviewWordView: React.FC<ReviewWordViewProps> = ({ word, onAnswer, 
                     <View style={styles.blurredContent}>
                         {/* 含义头部 */}
                         <View style={styles.meaningHeader}>
-                            <Text style={styles.mainMeaning}>{word.meaning}</Text>
+                            <Text style={styles.mainMeaning}>{vocabulary.meaning}</Text>
                             <View style={styles.typeTag}>
-                                <Text style={styles.typeText}>{word.type}</Text>
+                                <Text style={styles.typeText}>{vocabulary.partOfSpeech}</Text>
                             </View>
                         </View>
                         {/* 基础英文/详细定义 */}
-                        <Text style={styles.definitionText}>{word.definitions.basic}</Text>
+                        <Text style={styles.definitionText}>{vocabulary.analysis?.part_of_speech || vocabulary.meaning}</Text>
                     </View>
 
                     {/* 模糊遮罩层：仅在 isRevealed 为 false 时覆盖 */}

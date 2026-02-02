@@ -9,13 +9,15 @@ import { Colors } from '@/src/constants/colors';
 import { Typography } from '@/src/constants/typography';
 import { AlphabetLearningView } from '@/src/components/learning/alphabet/AlphabetLearningView';
 import { AlphabetReviewView } from '@/src/components/learning/alphabet/AlphabetReviewView';
-import { VocabularyAssessmentView } from '@/src/components/learning/vocabulary/VocabularyAssessmentView';
 import { VocabularyQuizView } from '@/src/components/learning/vocabulary/VocabularyQuizView';
+import { NewWordView } from '@/src/components/learning/vocabulary/NewWordView';
+import { ReviewWordView } from '@/src/components/learning/vocabulary/ReviewWordView';
 import { useVocabularyStore } from '@/src/stores/vocabularyStore';
 import { useLearningPreferenceStore } from '@/src/stores/learningPreferenceStore';
 import { useAlphabetStore } from '@/src/stores/alphabetStore';
 import { LearningPhase } from '@/src/entities/enums/LearningPhase.enum';
 import { useUserStore } from '@/src/stores/userStore';
+import { useVocabularyLearningEngine } from '@/src/hooks/useVocabularyLearningEngine';
 
 type SessionMode = 'REVIEW' | 'LEARN_NEW';
 type ModuleVariant = 'letter' | 'word';
@@ -26,7 +28,10 @@ export default function LearningSession() {
     const moduleParam = typeof params.module === 'string' ? params.module : 'word';
     const moduleType: ModuleVariant = moduleParam === 'letter' ? 'letter' : 'word';
     const courseSource = typeof params.source === 'string' ? params.source : undefined;
+    const rawLimit = params.limit ? parseInt(params.limit as string, 10) : undefined;
+    const limit = (typeof rawLimit === 'number' && isFinite(rawLimit)) ? rawLimit : undefined;
     const { startCourse, currentCourseSource } = useVocabularyStore();
+    const { dailyLimits } = useLearningPreferenceStore();
 
     useEffect(() => {
         if (!courseSource) return;
@@ -38,9 +43,10 @@ export default function LearningSession() {
 
         // ⭐ 2. 只有当当前没有课程时，才初始化一次
         if (!currentCourseSource) {
-            startCourse(courseSource);
+            const effectiveLimit = limit ?? dailyLimits.word ?? 20;
+            startCourse(courseSource, effectiveLimit);
         }
-    }, [moduleType, courseSource, currentCourseSource, startCourse]);
+    }, [moduleType, courseSource, currentCourseSource, startCourse, limit, dailyLimits.word]);
 
     if (moduleType === 'letter') {
         return <AlphabetSession />;
@@ -52,20 +58,12 @@ export default function LearningSession() {
 function WordSession() {
     const { t } = useTranslation();
     const router = useRouter();
-
-    // ⭐ 使用真正的 Store 状态
     const {
-        phase,
-        currentChunk,
-        currentIndex,
-        chunkPhase,
-        totalSessionWords,
-        completedCount,
-        rateCurrentWord,
-        submitQuizResult
-    } = useVocabularyStore();
-
-    const currentItem = currentChunk[currentIndex];
+        currentItem,
+        componentType,
+        progress,
+        handleAnswer
+    } = useVocabularyLearningEngine();
 
     // 处理退出
     const handleClose = () => {
@@ -79,67 +77,45 @@ function WordSession() {
         );
     };
 
-    // 1. 加载中状态
-    if (phase === LearningPhase.VOCAB_LOADING || (!currentItem && phase !== LearningPhase.VOCAB_COMPLETED)) {
-        return (
-            <SafeAreaView style={styles.container}>
-                <View style={styles.centerContent}>
-                    <Text>{t('common.loading')}</Text>
-                </View>
-            </SafeAreaView>
-        );
-    }
 
-    // 2. 完成状态
-    if (phase === LearningPhase.VOCAB_COMPLETED) {
-        return (
-            <SafeAreaView style={styles.container}>
-                <View style={styles.completeContainer}>
-                    <Text style={styles.completeTitle}>{t('learning.sessionComplete')}</Text>
-                    <Pressable style={styles.completeButton} onPress={() => router.back()}>
-                        <Text style={styles.completeButtonText}>{t('learning.backToHome')}</Text>
-                    </Pressable>
-                </View>
-            </SafeAreaView>
-        );
-    }
-
-    // 计算总进度 (基于已完成的单词总数)
-    const progress = totalSessionWords > 0 ? Math.round((completedCount / totalSessionWords) * 100) : 0;
-
+    // 分发渲染容器
+    const renderContent = () => {
+        switch (componentType) {
+            case 'loading':
+                return <View style={styles.centerContent}><Text>{t('common.loading')}</Text></View>;
+            case 'completed':
+                return (
+                    <View style={styles.completeContainer}>
+                        <Text style={styles.completeTitle}>{t('learning.sessionComplete')}</Text>
+                        <Pressable style={styles.completeButton} onPress={() => router.back()}>
+                            <Text style={styles.completeButtonText}>{t('learning.backToHome')}</Text>
+                        </Pressable>
+                    </View>
+                );
+            case 'vocab-new':
+                return <NewWordView vocabulary={currentItem!.entity} onNext={() => handleAnswer(true)} />;
+            case 'vocab-review':
+                return <ReviewWordView vocabulary={currentItem!.entity} onAnswer={(isCorrect, score) => handleAnswer(isCorrect, score)} onNext={() => handleAnswer(true)} />;
+            case 'vocab-new-quiz':
+            case 'vocab-rev-quiz':
+            case 'vocab-error-retry':
+                return <VocabularyQuizView vocabulary={currentItem!.entity} onResult={(isCorrect) => handleAnswer(isCorrect)} />;
+            default:
+                return null;
+        }
+    };
     return (
         <SafeAreaView edges={['top', 'bottom']} style={styles.container}>
             <ThaiPatternBackground opacity={0.05} />
-
-            {/* Header */}
             <View style={styles.header}>
-                <Pressable onPress={handleClose} style={styles.closeButton}>
-                    <X size={24} color={Colors.taupe} />
-                </Pressable>
-
+                <Pressable onPress={handleClose} style={styles.closeButton}><X size={24} color={Colors.taupe} /></Pressable>
                 <View style={styles.progressBarContainer}>
-                    <View style={[styles.progressBarFill, { width: `${progress}%` }]} />
+                    <View style={[styles.progressBarFill, { width: `${progress * 100}%` }]} />
                 </View>
-
-                {/* 右侧占位，保持进度条居中 */}
                 <View style={{ width: 44 }} />
             </View>
-
-            {/* Main Content */}
             <View style={styles.content}>
-                {chunkPhase === 'ASSESSMENT' ? (
-                    <VocabularyAssessmentView
-                        key={`assess-${currentItem.id}`}
-                        vocabulary={currentItem.entity}
-                        onRate={rateCurrentWord}
-                    />
-                ) : (
-                    <VocabularyQuizView
-                        key={`quiz-${currentItem.id}`}
-                        vocabulary={currentItem.entity}
-                        onResult={submitQuizResult}
-                    />
-                )}
+                {renderContent()}
             </View>
         </SafeAreaView>
     );

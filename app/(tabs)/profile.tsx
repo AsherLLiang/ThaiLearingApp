@@ -10,6 +10,7 @@ import { LanguageSwitcher } from '@/src/components/common/LanguageSwitcher';
 import { useModuleAccessStore } from '@/src/stores/moduleAccessStore';
 import { useUserStore } from '@/src/stores/userStore';
 import { useLearningStore } from '@/src/stores/learningStore';
+import { useLearningPreferenceStore } from '@/src/stores/learningPreferenceStore';
 import { Colors } from '@/src/constants/colors';
 import { Typography } from '@/src/constants/typography';
 
@@ -22,20 +23,7 @@ export default function ProfileScreen() {
 
   const [dailyReminder, setDailyReminder] = React.useState(true);
 
-  const updateDailyLimit = (limit: number) => {
-    // Update local store
-    useModuleAccessStore.setState(state => ({
-      userProgress: state.userProgress ? { ...state.userProgress, dailyLimit: limit } : null
-    }));
-    // In a real app, I should also call an API to save this setting specifically, 
-    // but the requirement says "unless user clicks...". 
-    // The backend getTodayMemories updates it if passed.
-    // So if I update it here locally, the next time they learn, it will use this new limit?
-    // No, getTodayMemories uses the stored limit if param is not passed.
-    // If I want to persist this change *without* starting a session, I need an API.
-    // However, for now, I will just update the local store so that when they go to Learning, 
-    // the Learning screen picks up this new limit and sends it to initSession, which updates the backend.
-  };
+
 
   const handleLogout = () => {
     Alert.alert(
@@ -149,23 +137,13 @@ export default function ProfileScreen() {
             <View style={styles.divider} />
             <Pressable
               style={styles.settingItem}
-              onPress={() => {
-                // Simple selection for now
-                Alert.alert(
-                  t('profile.dailyLimit', '每日学习数量'),
-                  t('profile.selectLimit', '请选择每日学习数量'),
-                  [
-                    { text: '10', onPress: () => updateDailyLimit(10) },
-                    { text: '20', onPress: () => updateDailyLimit(20) },
-                    { text: '50', onPress: () => updateDailyLimit(50) },
-                    { text: t('common.cancel'), style: 'cancel' }
-                  ]
-                );
-              }}
+              onPress={() => router.push('/learning/dailyLimit')}
             >
               <Text style={styles.settingLabel}>{t('profile.dailyLimit', '每日学习数量')}</Text>
               <View style={styles.settingRight}>
-                <Text style={styles.settingValue}>{userProgress?.dailyLimit || 20}</Text>
+                <Text style={styles.settingValue}>
+                  {useLearningPreferenceStore(state => state.dailyLimits['word']) || userProgress?.dailyLimit || 20}
+                </Text>
                 <ChevronRight size={20} color={Colors.taupe} />
               </View>
             </Pressable>

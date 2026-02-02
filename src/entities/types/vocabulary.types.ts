@@ -91,43 +91,52 @@ export interface Vocabulary {
 }
 // ==============================================================
 /**
- * 单词配置
+ * 单词来源
  */
-export const VOCAB_CONFIG = {
-    VOCAB_CHUNK_SIZE: 5,
-    VOCAB_SCORES: {
-        PERFECT: 5,
-        GOOD: 4,
-        PASS: 3,
-        WEAK: 2,
-        FAIL: 1,
-    },
-    VocabularyCategory: {
-        daily: 'daily',      // 日常用语
-        food: 'food',       // 食物
-        travel: 'travel',     // 旅游
-        business: 'business',   // 商务
-        family: 'family',     // 家庭
-        number: 'number',     // 数字
-        time: 'time',      // 时间
-    },
-    //AIP 延用已经定义好的 api Endpoint
+export type VocabQueueSource =
+    | 'vocab-review'       // 复习旧词自评 (ReviewWordView)
+    | 'vocab-rev-quiz'     // 复习测验 (VocabularyQuizView)
+    | 'vocab-new'          // 新词精讲 (NewWordView)
+    | 'vocab-new-quiz'     // 新词测验 (VocabularyQuizView)
+    | 'vocab-error-retry'; // 错题重练 (VocabularyQuizView)
+
+
+/**
+ * 单词会话全局状态枚举 (从 LearningPhase 整合)
+ */
+export enum VocabSessionPhase {
+    IDLE = 'vocab-idle',
+    LOADING = 'vocab-loading',
+    LEARNING = 'vocab-learning',
+    COMPLETED = 'vocab-completed',
 }
+
+/**
+ * 单词评分分值配置
+ *  PERFECT: 5,
+    GOOD: 4,
+    PASS: 3,
+    WEAK: 2,
+    FAIL: 1,
+ */
+export const VOCAB_SCORES = {
+    PERFECT: 5,
+    GOOD: 4,
+    PASS: 3,
+    WEAK: 2,
+    FAIL: 1,
+}
+
 // ==============================================================
 // 运行时单词状态（仅在内存中存在）
 export interface SessionWord {
-    // 核心数据
-    id: string;              // 方便索引
+    id: string;              // 对应 Vocabulary._id
     entity: Vocabulary;      // 原始数据
-    
-    // 学习进度状态
     isNew: boolean;          // 是否为新词
+    source: VocabQueueSource; // 当前处于哪个学习环节
     masteryLevel: number;    // 当前掌握度 (0-5)
-    
-    // 当前 Session 动态状态
-    phase: 'ASSESSMENT' | 'QUIZ'; // 当前处于评估还是测试阶段
-    mistakeCount: number;         // 本轮错了多少次 (用于计算扣分)
-    selfRating?: number;          // 用户自评的分数 (1-5)
+    mistakeCount: number;    // 本轮错误计数
+    selfRating?: number;     // 用户自评 (1-5)
 }
 
 /**
@@ -150,7 +159,7 @@ export interface VocabularyLearningState {
     // ⭐ 完整实体数据 (Single Source of Truth)
     // 前端展示组件应优先使用 entity 中的数据
     entity: Vocabulary;
-    
+
     // 运行时单词状态（仅在内存中存在）
     sessionWord: SessionWord;
 }
@@ -167,20 +176,18 @@ export const VOCABULARY_CONFIG = {
 };
 
 /**
- * 今日单词响应
+ * 后端响应返回的数据：单词
  */
-export interface TodayVocabularyResponse {
-    items: Array<{
-        _id: string; // Document ID (usually same as entity._id or memory ID)
-        entity: Vocabulary;
-        isNew?: boolean; // Derivable from memoryState but backend might simplify? No, we derive in frontend.
+export interface VocabularyResponse {
+    items: Array<Vocabulary&{
         memoryState: {
             masteryLevel: number;    // 0-5? or enum
-            reviewStage: number;
-            correctCount: number;
-            wrongCount: number;
-            streakCorrect: number;
-            nextReviewAt: string;
+            repetitions: number;    // 记忆次数
+            reviewStage: number;    // 复习阶段
+            correctCount: number;   // 正确次数
+            wrongCount: number;     // 错误次数
+            streakCorrect: number;  // 连续正确次数
+            nextReviewAt: string;   // 下次复习时间
             isNew: boolean;          // Backend calculated field from getTodayMemories
         };
     }>;
@@ -190,8 +197,8 @@ export interface TodayVocabularyResponse {
         newCount: number;
         entityType: string;
     };
-    lessonMetadata?: any; // For letter module
-    phonicsRule?: any;    // For letter module
+    lessonMetadata?: any; // For letter module(可能已经弃用，待确认)
+    phonicsRule?: any;    // For letter module(可能已经弃用，待确认)
 }
 
 /**

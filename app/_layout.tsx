@@ -54,7 +54,6 @@ export default function RootLayout() {
   }, [isAuthenticated, segments, fontsLoaded, fontError, navReady, router]);
 
   useEffect(() => {
-    if (!__DEV__) return;
     if (!isAuthenticated) return;
     if (didInitDevAccessRef.current) return;
     didInitDevAccessRef.current = true;

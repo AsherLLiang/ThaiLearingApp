@@ -137,7 +137,7 @@ async function getTodayMemories(db, params) {
      * 设计思想：Fail Fast (快速失败)。如果缺参数，第一行就报错返回，别浪费资源往下跑。
    */
   const start = Date.now();
-  const { userId, entityType, limit = 30, includeNew = true, roundNumber } = params;
+  const { userId, entityType, limit, includeNew = true, roundNumber } = params;
 
   // 🔍 调试日志：打印收到的 userId
   console.log('📥 [getTodayMemories] 收到请求，userId:', userId, ', entityType:', entityType);
@@ -413,7 +413,7 @@ async function getTodayMemories(db, params) {
         // ...entity: 展开运算符
         // 将数据库中查询到的单词/字母的所有原始字段（如 thaiWord, meaning, audioPath 等）
         // 原封不动地复制到返回结果中，前端直接使用这些字段。
-        entity: { ...entity },
+        ...entity,
         memoryState: {
           masteryLevel: memory.masteryLevel,     // 熟练度
           reviewStage: memory.reviewStage,       // 复习阶段
@@ -433,7 +433,7 @@ async function getTodayMemories(db, params) {
       entityType,                              // 实体类型
     };
 
-    // ======================= 8. 附加课程元数据 & 拼读规则（真实配置） =======================
+    // ======================= 8. 字母模块附加课程元数据 & 拼读规则（真实配置） =======================
     // 这一步是专门为【字母模块】服务的。
     // 字母学习不仅仅是看卡片，还需要知道“这一课的主题是什么”（lessonMetadata）
     // 以及“这一课的拼读规则是什么”（phonicsRule）。
