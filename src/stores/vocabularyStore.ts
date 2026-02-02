@@ -24,11 +24,14 @@ interface VocabularyStore {
     currentIndex: number;
     totalSessionWords: number;
     completedCount: number;
+    pendingResults: Array<{ userId: string, entityId: string, entityType: string, quality: number }>;
     initSession: (userId: string, options?: { limit?: number, source?: string }) => Promise<void>;
     startCourse: (source: string, limit?: number) => Promise<void>;
     submitResult: (isCorrect: boolean, score?: number) => Promise<void>;
+    markSelfRating: (rating: number) => void;
     next: () => void;
     finishSession: () => void;
+    flushResults: () => Promise<void>;
 }
 
 /**
@@ -50,9 +53,10 @@ export const useVocabularyStore = create<VocabularyStore>()(
             currentIndex: 0,
             totalSessionWords: 0,
             completedCount: 0,
+            pendingResults: [],
             initSession: async (userId: string, options: { limit?: number, source?: string } = {}) => {
                 try {
-                    set({ phase: VocabSessionPhase.LOADING });
+                    set({ phase: VocabSessionPhase.LOADING, pendingResults: [] }); // Clear pending
                     const { limit, source } = options;
                     // 确保 limit 是合法整数且不是 NaN
                     const finalLimit = typeof limit === 'string' ? parseInt(limit, 10) : limit;
@@ -78,7 +82,8 @@ export const useVocabularyStore = create<VocabularyStore>()(
                             // ⭐ 关键修复：进度条应基于单词数而非 queue 长度
                             totalSessionWords: result.data.summary?.total || result.data.items.length,
                             completedCount: 0,
-                            phase: VocabSessionPhase.LEARNING
+                            phase: VocabSessionPhase.LEARNING,
+                            pendingResults: [] // Reset buffer
                         });
                     } else {
                         set({ phase: VocabSessionPhase.COMPLETED });
@@ -88,24 +93,54 @@ export const useVocabularyStore = create<VocabularyStore>()(
                     set({ phase: VocabSessionPhase.IDLE });
                 }
             },
+            markSelfRating: (rating: number) => {
+                const { queue, currentIndex } = get();
+                const currentItem = queue[currentIndex];
+                if (!currentItem) return;
+
+                // 1. Update current item's rating
+                const updatedQueue = [...queue];
+                updatedQueue[currentIndex] = { ...currentItem, selfRating: rating };
+
+                // 2. State Sync: Find the corresponding Quiz item and sync the rating
+                // Search forward from current index
+                for (let i = currentIndex + 1; i < updatedQueue.length; i++) {
+                    const nextItem = updatedQueue[i];
+                    // Correct Sync Logic: Same ID, and is a Quiz Phase
+                    if (nextItem.id === currentItem.id &&
+                        (nextItem.source === 'vocab-rev-quiz' || nextItem.source === 'vocab-new-quiz')) {
+                        updatedQueue[i] = { ...nextItem, selfRating: rating };
+                        break; // Found the match, stop sync
+                    }
+                }
+
+                set({ queue: updatedQueue });
+                get().next();
+            },
             submitResult: async (isCorrect: boolean, score?: number) => {
-                const { queue, currentIndex, completedCount } = get();
+                const { queue, currentIndex, completedCount, pendingResults } = get();
                 const currentItem = queue[currentIndex];
                 if (!currentItem) return;
 
                 const userId = useUserStore.getState().currentUser?.userId;
 
-                // 如果回答错误，将该词加入队列末尾重练
+                // === Case 1: Wrong Answer ===
+                // Immediate Retry (Stay on card) + Increment Mistake Count
                 if (!isCorrect) {
-                    const retryItem: SessionWord = {
-                        ...currentItem,
-                        source: 'vocab-error-retry',
-                        mistakeCount: currentItem.mistakeCount + 1
-                    };
-                    set({ queue: [...queue, retryItem] });
+                    // Counter Logic: Increment mistakeCount ONLY IF NOT in retry phase
+                    const shouldIncrement = currentItem.source !== 'vocab-error-retry';
+                    const newMistakeCount = shouldIncrement ? currentItem.mistakeCount + 1 : currentItem.mistakeCount;
+
+                    const updatedQueue = [...queue];
+                    updatedQueue[currentIndex] = { ...currentItem, mistakeCount: newMistakeCount };
+
+                    set({ queue: updatedQueue });
+                    // DO NOT call next(). Wait for user to retry.
+                    return;
                 }
 
-                // 判断是否为该单词的最后一个环节（测验环节或错题重练环节）
+                // === Case 2: Correct Answer ===
+                // Determine if we are finishing the interaction with this word
                 const isFinalStep = currentItem.source === 'vocab-rev-quiz' ||
                     currentItem.source === 'vocab-new-quiz' ||
                     currentItem.source === 'vocab-error-retry';
@@ -113,33 +148,102 @@ export const useVocabularyStore = create<VocabularyStore>()(
                 if (isCorrect && isFinalStep) {
                     set({ completedCount: completedCount + 1 });
 
-                    if (userId) {
-                        // ⭐ 逻辑优化：如果中途有过错误，质量评分自动降级
-                        const finalQuality = currentItem.mistakeCount > 0
-                            ? VOCAB_SCORES.PASS
-                            : (score || VOCAB_SCORES.PERFECT);
+                    // --- Scoring Matrix Calculation ---
+                    const R = currentItem.selfRating || 3; // Default to 3 (Pass) if missing
+                    const M = currentItem.mistakeCount;
+                    let finalQuality = R;
 
-                        callCloudFunction("submitMemoryResult", {
+                    if (R === 5) { // Remembered / Know
+                        if (M === 0) finalQuality = 5;       // Perfect
+                        else if (M === 1) finalQuality = 4;  // Good (Remembered + 1 Slip)
+                        else finalQuality = 3;               // Pass (Remembered + Many Errors)
+                    } else if (R === 3) { // Fuzzy / Don't Know
+                        if (M === 0) finalQuality = 3;       // Pass
+                        else finalQuality = 2;               // Weak
+                    } else if (R === 1) { // Forgot
+                        finalQuality = 1;                    // Fail
+                    } else {
+                        // Default fallback (e.g. R=2/4 if ever supported)
+                        finalQuality = Math.max(1, R - (M > 0 ? 1 : 0));
+                    }
+
+                    // --- Deferred Submission (Buffer) ---
+                    if (userId) {
+                        const payload = {
                             userId,
-                            vocabularyId: currentItem.id,
+                            entityId: currentItem.id,
+                            entityType: 'word',
                             quality: finalQuality
-                        }, { endpoint: API_ENDPOINTS.MEMORY.SUBMIT_MEMORY_RESULT.cloudbase });
+                        };
+                        set({ pendingResults: [...pendingResults, payload] });
+                    }
+
+                    // --- Retry Queue Logic ---
+                    // If word had mistakes, it needs a dedicated Retry Phase later
+                    if (M > 0) {
+                        // Check if this item is already a retry item logic? 
+                        // "into the queue end"
+                        // We always push a new Retry Item if M > 0, UNLESS it's already a retry item?
+                        // Plan: "如果是第一次在测验中做错...进入后续的 Retry Phase"
+                        // Actually, if I am in vocab-error-retry and I initially got it wrong (Stay) and then right,
+                        // do I need to push it AGAIN?
+                        // User said: "Retry Phase: Wrong answers do NOT increment mistakeCount".
+                        // Usually Retry Phase assumes "Iterate until correct". Once correct, it's done. 
+                        // We don't loop retry-items forever unless they fail *again*?
+                        // But here we implement "Immediate Retry" (Stay). So once they pass, they pass.
+                        // So we ONLY push to retry queue if `source !== 'vocab-error-retry'`.
+                        if (currentItem.source !== 'vocab-error-retry') {
+                            const retryItem: SessionWord = {
+                                ...currentItem,
+                                source: 'vocab-error-retry',
+                                // Keep mistake count for history, or reset?
+                                // Actually, keep it so we know it was a problem.
+                                // But for the NEW retry item, should we reset mistakeCount?
+                                // No, keep it.
+                            };
+                            set({ queue: [...queue, retryItem] });
+                        }
                     }
                 }
+
+                // Proceed to next
                 get().next();
             },
-            next: () => {
+            next: async () => {
                 const { currentIndex, queue } = get();
                 if (currentIndex + 1 < queue.length) {
                     set({ currentIndex: currentIndex + 1 });
                 } else {
+                    // Queue Exhausted - Trigger Flush
+                    await get().flushResults();
                     get().finishSession();
+                }
+            },
+            flushResults: async () => {
+                const { pendingResults } = get();
+                if (pendingResults.length === 0) return;
+
+                console.log(`🚀 Flushing ${pendingResults.length} vocabulary results...`);
+
+                // Batch/Parallel processing could be implemented here if API supports batch
+                // For now, parallel clean requests
+                try {
+                    await Promise.all(pendingResults.map(p =>
+                        callCloudFunction("submitMemoryResult", p, { endpoint: API_ENDPOINTS.MEMORY.SUBMIT_MEMORY_RESULT.cloudbase })
+                    ));
+                    console.log("✅ Results flushed successfully.");
+                    set({ pendingResults: [] });
+                } catch (e) {
+                    console.error("❌ Failed to flush results:", e);
+                    // Strategy: Keep them in pending? Or fail silent? 
+                    // For now, log error. SM2 is resilient to missed updates (just reviewing again sooner/later).
+                    // But ideally we might want to retry? keeping it simple for now.
                 }
             },
             startCourse: async (source: string, limit?: number) => {
                 const userId = useUserStore.getState().currentUser?.userId;
                 if (!userId) return;
-                set({ currentCourseSource: source, currentIndex: 0, queue: [] });
+                set({ currentCourseSource: source, currentIndex: 0, queue: [], pendingResults: [] });
                 await get().initSession(userId, { source, limit });
             },
             finishSession: () => {

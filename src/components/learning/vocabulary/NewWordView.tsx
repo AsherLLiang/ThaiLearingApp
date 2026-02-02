@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { View, Text, StyleSheet, Pressable, ScrollView, Dimensions } from 'react-native';
 import { Volume2 } from 'lucide-react-native';
-
 import { Colors } from '@/src/constants/colors';
 import { Typography } from '@/src/constants/typography';
 import { BlurRevealer } from '@/src/components/common/BlurRevealer';

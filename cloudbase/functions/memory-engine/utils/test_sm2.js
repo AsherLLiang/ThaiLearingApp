@@ -3,7 +3,7 @@
  * 运行方式: node test_sm2.js
  */
 
-const { calculateSM2Optimized, masteryToQuality } = require('./sm2');
+const { calculateSM2, masteryToQuality } = require('./sm2');
 const { MasteryLevel } = require('./constants');
 
 console.log('=== SM-2 评分逻辑测试 ===\n');
