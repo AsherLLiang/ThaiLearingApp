@@ -4,7 +4,7 @@
  * 
  */
 
-const { calculateSM2Optimized, masteryToQuality } = require('./sm2');
+const { calculateSM2, masteryToQuality } = require('./sm2');
 
 /**
  * 创建新的记忆记录,并写入 memory_status 集合,不做导出
@@ -129,14 +129,14 @@ async function updateMemoryAfterReview(db, userId, entityType, entityId, quality
         console.log('SM-2质量:', sm2Quality);
 
         // 3. 计算新的SM-2参数
-        console.log('步骤3: 调用 calculateSM2Optimized');
+        console.log('步骤3: 调用 calculateSM2');
         console.log('调用参数:', {
             quality,
             intervalDays: memory.intervalDays,
             easinessFactor: memory.easinessFactor,
             reviewStage: memory.reviewStage
         });
-        const sm2Result = calculateSM2Optimized(
+        const sm2Result = calculateSM2(
             quality,
             memory.intervalDays,
             memory.easinessFactor,

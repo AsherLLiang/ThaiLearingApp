@@ -5,7 +5,7 @@
  * 修复：wx-server-sdk 不支持 getOne()，改用 get() + data[0]
  */
 
-const { calculateSM2Optimized } = require('./sm2');
+const { calculateSM2 } = require('./sm2');
 
 /**
  * 创建新的记忆记录
@@ -117,7 +117,7 @@ async function updateMemoryAfterReview(db, userId, entityType, entityId, quality
         console.log('SM-2质量:', sm2Quality);
 
         // 3. 计算新的SM-2参数
-        console.log('步骤3: 调用 calculateSM2Optimized');
+        console.log('步骤3: 调用 calculateSM2');
         console.log('调用参数:', {
             quality,
             intervalDays: memory.intervalDays,
@@ -125,7 +125,7 @@ async function updateMemoryAfterReview(db, userId, entityType, entityId, quality
             reviewStage: memory.reviewStage
         });
 
-        const sm2Result = calculateSM2Optimized(
+        const sm2Result = calculateSM2(
             quality,
             memory.intervalDays,
             memory.easinessFactor,

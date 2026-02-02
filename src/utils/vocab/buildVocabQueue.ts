@@ -20,42 +20,45 @@ export function buildVocabQueue(data: VocabularyResponse): SessionWord[] {
     //4.从 items 中 extract 新词
     const newWords = items.filter(item => item.memoryState.isNew === true);
     //5.遍历复习词,为每个复习词生成2个记录
-    reviewWords.forEach(
-        (item) => {
-            //Copy the original data to const base and perform basic initialization to ensure the integrity of the data structure
-            const base: SessionWord = {
-                id: item._id,
-                entity: item,
-                isNew: false,
-                masteryLevel: item.memoryState.masteryLevel || 0,
-                mistakeCount: 0,
-                source: 'vocab-review' // Set the phase to show the review word
-            }
-            //Each review word generates 2 records:
-            //Show the detail of review word
-            queue.push({ ...base, source: 'vocab-review' })
-            //Show the quizs of review word
-            queue.push({ ...base, source: 'vocab-rev-quiz' })
+    // Helper function to process batches
+    const processBatch = (items: VocabularyResponse['items'], isNew: boolean) => {
+        const BATCH_SIZE = 5;
+        for (let i = 0; i < items.length; i += BATCH_SIZE) {
+            const chunk = items.slice(i, i + BATCH_SIZE);
+
+            // 1. Push Learning/Review Phase Items (The whole batch)
+            chunk.forEach(item => {
+                const base: SessionWord = {
+                    id: item._id,
+                    entity: item,
+                    isNew: isNew,
+                    masteryLevel: item.memoryState.masteryLevel || 0,
+                    mistakeCount: 0,
+                    source: isNew ? 'vocab-new' : 'vocab-review',
+                    // Initialize selfRating as undefined
+                };
+                queue.push(base);
+            });
+
+            // 2. Push Quiz Phase Items (The whole batch)
+            chunk.forEach(item => {
+                const base: SessionWord = {
+                    id: item._id,
+                    entity: item,
+                    isNew: isNew,
+                    masteryLevel: item.memoryState.masteryLevel || 0,
+                    mistakeCount: 0,
+                    source: isNew ? 'vocab-new-quiz' : 'vocab-rev-quiz',
+                };
+                queue.push(base);
+            });
         }
-    )
-    //6.遍历新词,为每个新词生成2个记录(精讲、测验)
-    newWords.forEach(
-        (item) => {
-            //Copy the original data to const base and perform basic initialization to ensure the integrity of the data structure
-            const base: SessionWord = {
-                id: item._id,
-                entity: item,
-                isNew: true,
-                masteryLevel: item.memoryState.masteryLevel || 0,
-                mistakeCount: 0,
-                source: 'vocab-new' // Set the phase to show the new word
-            }
-            //Each new word generates 2 records:
-            //Show the details of new word（精讲）
-            queue.push({ ...base, source: 'vocab-new' })
-            //Show the quizs of new word（测验）
-            queue.push({ ...base, source: 'vocab-new-quiz' })
-        }
-    )
+    };
+
+    // 5. Process Review Words (Batch: 5 Review -> 5 Quiz)
+    processBatch(reviewWords, false);
+
+    // 6. Process New Words (Batch: 5 Learn -> 5 Quiz)
+    processBatch(newWords, true);
     return queue;
 }

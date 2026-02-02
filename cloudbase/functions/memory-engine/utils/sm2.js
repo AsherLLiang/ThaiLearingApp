@@ -66,7 +66,7 @@ function masteryToQuality(mastery) {
  * @returns {number} Quality值 (1-5)
  * 
  * @example
- * const result = calculateSM2Optimized('认识', 2, 2.5, 1);
+ * const result = calculateSM2('认识', 2, 2.5, 1);
  * // {
  * //   nextInterval: 4,
  * //   nextEasinessFactor: 2.6,
@@ -74,7 +74,7 @@ function masteryToQuality(mastery) {
  * //   shouldResetCount: false
  * // }
  * */
-function calculateSM2Optimized(
+function calculateSM2(
     mastery,
     currentInterval = 1,
     easinessFactor = SM2_PARAMS.INITIAL_EASINESS_FACTOR,
@@ -224,7 +224,7 @@ function getAlgorithmInfo() {
 }
 
 module.exports = {
-    calculateSM2Optimized,
+    calculateSM2,
     generateReviewTimeline,
     getTodayRange,
     getAlgorithmInfo,
