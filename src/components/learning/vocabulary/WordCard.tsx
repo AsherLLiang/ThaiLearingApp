@@ -64,8 +64,9 @@ export const WordCard: React.FC<WordCardProps> = ({ vocabulary, autoPlay = false
 const styles = StyleSheet.create({
     cardContainer: {
         alignItems: 'center',
+        alignSelf: 'center',
         marginBottom: 24,
-        width: '100%',
+        width: '95%',
     },
     wordCard: {
         width: '100%',

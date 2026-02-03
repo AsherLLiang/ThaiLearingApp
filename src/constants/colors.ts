@@ -3,7 +3,7 @@ export const Colors = {
     paper: '#FAF9F6',
     ink: '#1A1A1A',
     sand: '#E5E2DB',
-    taupe: '#8E8B82',
+    taupe: '#898784ff',
     thaiGold: '#D4AF37',
     accent: '#B8956A',
     white: '#FFFFFF',

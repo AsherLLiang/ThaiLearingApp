@@ -64,7 +64,7 @@ export const useVocabularyStore = create<VocabularyStore>()(
                     const { limit, source } = options;
                     // 确保 limit 是合法整数且不是 NaN
                     const finalLimit = typeof limit === 'string' ? parseInt(limit, 10) : limit;
-                    const safeLimit = (typeof finalLimit === 'number' && isFinite(finalLimit)) ? finalLimit : 20;
+                    const safeLimit = (typeof finalLimit === 'number' && isFinite(finalLimit)) ? finalLimit : 5;
 
                     const result: any = await callCloudFunction<VocabularyResponse>(
                         "getTodayMemories",

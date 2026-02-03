@@ -6,6 +6,7 @@ import { Vocabulary } from '@/src/entities/types/vocabulary.types';
 import { useVocabularyStore } from '@/src/stores/vocabularyStore';
 import { VocabMultipleQuiz, QuizOption } from '@/src/components/learning/vocabulary/VocabMultipleQuiz';
 import { VocabularyDetailView } from '@/src/components/learning/vocabulary/VocabularyDetailView';
+import { WordCard } from '@/src/components/learning/vocabulary/WordCard';
 import { useTranslation } from 'react-i18next';
 
 interface VocabularyQuizViewProps {
@@ -80,6 +81,9 @@ export const VocabularyQuizView: React.FC<VocabularyQuizViewProps> = ({ vocabula
             ) : (
                 <View style={styles.detailsWrapper}>
                     {/* Reuse VocabularyDetailView (without blur) */}
+                    <WordCard
+                        vocabulary={vocabulary}
+                    />
                     <VocabularyDetailView
                         vocabulary={vocabulary}
                         blurDetails={false}

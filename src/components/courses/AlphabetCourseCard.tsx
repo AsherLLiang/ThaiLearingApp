@@ -83,7 +83,7 @@ export function AlphabetCourseCard({ course, isCurrent, progress, onStart }: Alp
               }}
             >
               <Text style={[styles.startBtnText, isCurrent && styles.activeStartBtnText]}>
-                {isCurrent ? t('courses.continue', '继续学习') : t('courses.startBtnText', '开始学习')}
+                {isCurrent ? t('courses.continue') : t('courses.startBtnText')}
               </Text>
             </Pressable>
           </View>

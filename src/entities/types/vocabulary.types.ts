@@ -21,6 +21,13 @@ export interface Vocabulary {
     analysis?: {
         letter_pron_analysis?: string; // 字母发音解析
         part_of_speech?: string;       // 词性说明
+        cognates: {
+            0: string;
+            1: string;
+            2: string;
+            3: string;
+            4: string;
+        };              // 同根词
         phonetic_association?: {       // 联想记忆
             拆分: string;
             记忆句: string;
