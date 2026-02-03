@@ -139,7 +139,7 @@ export default function ProfileScreen() {
               style={styles.settingItem}
               onPress={() => router.push('/learning/dailyLimit')}
             >
-              <Text style={styles.settingLabel}>{t('profile.dailyLimit', '每日学习数量')}</Text>
+              <Text style={styles.settingLabel}>{t('profile.limit')}</Text>
               <View style={styles.settingRight}>
                 <Text style={styles.settingValue}>
                   {useLearningPreferenceStore(state => state.dailyLimits['word']) || userProgress?.dailyLimit || 20}

@@ -22,10 +22,10 @@ const getStoredLanguage = async (): Promise<string | null> => {
 const getDeviceLanguage = (): string => {
   const locales = Localization.getLocales();  // 获取区域设置数组
   if (!locales || locales.length === 0) {
-    return 'zh'; // 默认中文
+    return 'en'; // 默认英文
   }
   const languageCode = locales[0].languageCode;  // 例如: "zh" 或 "en"
-  return languageCode === 'zh' ? 'zh' : 'en';  // 默认中文
+  return languageCode === 'en' ? 'en' : 'zh';  // 默认English
 };
 
 // 【核心函数3】初始化 i18n
