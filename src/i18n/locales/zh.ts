@@ -89,7 +89,7 @@ export default {
     commonMistakes: '常见错误:',
     similarWordsDiff: '相似词汇区别:',
     viewDefinition: '查看释义',
-    nextEnter: '下一个 (Enter)',
+    nextEnter: '下一个',
     next: '下一个',
     forgot: '忘记了',
     unsure: '模糊',

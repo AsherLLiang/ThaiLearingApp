@@ -55,19 +55,25 @@ export const VocabularyDetailView: React.FC<VocabularyDetailViewProps> = ({
                             style={[styles.tab, activeTab === 'basic' && styles.activeTab]}
                             onPress={() => setActiveTab('basic')}
                         >
-                            <Text style={[styles.tabText, activeTab === 'basic' && styles.activeTabText]}>{t('learning.basicDefinition')}</Text>
+                            <Text style={[styles.tabText, activeTab === 'basic' && styles.activeTabText]}>
+                                {t('learning.basicDefinition')} // 基本释义
+                            </Text>
                         </Pressable>
                         <Pressable
                             style={[styles.tab, activeTab === 'examples' && styles.activeTab]}
                             onPress={() => setActiveTab('examples')}
                         >
-                            <Text style={[styles.tabText, activeTab === 'examples' && styles.activeTabText]}>{t('learning.exampleSentences')}</Text>
+                            <Text style={[styles.tabText, activeTab === 'examples' && styles.activeTabText]}>
+                                {t('learning.exampleSentences')} // 例句
+                            </Text>
                         </Pressable>
                         <Pressable
                             style={[styles.tab, activeTab === 'usage' && styles.activeTab]}
                             onPress={() => setActiveTab('usage')}
                         >
-                            <Text style={[styles.tabText, activeTab === 'usage' && styles.activeTabText]}>{t('learning.usageDetails')}</Text>
+                            <Text style={[styles.tabText, activeTab === 'usage' && styles.activeTabText]}>
+                                {t('learning.usageDetails')} // 用法
+                            </Text>
                         </Pressable>
                     </View>
 

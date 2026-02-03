@@ -89,7 +89,7 @@ export default {
     commonMistakes: 'Common Mistakes:',
     similarWordsDiff: 'Similar Words:',
     viewDefinition: 'View Definition',
-    nextEnter: 'Next (Enter)',
+    nextEnter: 'Next',
     next: 'Next',
     forgot: 'Forgot',
     unsure: 'Unsure',
@@ -110,7 +110,7 @@ export default {
     start: 'Start Learning',
     quizInstruction: 'Select the correct meaning',
     skip: 'Skip',
-    dontKnow: 'Unknow',
+    dontKnow: 'Unfamiliar',
     nextStep: 'Next',
   },
   modules: {
