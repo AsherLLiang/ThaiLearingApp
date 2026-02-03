@@ -1,97 +1,98 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
-import { Volume2, CheckCircle2, XCircle, Eye } from 'lucide-react-native';
-import { Audio } from 'expo-av';
+import React, { useState, useMemo, useEffect } from 'react';
+import { View, StyleSheet, Pressable, Text } from 'react-native';
 import { Colors } from '@/src/constants/colors';
 import { Typography } from '@/src/constants/typography';
-import type { Vocabulary } from '@/src/entities/types/vocabulary.types';
-import { getVocabAudioUrl } from '@/src/utils/vocab/vocabAudioHelper';
+import { Vocabulary } from '@/src/entities/types/vocabulary.types';
+import { useVocabularyStore } from '@/src/stores/vocabularyStore';
+import { VocabMultipleQuiz, QuizOption } from '@/src/components/learning/vocabulary/VocabMultipleQuiz';
+import { VocabularyDetailView } from '@/src/components/learning/vocabulary/VocabularyDetailView';
+import { useTranslation } from 'react-i18next';
 
 interface VocabularyQuizViewProps {
     vocabulary: Vocabulary;
-    onResult: (isCorrect: boolean) => void;
 }
 
-export const VocabularyQuizView: React.FC<VocabularyQuizViewProps> = ({
-    vocabulary,
-    onResult
-}) => {
-    const [isRevealed, setIsRevealed] = useState(false);
-    const soundRef = React.useRef<Audio.Sound | null>(null);
+export const VocabularyQuizView: React.FC<VocabularyQuizViewProps> = ({ vocabulary }) => {
+    const { t } = useTranslation();
+    const [viewMode, setViewMode] = useState<'QUIZ' | 'DETAILS'>('QUIZ');
 
-    // 处理发音播放
-    const playAudio = async () => {
-        try {
-            const url = await getVocabAudioUrl({ audioPath: vocabulary.audioPath });
-            if (!url) return;
+    const queue = useVocabularyStore(state => state.queue);
+    const submitResult = useVocabularyStore(state => state.submitResult);
 
-            if (soundRef.current) {
-                await soundRef.current.unloadAsync().catch(() => { });
-            }
+    // Reset mode when vocabulary changes
+    useEffect(() => {
+        setViewMode('QUIZ');
+    }, [vocabulary._id]);
 
-            const { sound } = await Audio.Sound.createAsync(
-                { uri: url },
-                { shouldPlay: true }
-            );
-            soundRef.current = sound;
-        } catch (error) {
-            console.warn('Playback failed:', error);
-        }
+    // Generate Options
+    const options = useMemo<QuizOption[]>(() => {
+        // 1. Current word is correct option
+        const correctOption: QuizOption = {
+            id: vocabulary._id,
+            definition: vocabulary.meaning, // Question is Thai, Answer is Meaning
+            isCorrect: true
+        };
+
+        // 2. Pick distractors
+        // Filter out current word
+        const otherWords = queue.filter(w => w.id !== vocabulary._id);
+
+        // Shuffle others
+        const shuffledOthers = [...otherWords].sort(() => 0.5 - Math.random());
+
+        // Take top 3
+        const distributers = shuffledOthers.slice(0, 3).map(w => ({
+            id: w.id,
+            definition: w.entity.meaning,
+            isCorrect: false
+        }));
+
+        // 3. Combine and shuffle
+        const combined = [correctOption, ...distributers];
+        return combined.sort(() => 0.5 - Math.random());
+    }, [vocabulary._id, queue]); // Re-generate if ID or queue changes
+
+    const handleCorrect = () => {
+        // Transition to Details view
+        setViewMode('DETAILS');
     };
 
-    React.useEffect(() => {
-        // 进入时播放
-        playAudio();
-        return () => {
-            if (soundRef.current) {
-                soundRef.current.unloadAsync().catch(() => { });
-            }
-        };
-    }, [vocabulary._id]);
+    const handleWrong = () => {
+        // Record mistake, stay in QUIZ mode
+        submitResult(false);
+    };
+
+    const handleNext = () => {
+        // Submit correct (finally) and advance
+        // Note: submitResult logic handles scoring based on mistakeCount accumulated during handleWrong
+        submitResult(true);
+    };
 
     return (
         <View style={styles.container}>
-            <View style={styles.quizCard}>
-                <Text style={styles.label}>请回忆这个词的含义</Text>
+            {viewMode === 'QUIZ' ? (
+                <VocabMultipleQuiz
+                    vocabulary={vocabulary}
+                    options={options}
+                    onCorrect={handleCorrect}
+                    onWrong={handleWrong}
+                />
+            ) : (
+                <View style={styles.detailsWrapper}>
+                    {/* Reuse VocabularyDetailView (without blur) */}
+                    <VocabularyDetailView
+                        vocabulary={vocabulary}
+                        blurDetails={false}
+                    />
 
-                <View style={styles.questionSection}>
-                    <Text style={styles.thaiWord}>{vocabulary.thaiWord}</Text>
-                    <Pressable style={styles.audioButton} onPress={playAudio}>
-                        <Volume2 size={32} color={Colors.thaiGold} />
-                    </Pressable>
-                </View>
-
-                {!isRevealed ? (
-                    <Pressable style={styles.revealButton} onPress={() => setIsRevealed(true)}>
-                        <Eye size={20} color={Colors.white} />
-                        <Text style={styles.revealButtonText}>查看答案</Text>
-                    </Pressable>
-                ) : (
-                    <View style={styles.answerSection}>
-                        <View style={styles.divider} />
-                        <Text style={styles.meaningText}>{vocabulary.meaning}</Text>
-                        <Text style={styles.phoneticText}>{vocabulary.pronunciation}</Text>
-
-                        <View style={styles.feedbackButtons}>
-                            <Pressable
-                                style={[styles.feedbackButton, styles.wrongButton]}
-                                onPress={() => onResult(false)}
-                            >
-                                <XCircle size={24} color="#EF4444" />
-                                <Text style={styles.wrongButtonText}>答错了</Text>
-                            </Pressable>
-
-                            <Pressable
-                                style={[styles.feedbackButton, styles.correctButton]}
-                                onPress={() => onResult(true)}
-                            >
-                                <CheckCircle2 size={24} color="#10B981" />
-                                <Text style={styles.correctButtonText}>答对了</Text>
-                            </Pressable>
-                        </View>
+                    {/* Bottom Next Button */}
+                    <View style={styles.bottomBar}>
+                        <Pressable style={styles.nextButton} onPress={handleNext}>
+                            <Text style={styles.nextButtonText}>{t('learning.next')}</Text>
+                        </Pressable>
                     </View>
-                )}
-            </View>
+                </View>
+            )}
         </View>
     );
 };
@@ -100,110 +101,33 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: Colors.paper,
-        padding: 24,
-        justifyContent: 'center',
     },
-    quizCard: {
-        backgroundColor: Colors.white,
-        borderRadius: 24,
-        padding: 32,
-        alignItems: 'center',
-        borderWidth: 1,
-        borderColor: Colors.sand,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.05,
-        shadowRadius: 12,
-        elevation: 3,
-    },
-    label: {
-        fontFamily: Typography.notoSerifRegular,
-        fontSize: 16,
-        color: Colors.taupe,
-        marginBottom: 24,
-    },
-    questionSection: {
-        alignItems: 'center',
-        marginBottom: 40,
-    },
-    thaiWord: {
-        fontFamily: Typography.sarabunBold,
-        fontSize: 64,
-        color: Colors.ink,
-        marginBottom: 16,
-    },
-    audioButton: {
-        padding: 12,
-        backgroundColor: 'rgba(212, 175, 55, 0.1)',
-        borderRadius: 30,
-    },
-    revealButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: Colors.ink,
-        paddingHorizontal: 32,
-        paddingVertical: 16,
-        borderRadius: 100,
-        gap: 8,
-    },
-    revealButtonText: {
-        fontFamily: Typography.notoSerifBold,
-        fontSize: 16,
-        color: Colors.white,
-    },
-    answerSection: {
-        width: '100%',
-        alignItems: 'center',
-    },
-    divider: {
-        width: '100%',
-        height: 1,
-        backgroundColor: Colors.sand,
-        marginBottom: 32,
-    },
-    meaningText: {
-        fontFamily: Typography.notoSerifBold,
-        fontSize: 32,
-        color: Colors.ink,
-        marginBottom: 8,
-    },
-    phoneticText: {
-        fontFamily: Typography.notoSerifRegular,
-        fontSize: 18,
-        color: Colors.taupe,
-        marginBottom: 40,
-    },
-    feedbackButtons: {
-        flexDirection: 'row',
-        gap: 16,
-        width: '100%',
-    },
-    feedbackButton: {
+    detailsWrapper: {
         flex: 1,
-        flexDirection: 'row',
+        paddingTop: 40,
+        paddingHorizontal: 20,
+    },
+    bottomBar: {
+        paddingVertical: 20,
+        backgroundColor: Colors.paper,
+        borderTopWidth: 1,
+        borderTopColor: Colors.sand,
+    },
+    nextButton: {
+        backgroundColor: Colors.ink,
+        paddingVertical: 16,
+        borderRadius: 12,
         alignItems: 'center',
         justifyContent: 'center',
-        paddingVertical: 16,
-        borderRadius: 16,
-        borderWidth: 1,
-        gap: 8,
+        shadowColor: Colors.thaiGold,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
+        elevation: 4,
     },
-    wrongButton: {
-        borderColor: '#FCA5A5',
-        backgroundColor: '#FEF2F2',
-    },
-    wrongButtonText: {
+    nextButtonText: {
         fontFamily: Typography.notoSerifBold,
-        color: '#DC2626',
-        fontSize: 16,
-    },
-    correctButton: {
-        borderColor: '#6EE7B7',
-        backgroundColor: '#ECFDF5',
-    },
-    correctButtonText: {
-        fontFamily: Typography.notoSerifBold,
-        color: '#059669',
-        fontSize: 16,
+        fontSize: 18,
+        color: Colors.white,
     },
 });

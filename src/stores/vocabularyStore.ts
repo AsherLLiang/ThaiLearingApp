@@ -25,10 +25,13 @@ interface VocabularyStore {
     totalSessionWords: number;
     completedCount: number;
     pendingResults: Array<{ userId: string, entityId: string, entityType: string, quality: number }>;
+    skippedIds: string[]; // Track skipped word IDs
     initSession: (userId: string, options?: { limit?: number, source?: string }) => Promise<void>;
     startCourse: (source: string, limit?: number) => Promise<void>;
     submitResult: (isCorrect: boolean, score?: number) => Promise<void>;
     markSelfRating: (rating: number) => void;
+    skipWord: (id: string) => void;
+    submitSkippedWords: () => Promise<void>;
     next: () => void;
     finishSession: () => void;
     flushResults: () => Promise<void>;
@@ -54,9 +57,10 @@ export const useVocabularyStore = create<VocabularyStore>()(
             totalSessionWords: 0,
             completedCount: 0,
             pendingResults: [],
+            skippedIds: [],
             initSession: async (userId: string, options: { limit?: number, source?: string } = {}) => {
                 try {
-                    set({ phase: VocabSessionPhase.LOADING, pendingResults: [] }); // Clear pending
+                    set({ phase: VocabSessionPhase.LOADING, pendingResults: [], skippedIds: [] }); // Clear pending & skipped
                     const { limit, source } = options;
                     // 确保 limit 是合法整数且不是 NaN
                     const finalLimit = typeof limit === 'string' ? parseInt(limit, 10) : limit;
@@ -115,7 +119,7 @@ export const useVocabularyStore = create<VocabularyStore>()(
                 }
 
                 set({ queue: updatedQueue });
-                get().next();
+                // Do NOT call next() here. We wait for manual "Next" button in UI.
             },
             submitResult: async (isCorrect: boolean, score?: number) => {
                 const { queue, currentIndex, completedCount, pendingResults } = get();
@@ -168,7 +172,10 @@ export const useVocabularyStore = create<VocabularyStore>()(
                     }
 
                     // --- Deferred Submission (Buffer) ---
-                    if (userId) {
+                    // Refinement: vocab-error-retry does NOT re-submit scores.
+                    const shouldSubmitScore = currentItem.source !== 'vocab-error-retry';
+
+                    if (userId && shouldSubmitScore) {
                         const payload = {
                             userId,
                             entityId: currentItem.id,
@@ -208,6 +215,60 @@ export const useVocabularyStore = create<VocabularyStore>()(
 
                 // Proceed to next
                 get().next();
+            },
+            skipWord: (id: string) => {
+                const { queue, skippedIds, currentIndex } = get();
+                // 1. Add to skippedIds
+                if (!skippedIds.includes(id)) {
+                    set({ skippedIds: [...skippedIds, id] });
+                }
+
+                // 2. Remove from queue (all instances of this word)
+                const newQueue = queue.filter(w => w.id !== id);
+
+                // Adjust currentIndex if necessary (usually not needed if we just render newQueue[currentIndex])
+                // But if we removed the *current* item, the next item slides into currentIndex position.
+                // If we were at the end, currentIndex might now be out of bounds.
+
+                set({ queue: newQueue });
+
+                // Check bounds
+                if (currentIndex >= newQueue.length) {
+                    // If queue is empty or we are at end, calling next() or finish check might be needed
+                    // But simplest is to just ensure we are safe.
+                    // The view renders queue[currentIndex].
+                    if (newQueue.length === 0) {
+                        get().finishSession();
+                    }
+                }
+            },
+            submitSkippedWords: async () => {
+                const { skippedIds } = get();
+                const userId = useUserStore.getState().currentUser?.userId;
+
+                if (!userId || skippedIds.length === 0) return;
+
+                console.log(`🚀 Submitting ${skippedIds.length} skipped words...`);
+                try {
+                    const results = skippedIds.map(id => ({
+                        entityType: 'word',
+                        entityId: id,
+                        quality: 0, // Ignored by backend when isSkipped is true
+                        isSkipped: true
+                    }));
+
+                    // Use batch submission
+                    await callCloudFunction(
+                        "submitMemoryResult",
+                        { userId, results },
+                        { endpoint: API_ENDPOINTS.MEMORY.SUBMIT_MEMORY_RESULT.cloudbase }
+                    );
+
+                    console.log("✅ Skipped words submitted.");
+                    set({ skippedIds: [] });
+                } catch (e) {
+                    console.error("❌ Failed to submit skipped words:", e);
+                }
             },
             next: async () => {
                 const { currentIndex, queue } = get();

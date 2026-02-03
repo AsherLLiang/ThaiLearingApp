@@ -29,18 +29,8 @@ export default function DailyLimitSetupScreen() {
     const handleConfirm = async () => {
         setDailyLimit(moduleType, limit);
         setProgressDailyLimit(moduleType, limit);
-
-        if (courseSource) {
-            await startCourse(courseSource, limit);
-        }
-
-        router.replace({
-            pathname: '/learning',
-            params: {
-                module: moduleType,
-                source: courseSource,
-            },
-        });
+        // User requested: Save setting and go back, do NOT start session immediately.
+        router.back();
     };
 
     return (

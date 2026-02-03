@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Colors } from '@/src/constants/colors';
 import { Typography } from '@/src/constants/typography';
@@ -13,6 +14,7 @@ export function RoundCompletionView({
     roundNumber,
     onFinish,
 }: RoundCompletionViewProps) {
+    const { t } = useTranslation();
     const isFinal = roundNumber >= 3;
 
     return (
@@ -21,13 +23,15 @@ export function RoundCompletionView({
                 <CheckCircle2 size={80} color={Colors.thaiGold} style={styles.icon} />
 
                 <Text style={styles.title}>
-                    {isFinal ? '课程完成！' : `Round ${roundNumber} 完成`}
+                    {isFinal
+                        ? t('components.completion.courseDone', '课程完成！')
+                        : t('components.completion.roundDone', { round: roundNumber, defaultValue: `Round ${roundNumber} 完成` })}
                 </Text>
 
                 <Text style={styles.subtitle}>
                     {isFinal
-                        ? '恭喜你完成了本节课程的所有学习内容！'
-                        : '休息一下，准备进入下一轮学习\n每节课需完成3轮学习'}
+                        ? t('components.completion.courseDoneMsg', '恭喜你完成了本节课程的所有学习内容！')
+                        : t('components.completion.roundDoneMsg', '休息一下，准备进入下一轮学习\n每节课需完成3轮学习')}
                 </Text>
 
                 <TouchableOpacity
@@ -36,7 +40,9 @@ export function RoundCompletionView({
                     activeOpacity={0.8}
                 >
                     <Text style={styles.buttonText}>
-                        {isFinal ? '完成课程' : '返回选课'}
+                        {isFinal
+                            ? t('components.completion.finishCourse', '完成课程')
+                            : t('components.completion.backToCourses', '返回选课')}
                     </Text>
                 </TouchableOpacity>
             </View>

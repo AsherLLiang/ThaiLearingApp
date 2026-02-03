@@ -102,6 +102,16 @@ export default {
     endSessionTitle: 'End Session?',
     endSessionMessage: 'Are you sure you want to quit?',
     quit: 'Quit',
+    noExamples: 'No examples available',
+    noUsage: 'No usage details available',
+    setupTitle: 'Daily Plan',
+    setupSubtitle: 'Select number of letters to learn/review',
+    setupSubtitleWords: 'Select number of words to learn/review',
+    start: 'Start Learning',
+    quizInstruction: 'Select the correct meaning',
+    skip: 'Skip',
+    dontKnow: 'Unknow',
+    nextStep: 'Next',
   },
   modules: {
     alphabet: 'Alphabet',
@@ -131,6 +141,29 @@ export default {
     description: 'Learn 44 consonants and 32 vowels,掌握 standard pronunciation',
     continue: 'Continue Learning',
     start: 'Start Learning',
+    phase: {
+      new: 'New Letter',
+      review: 'Quick Review',
+      final: 'Final Review',
+      fix: 'Mistake Review',
+      warmup: 'Warm Up',
+      completed: 'Round Completed',
+      finished: 'Course Completed'
+    },
+    roundInfo: 'Round {{current}} / {{total}}',
+    skipBury: 'Skip (Bury)',
+    optionsLoadFailed: 'Failed to load options',
+    regenerate: 'Regenerate Question',
+    checkAnswer: 'Check Answer',
+    nextQuestion: 'Next Question →',
+    instructions: {
+      selectCorrect: 'Select the correct meaning',
+      listenChoose: 'Listen and choose the letter',
+      matchPronunciation: 'Match the pronunciation',
+      consonantClass: 'Select the consonant class',
+      initialSound: 'Identify the initial sound',
+      finalSound: 'Identify the final sound'
+    },
   },
   alphabetTest: {
     title: 'Alphabet Test',
@@ -142,5 +175,51 @@ export default {
     failed: 'Fail',
     retry: 'Retry',
     backToHome: 'Back to Home',
+  },
+  components: {
+    phonics: {
+      title: 'Tone Rules',
+      interactive: '📌 Interactive Example',
+      understood: 'Understood, Continue →'
+    },
+    completion: {
+      courseDone: 'Course Completed!',
+      roundDone: 'Round {{round}} Completed',
+      courseDoneMsg: 'Congratulations! You have completed all content in this lesson!',
+      roundDoneMsg: 'Take a break and get ready for the next round\n3 rounds required per lesson',
+      finishCourse: 'Finish Course',
+      backToCourses: 'Back to Courses'
+    },
+    recovery: {
+      title: 'Resume Session?',
+      message: 'Unfinished round detected. Do you want to continue?',
+      restart: 'Restart Round',
+      continue: 'Continue Learning'
+    },
+    miniReview: {
+      hint: '💡 Hint:',
+      pitchCurve: '🎵 Pitch Curve',
+      playSound: 'Play Sound',
+      explanation: '💡 Explanation',
+      aspirated: 'Aspirated',
+      unaspirated: 'Unaspirated',
+      voiceless: 'Voiceless',
+      voiced: 'Voiced',
+      highClass: 'High Class',
+      midClass: 'Mid Class',
+      lowClass: 'Low Class',
+      consonantClass: 'Class'
+    },
+    aspirated: {
+      title: 'Aspirated Sound Training',
+      instruction: '🔊 Play the target sound first, then choose the matching letter',
+      playTarget: 'Play Target Sound',
+      tipsTitle: '💡 Tips',
+      aspirated: 'Aspirated',
+      unaspirated: 'Unaspirated',
+      correctAns: '✅ Correct Answer',
+      aspiratedDesc: 'This is an aspirated sound (strong airflow)',
+      unaspiratedDesc: 'This is an unaspirated sound (weak airflow)'
+    }
   }
 };

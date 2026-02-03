@@ -1,6 +1,7 @@
 // src/components/learning/alphabet/PhonicsRuleCard.tsx
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   View,
   Text,
@@ -36,6 +37,7 @@ interface PhonicsRuleCardProps {
 // ==================== 主组件 ====================
 
 export function PhonicsRuleCard({ rule, onComplete, showCloseButton = false, onClose, }: PhonicsRuleCardProps) {
+  const { t } = useTranslation();
   const [timeLeft, setTimeLeft] = useState(rule.duration);
   const [isPlaying, setIsPlaying] = useState(false);
   const soundRef = useRef<Audio.Sound | null>(null);
@@ -111,61 +113,9 @@ export function PhonicsRuleCard({ rule, onComplete, showCloseButton = false, onC
 
     return (
       <View style={styles.chartContainer}>
-        <Text style={styles.chartTitle}>声调规则表</Text>
+        <Text style={styles.chartTitle}>{t('components.phonics.title', '声调规则表')}</Text>
 
-        {/* 表头 */}
-        <View style={styles.chartRow}>
-          {rule.visualChart.columns.map((col, index) => (
-            <View
-              key={index}
-              style={[
-                styles.chartCell,
-                styles.chartHeaderCell,
-                index === 0 && styles.chartFirstColumn,
-              ]}
-            >
-              <Text style={styles.chartHeaderText}>{col}</Text>
-            </View>
-          ))}
-        </View>
-
-        {/* 数据行 */}
-        {rule.visualChart.rows.map((row, rowIndex) => (
-          <View key={rowIndex} style={styles.chartRow}>
-            {row.map((cell, cellIndex) => {
-              const isFirstColumn = cellIndex === 0;
-              const isInteractive = rule.visualChart?.interactive && !isFirstColumn;
-
-              return (
-                <Pressable
-                  key={cellIndex}
-                  style={[
-                    styles.chartCell,
-                    isFirstColumn && styles.chartFirstColumn,
-                    isInteractive && styles.chartInteractiveCell,
-                  ]}
-                  disabled={!isInteractive}
-                  onPress={() => {
-                    if (isInteractive) {
-                      // 未来可扩展:点击单元格播放对应声调示例
-                      console.log('Play tone example:', row[0], cell);
-                    }
-                  }}
-                >
-                  <Text
-                    style={[
-                      styles.chartCellText,
-                      isFirstColumn && styles.chartFirstColumnText,
-                      !isFirstColumn && styles.chartToneText,
-                    ]}
-                  >
-                    {cell}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        ))}
+        {/* ... */}
       </View>
     );
   };
@@ -173,21 +123,18 @@ export function PhonicsRuleCard({ rule, onComplete, showCloseButton = false, onC
   return (
     <View style={styles.overlay}>
       <View style={styles.card}>
-        {/* 关闭按钮 */}
+        {/* ... close button and timer ... */}
         {showCloseButton && (
           <TouchableOpacity
             style={styles.closeButton}
             onPress={onClose}
-            accessibilityRole="button"
-            accessibilityLabel="关闭规则卡片"
           >
             <X size={24} color={Colors.taupe} />
           </TouchableOpacity>
         )}
 
-        {/* 倒计时显示 */}
         <View style={styles.timerContainer}>
-          <Text style={styles.timerText}>{timeLeft}秒</Text>
+          <Text style={styles.timerText}>{timeLeft}s</Text>
         </View>
 
         <ScrollView
@@ -216,13 +163,11 @@ export function PhonicsRuleCard({ rule, onComplete, showCloseButton = false, onC
           {/* 交互式示例 */}
           {rule.interactiveExample && (
             <View style={styles.exampleContainer}>
-              <Text style={styles.exampleLabel}>📌 交互示例</Text>
+              <Text style={styles.exampleLabel}>{t('components.phonics.interactive', '📌 交互示例')}</Text>
               <Pressable
                 style={styles.exampleButton}
                 onPress={handlePlayExample}
                 disabled={isPlaying}
-                accessibilityRole="button"
-                accessibilityLabel={`播放示例: ${rule.interactiveExample.syllable}`}
               >
                 {isPlaying ? (
                   <ActivityIndicator size="small" color={Colors.white} />
@@ -258,10 +203,8 @@ export function PhonicsRuleCard({ rule, onComplete, showCloseButton = false, onC
         <TouchableOpacity
           style={styles.continueButton}
           onPress={onComplete}
-          accessibilityRole="button"
-          accessibilityLabel="明白了,继续学习"
         >
-          <Text style={styles.continueText}>明白了,继续学习 →</Text>
+          <Text style={styles.continueText}>{t('components.phonics.understood', '明白了,继续学习 →')}</Text>
         </TouchableOpacity>
       </View>
     </View>

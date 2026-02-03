@@ -1,6 +1,7 @@
 // src/components/learning/alphabet/AlphabetReviewView.tsx
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   View,
   Text,
@@ -284,17 +285,18 @@ export function AlphabetReviewView({
 
 
   // --- 4. Render Helpers ---
+  const { t } = useTranslation();
 
   const renderQuestionHeader = () => {
     const title = ALPHABET_GAME_TYPE_LABELS[question.gameType] || 'Review';
-    let instruction = 'Select the correct answer';
+    let instruction = t('alphabet.instructions.selectCorrect', 'Select the correct answer');
 
     switch (question.gameType) {
-      case AlphabetGameType.SOUND_TO_LETTER: instruction = 'Listen and choose the letter'; break;
-      case AlphabetGameType.LETTER_TO_SOUND: instruction = 'Match the pronunciation'; break;
-      case AlphabetGameType.CONSONANT_CLASS: instruction = 'Select the consonant class'; break;
-      case AlphabetGameType.INITIAL_SOUND: instruction = 'Identify the initial sound'; break;
-      case AlphabetGameType.FINAL_SOUND: instruction = 'Identify the final sound'; break;
+      case AlphabetGameType.SOUND_TO_LETTER: instruction = t('alphabet.instructions.listenChoose', 'Listen and choose the letter'); break;
+      case AlphabetGameType.LETTER_TO_SOUND: instruction = t('alphabet.instructions.matchPronunciation', 'Match the pronunciation'); break;
+      case AlphabetGameType.CONSONANT_CLASS: instruction = t('alphabet.instructions.consonantClass', 'Select the consonant class'); break;
+      case AlphabetGameType.INITIAL_SOUND: instruction = t('alphabet.instructions.initialSound', 'Identify the initial sound'); break;
+      case AlphabetGameType.FINAL_SOUND: instruction = t('alphabet.instructions.finalSound', 'Identify the final sound'); break;
       default: break;
     }
 
@@ -338,7 +340,7 @@ export function AlphabetReviewView({
     if (!options || options.length < minOptions) {
       return (
         <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>题目选项加载失败</Text>
+          <Text style={styles.errorText}>{t('alphabet.optionsLoadFailed', '题目选项加载失败')}</Text>
           <TouchableOpacity
             style={styles.retryButton}
             onPress={() => {
@@ -346,7 +348,7 @@ export function AlphabetReviewView({
               resetForNewQuestion();
             }}
           >
-            <Text style={styles.retryButtonText}>重新生成题目</Text>
+            <Text style={styles.retryButtonText}>{t('alphabet.regenerate', '重新生成题目')}</Text>
           </TouchableOpacity>
         </View>
       );
@@ -463,13 +465,13 @@ export function AlphabetReviewView({
         {/* Confirm Button for Audio Questions */}
         {(question.gameType === AlphabetGameType.LETTER_TO_SOUND) && answerState === 'idle' && selectedOptionIndex !== null && (
           <TouchableOpacity style={styles.nextButton} onPress={handleConfirmAnswer}>
-            <Text style={styles.nextButtonText}>Check Answer</Text>
+            <Text style={styles.nextButtonText}>{t('alphabet.checkAnswer', 'Check Answer')}</Text>
           </TouchableOpacity>
         )}
 
         {answerState === 'locked' && (
           <TouchableOpacity style={styles.nextButton} onPress={handleNextQuestion}>
-            <Text style={styles.nextButtonText}>Next Question →</Text>
+            <Text style={styles.nextButtonText}>{t('alphabet.nextQuestion', 'Next Question →')}</Text>
           </TouchableOpacity>
         )}
       </View>
