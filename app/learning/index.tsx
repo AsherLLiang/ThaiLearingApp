@@ -41,12 +41,21 @@ export default function LearningSession() {
             return;
         }
 
-        // ⭐ 2. 只有当当前没有课程时，才初始化一次
-        if (!currentCourseSource) {
-            const effectiveLimit = limit ?? dailyLimits.word ?? 20;
+        // ⭐ 2. 核心初始化逻辑（单一数据源）
+        // 只有当：
+        // A. 当前 Store 里没有加载任何课程
+        // B. 或者 Store 里的课程跟 URL 参数不一致（用户切换了课程）
+        // 才触发 startCourse。
+        // 且 limit 必须强制使用 store 中的 dailyLimits (用户设置)，如果没有则兜底 20
+        if (!currentCourseSource || currentCourseSource !== courseSource) {
+            console.log(`🔄 Init Session: Switching from [${currentCourseSource}] to [${courseSource}]`);
+
+            // 🔥 CRITICAL: Trust store only. Do not use URL params for limit.
+            const effectiveLimit = dailyLimits.word || 20;
+
             startCourse(courseSource, effectiveLimit);
         }
-    }, [moduleType, courseSource, currentCourseSource, startCourse, limit, dailyLimits.word]);
+    }, [moduleType, courseSource, currentCourseSource, startCourse, dailyLimits.word]);
 
     if (moduleType === 'letter') {
         return <AlphabetSession />;

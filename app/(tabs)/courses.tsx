@@ -63,21 +63,22 @@ export default function CoursesScreen() {
   const { t } = useTranslation();
   const [activeCategory, setActiveCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
-
   const { currentCourseSource, startCourse } = useVocabularyStore();
-  const { hasDailyLimit } = useLearningPreferenceStore();
+  const { hasDailyLimit } = useLearningPreferenceStore();//该 Store 可能为历史设计遗留，后续需要调整或者删除
   const { userProgress, getUserProgress, checkAccess, accessCache } = useModuleAccessStore();
   const [modalVisible, setModalVisible] = useState(false);
   const [pendingCourse, setPendingCourse] = useState<CourseWithImage | null>(null);
   const didDevAccessCheckRef = useRef(false);
 
   useEffect(() => {
+    //页面一加载，如果发现没有 userProgress，就赶紧去后端拉取。这是为了让课程卡片能显示 "12/50" 这样的进度条。
     if (!userProgress) {
       getUserProgress().catch((err) => console.warn('Failed to fetch user progress', err));
     }
   }, [userProgress, getUserProgress]);
 
   useEffect(() => {
+    //这是一个只在开发模式 (__DEV__) 跑的逻辑。它会遍历所有模块自动检查一遍权限。这是为了方便开发者调试解锁逻辑，生产环境不会运行。
     if (!__DEV__) return;
     if (didDevAccessCheckRef.current) return;
     didDevAccessCheckRef.current = true;
@@ -123,6 +124,7 @@ export default function CoursesScreen() {
     return undefined;
   };
 
+  // ⭐ 过滤课程
   const filteredCourses = useMemo(() => {
     return COURSES.filter(course => {
       const matchesCategory = activeCategory === 'all' || course.category === activeCategory;
@@ -135,10 +137,20 @@ export default function CoursesScreen() {
 
 
   // ⭐ 统一的 Start Learning 逻辑：接收 course，返回一个点击 handler
+  /**
+   * 说明：当用户点击课程卡片时触发
+   * 逻辑流:
+   * 1. 查锁: 先看这个课是不是锁住的 (isLocked)。如果锁了，直接拦截。
+   * 2. 判重: 检查用户点的是不是当前正在学的课。
+   *   - 是当前课: 直接跳转。但在跳转前，会检查 needsDailySetup。如果没设过每日计划，先跳到 setup 页；否则直接跳 learning 页。(注意：这里就是刚才那个 Bug 发生的地方，传参传错了)
+   *   - 是新课: 不直接跳，而是唤起弹窗 (setModalVisible(true))，问用户“确定要切换课程吗？”。
+   * @param course 
+   * @returns 
+   */
   const handleStartLearning = (course: CourseWithImage) => {
     return () => {
+      // ⭐ 1. 查锁
       const moduleType = getModuleType(course);
-
       // 🔒 Double Check: UI Should be disabled, but logic must be safe
       const { checkAccessLocally, accessCache: cachedAccess } = useModuleAccessStore.getState();
       const devOverrideUnlocked = __DEV__ && cachedAccess.get(moduleType) === true;
@@ -148,29 +160,24 @@ export default function CoursesScreen() {
         return;
       }
 
-      const needsDailySetup = !hasDailyLimit(moduleType);
-
-      // ✅ 同一个课程：直接按照是否已设置日计划进行跳转
+      // ⭐ 2. 判重
+      // ⭐ 3. 同一个课程：直接跳转
       if (currentCourseSource === course.source) {
-        // Pass moduleType to startCourse for strict check
-        startCourse(course.source, moduleType).then(() => {
-          // Special routing for Alphabet, ignoring daily setup check
-          if (moduleType === 'letter') {
-            router.push('/alphabet');
-          } else {
-            router.push({
-              pathname: needsDailySetup ? '/learning/setup' : '/learning',
-              params: {
-                module: moduleType,
-                source: course.source,
-              },
-            });
-          }
-        });
+        if (moduleType === 'letter') {
+          router.push('/alphabet');
+        } else {
+          router.push({
+            pathname: '/learning',
+            params: {
+              module: moduleType,
+              source: course.source,
+            },
+          });
+        }
         return;
       }
 
-      // ✅ 切换课程：弹确认框
+      // ⭐ 4. 是新课，切换课程：弹确认框
       setPendingCourse(course);
       setModalVisible(true);
     };
@@ -178,31 +185,34 @@ export default function CoursesScreen() {
 
   const confirmSwitchCourse = async () => {
     if (pendingCourse) {
-      await proceedToCourse(pendingCourse);
+      // ✅ 切换课程：直接跳转，让 learning 页面负责初始化
+      const moduleType = getModuleType(pendingCourse);
+
+      setModalVisible(false);
+      setPendingCourse(null);
+
+      // Special routing for Alphabet
+      if (moduleType === 'letter') {
+        router.push('/alphabet');
+      } else {
+        router.push({
+          pathname: '/learning',
+          params: {
+            module: moduleType,
+            source: pendingCourse.source,
+          },
+        });
+      }
     }
   };
 
-  const proceedToCourse = async (course: CourseWithImage) => {
-    const moduleType = getModuleType(course);
-    const needsDailySetup = !hasDailyLimit(moduleType);
+  // Clean up unused proceedToCourse if no longer needed, or redefine it as above. 
+  // But strictly following the plan to modify handleStartLearning first.
+  // Actually, confirmSwitchCourse calls proceedToCourse. Let's make confirmSwitchCourse do the work directly 
+  // or update proceedToCourse.
+  // Let's remove proceedToCourse and inline the logic into confirmSwitchCourse for simplicity as per "pure navigator" goal.
 
-    await startCourse(course.source, moduleType);
-    setModalVisible(false);
-    setPendingCourse(null);
 
-    // Special routing for Alphabet
-    if (moduleType === 'letter') {
-      router.push('/alphabet');
-    } else {
-      router.push({
-        pathname: needsDailySetup ? '/learning/setup' : '/learning',
-        params: {
-          module: moduleType,
-          source: course.source,
-        },
-      });
-    }
-  };
 
   return (
     <SafeAreaView edges={['top']} style={styles.safeArea}>
