@@ -34,7 +34,7 @@ const BATCH_SIZE = 5;
  */
 async function submitMemoryResult(db, params) {
   const start = Date.now();
-  const { userId, entityType, entityId, quality, results } = params || {};
+  const { userId, entityType, entityId, quality, isSkipped, results } = params || {};
 
   // 1. 基本校验：必须有 userId
   if (!userId) {
@@ -62,18 +62,19 @@ async function submitMemoryResult(db, params) {
     items = results.map((r) => ({
       entityType: r.entityType,
       entityId: r.entityId,
-      quality: r.quality
+      quality: r.quality,
+      isSkipped: r.isSkipped
     }));
   }
   // 2.2 兼容旧版：单条参数
-  else if (entityType && entityId && quality) {
-    items = [{ entityType, entityId, quality }];
+  else if (entityType && entityId && (quality || isSkipped)) {
+    items = [{ entityType, entityId, quality, isSkipped }];
   } else {
     // 两种格式都不满足
     return createResponse(
       false,
       null,
-      '缺少必填参数: entityType, entityId, quality 或 results[]',
+      '缺少必填参数: entityType, entityId, (quality or isSkipped) 或 results[]',
       'INVALID_PARAMS'
     );
   }
@@ -87,23 +88,27 @@ async function submitMemoryResult(db, params) {
 
       const batchResults = await Promise.all(
         batch.map(async (item) => {
-          const { entityType, entityId, quality } = item;
+          const { entityType, entityId, quality, isSkipped } = item;
 
           // 防御性校验，避免 results 里混入空对象
-          if (!entityType || !entityId || !quality) return null;
+          if (!entityType || !entityId) return null;
+          // non-skipped item must have quality
+          if (!isSkipped && !quality) return null;
 
           const memoryState = await updateMemoryAfterReview(
             db,
             userId,
             entityType,
             entityId,
-            quality
+            quality,
+            isSkipped
           );
 
           return {
             entityType,
             entityId,
             quality,
+            isSkipped,
             memoryState
           };
         })

@@ -95,11 +95,11 @@ function WordSession() {
             case 'vocab-new':
                 return <NewWordView vocabulary={currentItem!.entity} onNext={() => handleAnswer(true)} />;
             case 'vocab-review':
-                return <ReviewWordView vocabulary={currentItem!.entity} onAnswer={(isCorrect, score) => handleAnswer(isCorrect, score)} onNext={() => handleAnswer(true)} />;
+                return <ReviewWordView vocabulary={currentItem!.entity} onNext={() => handleAnswer(true)} />;
             case 'vocab-new-quiz':
             case 'vocab-rev-quiz':
             case 'vocab-error-retry':
-                return <VocabularyQuizView vocabulary={currentItem!.entity} onResult={(isCorrect) => handleAnswer(isCorrect)} />;
+                return <VocabularyQuizView vocabulary={currentItem!.entity} />;
             default:
                 return null;
         }

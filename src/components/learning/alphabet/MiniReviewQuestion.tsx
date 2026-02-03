@@ -1,6 +1,7 @@
 // src/components/learning/alphabet/MiniReviewQuestion.tsx
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   View,
   Text,
@@ -26,13 +27,13 @@ import { Typography } from '@/src/constants/typography';
 interface MiniReviewQuestionProps {
   /** 题目数据 */
   question: MiniReviewQuestionType;
-  
+
   /** 答题回调(isCorrect, questionType) */
   onAnswer: (isCorrect: boolean, type: QuestionType) => void;
-  
+
   /** 下一题回调 */
   onNext: () => void;
-  
+
   /** 返回回调(可选) */
   onBack?: () => void;
 }
@@ -45,6 +46,7 @@ export function MiniReviewQuestion({
   onNext,
   onBack,
 }: MiniReviewQuestionProps) {
+  const { t } = useTranslation();
   const [answered, setAnswered] = useState(false);
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -54,7 +56,7 @@ export function MiniReviewQuestion({
   useEffect(() => {
     return () => {
       if (soundRef.current) {
-        soundRef.current.unloadAsync().catch(() => {});
+        soundRef.current.unloadAsync().catch(() => { });
         soundRef.current = null;
       }
     };
@@ -113,20 +115,24 @@ export function MiniReviewQuestion({
 
     return (
       <View style={styles.hintContainer}>
-        <Text style={styles.hintTitle}>💡 提示:</Text>
+        <Text style={styles.hintTitle}>{t('components.miniReview.hint', '💡 提示:')}</Text>
         {aspirated !== undefined && (
           <Text style={styles.hintText}>
-            • {aspirated ? '送气音 (aspirated)' : '不送气音 (unaspirated)'}
+            • {aspirated ? t('components.miniReview.aspirated', '送气音 (aspirated)') : t('components.miniReview.unaspirated', '不送气音 (unaspirated)')}
           </Text>
         )}
         {voiceless !== undefined && (
           <Text style={styles.hintText}>
-            • {voiceless ? '清音 (voiceless)' : '浊音 (voiced)'}
+            • {voiceless ? t('components.miniReview.voiceless', '清音 (voiceless)') : t('components.miniReview.voiced', '浊音 (voiced)')}
           </Text>
         )}
         {consonantClass && (
           <Text style={styles.hintText}>
-            • 辅音类: {consonantClass === 'high' ? '高辅音' : consonantClass === 'mid' ? '中辅音' : '低辅音'}
+            • {t('components.miniReview.consonantClass', '辅音类')}: {
+              consonantClass === 'high' ? t('components.miniReview.highClass', '高辅音') :
+                consonantClass === 'mid' ? t('components.miniReview.midClass', '中辅音') :
+                  t('components.miniReview.lowClass', '低辅音')
+            }
           </Text>
         )}
       </View>
@@ -142,7 +148,7 @@ export function MiniReviewQuestion({
 
     return (
       <View style={styles.pitchContainer}>
-        <Text style={styles.pitchTitle}>🎵 音高曲线</Text>
+        <Text style={styles.pitchTitle}>{t('components.miniReview.pitchCurve', '🎵 音高曲线')}</Text>
         <View style={styles.pitchChart}>
           {curve.map((height, index) => (
             <View
@@ -203,7 +209,7 @@ export function MiniReviewQuestion({
           ) : (
             <>
               <Volume2 size={20} color={Colors.white} />
-              <Text style={styles.audioButtonText}>播放发音</Text>
+              <Text style={styles.audioButtonText}>{t('components.miniReview.playSound', '播放发音')}</Text>
             </>
           )}
         </TouchableOpacity>
@@ -275,9 +281,9 @@ export function MiniReviewQuestion({
           style={styles.nextButton}
           onPress={onNext}
           accessibilityRole="button"
-          accessibilityLabel="下一题"
+          accessibilityLabel={t('alphabet.nextQuestion', '下一题 →')}
         >
-          <Text style={styles.nextButtonText}>下一题 →</Text>
+          <Text style={styles.nextButtonText}>{t('alphabet.nextQuestion', '下一题 →')}</Text>
         </TouchableOpacity>
       )}
     </ScrollView>

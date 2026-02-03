@@ -1,139 +1,92 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
-import { Volume2 } from 'lucide-react-native';
-import { BlurView } from 'expo-blur';
 import { Colors } from '@/src/constants/colors';
 import { Typography } from '@/src/constants/typography';
+import { WordCard } from '@/src/components/learning/vocabulary/WordCard';
+import { VocabularyDetailView } from '@/src/components/learning/vocabulary/VocabularyDetailView';
+import { useVocabularyStore } from '@/src/stores/vocabularyStore';
 import { Vocabulary } from '@/src/entities/types/vocabulary.types';
+import { X } from 'lucide-react-native';
 
 interface ReviewWordViewProps {
-    vocabulary: Vocabulary; // 复习的单词数据
-    // 用户回答结果的回调函数。
-    // isCorrect: 是否答对, score: 质量评分 (1-5)
-    onAnswer: (isCorrect: boolean, score: number) => void;
-    onNext: () => void; // 进入下一个单词的回调
+    vocabulary: Vocabulary;
+    onNext: () => void;
 }
 
-/**
- * ReviewWordView 组件
- * 
- * 这是一个用于“旧词复习”环节的视图组件。
- * 
- * 主要逻辑流程：
- * 1. 初始状态下（isRevealed=false），只显示单词本身（泰语+发音）和一个辅助例句。
- * 2. 单词的详细释义被模糊处理，强制用户进行回忆。
- * 3. 底部提供三个按钮：忘记、模糊、认识，供用户自评。
- * 4. 用户点击任一评分按钮后：
- *    - 调用 onAnswer 提交评分结果。
- *    - 设置 isRevealed=true，揭示被模糊的释义内容。
- *    - 底部按钮变为“下一个”。
- * 5. 用户阅读释义确认后，点击“下一个”继续。
- */
-export const ReviewWordView: React.FC<ReviewWordViewProps> = ({ vocabulary, onAnswer, onNext }) => {
+export const ReviewWordView: React.FC<ReviewWordViewProps> = ({ vocabulary, onNext }) => {
     const { t } = useTranslation();
-    // 控制释义内容是否已揭示
     const [isRevealed, setIsRevealed] = useState(false);
+    const skipWord = useVocabularyStore(state => state.skipWord);
+    const markSelfRating = useVocabularyStore(state => state.markSelfRating);
 
-    // 处理用户点击评分按钮
-    const handleReveal = (quality: 'know' | 'unsure' | 'forgot') => {
-        setIsRevealed(true); // 揭示答案
-
-        let isCorrect = true;
-        let score = 5;
-
-        if (quality === 'forgot') {
-            isCorrect = false;
-            score = 1;
-        } else if (quality === 'unsure') {
-            isCorrect = true;
-            score = 3;
-        }
-
-        onAnswer(isCorrect, score);   // 提交结果
+    const handleRate = (score: number) => {
+        markSelfRating(score);
+        setIsRevealed(true);
     };
 
-    // 提取第一个例句作为上下文提示
+    const handleSkip = () => {
+        skipWord(vocabulary._id);
+    };
+
+    // Extract first example sentence as context hint
     const exampleSentences = vocabulary.exampleSentences || {};
-    const exampleSentence = Object.values(exampleSentences)[0];
+    const firstExample = Object.values(exampleSentences)[0];
 
     return (
         <View style={styles.container}>
-            <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-                {/* 顶部区域：单词卡片与发音 */}
-                <View style={styles.topSection}>
-                    <Text style={styles.thaiWord}>{vocabulary.thaiWord}</Text>
+            {/* Top Right Skip Button */}
+            <Pressable style={styles.skipButton} onPress={handleSkip}>
+                <Text style={styles.skipText}>{t('learning.skip')}</Text>
+                <X size={16} color={Colors.taupe} />
+            </Pressable>
 
-                    <View style={styles.phoneticRow}>
-                        <Pressable style={styles.audioButton}>
-                            <Volume2 size={20} color={Colors.thaiGold} />
-                        </Pressable>
-                        <Text style={styles.phoneticText}>{vocabulary.pronunciation}</Text>
-                    </View>
-                </View>
+            <View style={styles.content}>
+                <WordCard vocabulary={vocabulary} autoPlay={true} />
 
-                {/* 上下文提示区域：展示例句 */}
-                {exampleSentence && (
+                {/* Context Hint */}
+                {firstExample && (
                     <View style={styles.contextContainer}>
-                        <Text style={styles.contextThai}>
-                            {exampleSentence.泰语}
-                        </Text>
-                        <Text style={styles.contextMeaning}>{exampleSentence.中文}</Text>
+                        <Text style={styles.contextThai}>{firstExample.泰语}</Text>
+                        <Text style={styles.contextMeaning}>{firstExample.中文}</Text>
                     </View>
                 )}
 
-                {/* 模糊内容区域：答案与详细释义 */}
-                <View style={styles.blurredAreaContainer}>
-                    {/* 实际内容层 */}
-                    <View style={styles.blurredContent}>
-                        {/* 含义头部 */}
-                        <View style={styles.meaningHeader}>
-                            <Text style={styles.mainMeaning}>{vocabulary.meaning}</Text>
-                            <View style={styles.typeTag}>
-                                <Text style={styles.typeText}>{vocabulary.partOfSpeech}</Text>
-                            </View>
-                        </View>
-                        {/* 基础英文/详细定义 */}
-                        <Text style={styles.definitionText}>{vocabulary.analysis?.part_of_speech || vocabulary.meaning}</Text>
-                    </View>
+                <VocabularyDetailView
+                    vocabulary={vocabulary}
+                    blurDetails={!isRevealed}
+                />
+            </View>
 
-                    {/* 模糊遮罩层：仅在 isRevealed 为 false 时覆盖 */}
-                    {!isRevealed && (
-                        <BlurView intensity={60} style={StyleSheet.absoluteFill} tint="dark">
-                            <View style={styles.blurOverlay} />
-                        </BlurView>
-                    )}
-                </View>
-            </ScrollView>
-
-            {/* 底部操作栏 */}
+            {/* Bottom Action Bar */}
             <View style={styles.bottomBar}>
                 {!isRevealed ? (
-                    // 未揭示时：展示三个自评按钮 (忘记 / 模糊 / 认识)
                     <View style={styles.buttonGrid}>
+                        {/* Forgot -> Score 1 */}
                         <Pressable
                             style={[styles.actionButton, styles.btnForgot]}
-                            onPress={() => handleReveal('forgot')}
+                            onPress={() => handleRate(1)}
                         >
                             <Text style={[styles.btnText, styles.textForgot]}>{t('learning.forgot')}</Text>
                         </Pressable>
 
+                        {/* Unsure -> Score 3 */}
                         <Pressable
                             style={[styles.actionButton, styles.btnUnsure]}
-                            onPress={() => handleReveal('unsure')}
+                            onPress={() => handleRate(3)}
                         >
                             <Text style={[styles.btnText, styles.textUnsure]}>{t('learning.unsure')}</Text>
                         </Pressable>
 
+                        {/* Know -> Score 5 */}
                         <Pressable
                             style={[styles.actionButton, styles.btnKnow]}
-                            onPress={() => handleReveal('know')}
+                            onPress={() => handleRate(5)}
                         >
                             <Text style={[styles.btnText, styles.textKnow]}>{t('learning.know')}</Text>
                         </Pressable>
                     </View>
                 ) : (
-                    // 已揭示时：展示“下一个”按钮
                     <Pressable style={styles.nextButton} onPress={onNext}>
                         <Text style={styles.nextButtonText}>{t('learning.next')}</Text>
                     </Pressable>
@@ -146,108 +99,50 @@ export const ReviewWordView: React.FC<ReviewWordViewProps> = ({ vocabulary, onAn
 const styles = StyleSheet.create({
     container: {
         flex: 1,
+        backgroundColor: Colors.paper,
+        position: 'relative',
     },
-    scrollView: {
-        flex: 1,
-    },
-    scrollContent: {
-        paddingHorizontal: 24,
-        paddingTop: 40,
-        paddingBottom: 100,
-        alignItems: 'center',
-    },
-    topSection: {
-        alignItems: 'center',
-        marginBottom: 32,
-    },
-    thaiWord: {
-        fontFamily: Typography.sarabunBold,
-        fontSize: 64,
-        color: Colors.ink,
-        marginBottom: 12,
-    },
-    phoneticRow: {
+    skipButton: {
+        position: 'absolute',
+        top: 10,
+        right: 20,
+        zIndex: 10,
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 12,
+        backgroundColor: 'rgba(0,0,0,0.05)',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 16,
+        gap: 4,
     },
-    audioButton: {
-        padding: 8,
-        backgroundColor: 'rgba(212, 175, 55, 0.1)',
-        borderRadius: 20,
-    },
-    phoneticText: {
+    skipText: {
         fontFamily: Typography.notoSerifRegular,
-        fontSize: 20,
+        fontSize: 12,
         color: Colors.taupe,
     },
+    content: {
+        flex: 1,
+        marginTop: 40,
+        paddingHorizontal: 20,
+    },
     contextContainer: {
-        width: '100%',
         backgroundColor: Colors.white,
-        padding: 20,
-        borderRadius: 16,
+        padding: 16,
+        borderRadius: 12,
         borderWidth: 1,
         borderColor: Colors.sand,
-        marginBottom: 32,
+        marginBottom: 16,
     },
     contextThai: {
         fontFamily: Typography.sarabunRegular,
-        fontSize: 18,
+        fontSize: 16,
         color: Colors.ink,
-        marginBottom: 8,
-        lineHeight: 28,
+        marginBottom: 4,
     },
     contextMeaning: {
         fontFamily: Typography.notoSerifRegular,
         fontSize: 14,
         color: Colors.taupe,
-    },
-    blurredAreaContainer: {
-        width: '100%',
-        minHeight: 200,
-        borderRadius: 16,
-        overflow: 'hidden',
-        position: 'relative',
-        backgroundColor: Colors.white,
-        borderWidth: 1,
-        borderColor: Colors.sand,
-    },
-    blurredContent: {
-        padding: 24,
-        alignItems: 'center',
-    },
-    blurOverlay: {
-        flex: 1,
-        backgroundColor: 'rgba(26, 26, 26, 0.8)', // Dark overlay for better contrast with white text if needed, or match design
-    },
-    meaningHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-        marginBottom: 16,
-    },
-    mainMeaning: {
-        fontFamily: Typography.notoSerifBold,
-        fontSize: 24,
-        color: Colors.ink,
-    },
-    typeTag: {
-        backgroundColor: 'rgba(212, 175, 55, 0.1)',
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 6,
-    },
-    typeText: {
-        fontFamily: Typography.notoSerifRegular,
-        fontSize: 12,
-        color: Colors.thaiGold,
-    },
-    definitionText: {
-        fontFamily: Typography.notoSerifRegular,
-        fontSize: 16,
-        color: Colors.ink,
-        textAlign: 'center',
-        lineHeight: 24,
     },
     bottomBar: {
         position: 'absolute',
@@ -261,19 +156,18 @@ const styles = StyleSheet.create({
     },
     buttonGrid: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
-        gap: 16,
+        gap: 12,
     },
     actionButton: {
         flex: 1,
-        paddingVertical: 16,
+        paddingVertical: 14,
         borderRadius: 12,
         alignItems: 'center',
         justifyContent: 'center',
+        borderWidth: 1,
     },
     btnForgot: {
         backgroundColor: '#FEF2F2',
-        borderWidth: 1,
         borderColor: '#FCA5A5',
     },
     textForgot: {
@@ -281,7 +175,6 @@ const styles = StyleSheet.create({
     },
     btnUnsure: {
         backgroundColor: '#FFFBEB',
-        borderWidth: 1,
         borderColor: '#FCD34D',
     },
     textUnsure: {
@@ -289,7 +182,6 @@ const styles = StyleSheet.create({
     },
     btnKnow: {
         backgroundColor: '#ECFDF5',
-        borderWidth: 1,
         borderColor: '#6EE7B7',
     },
     textKnow: {
@@ -297,7 +189,7 @@ const styles = StyleSheet.create({
     },
     btnText: {
         fontFamily: Typography.notoSerifBold,
-        fontSize: 16,
+        fontSize: 14,
     },
     nextButton: {
         backgroundColor: Colors.ink,
@@ -311,4 +203,3 @@ const styles = StyleSheet.create({
         color: Colors.white,
     },
 });
-

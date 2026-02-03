@@ -1,6 +1,7 @@
 // src/components/learning/alphabet/SessionRecoveryCard.tsx
 
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Colors } from '@/src/constants/colors';
 import { Typography } from '@/src/constants/typography';
@@ -14,12 +15,14 @@ export function SessionRecoveryCard({
     onContinue,
     onRestart,
 }: SessionRecoveryCardProps) {
+    const { t } = useTranslation();
+
     return (
         <View style={styles.overlay}>
             <View style={styles.card}>
-                <Text style={styles.title}>继续上次学习？</Text>
+                <Text style={styles.title}>{t('components.recovery.title', '继续上次学习？')}</Text>
                 <Text style={styles.description}>
-                    检测到您在该课程存在未完成的轮次，是否继续之前的阶段？
+                    {t('components.recovery.message', '检测到您在该课程存在未完成的轮次，是否继续之前的阶段？')}
                 </Text>
 
                 <View style={styles.buttonRow}>
@@ -27,14 +30,14 @@ export function SessionRecoveryCard({
                         style={[styles.button, styles.restartButton]}
                         onPress={onRestart}
                     >
-                        <Text style={styles.restartText}>重新开始本轮</Text>
+                        <Text style={styles.restartText}>{t('components.recovery.restart', '重新开始本轮')}</Text>
                     </TouchableOpacity>
 
                     <TouchableOpacity
                         style={[styles.button, styles.continueButton]}
                         onPress={onContinue}
                     >
-                        <Text style={styles.continueText}>继续学习</Text>
+                        <Text style={styles.continueText}>{t('components.recovery.continue', '继续学习')}</Text>
                     </TouchableOpacity>
                 </View>
             </View>

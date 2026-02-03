@@ -101,7 +101,17 @@ export default {
     noNewWordsMessage: '你已经学完了所有新单词！',
     endSessionTitle: '结束学习？',
     endSessionMessage: '确定要退出吗？',
-    quit: '退出',
+    quit: '退出学习',
+    noExamples: '暂无例句',
+    noUsage: '暂无用法详解',
+    setupTitle: '今日学习计划',
+    setupSubtitle: '选择今天要学习/复习的字母数量',
+    setupSubtitleWords: '选择今天要学习/复习的单词数量',
+    start: '开始学习',
+    quizInstruction: '请选择正确的含义',
+    skip: '跳过',
+    dontKnow: '不认识',
+    nextStep: '下一步',
   },
   modules: {
     alphabet: '字母学习',
@@ -131,6 +141,29 @@ export default {
     description: '学习44个辅音和32个元音，掌握标准发音',
     continue: '继续学习',
     start: '开始学习',
+    phase: {
+      new: '新字母',
+      review: '快速复习',
+      final: '最终复习',
+      fix: '错题修正',
+      warmup: '热身环节',
+      completed: '本轮完成',
+      finished: '课程完成'
+    },
+    roundInfo: '第 {{current}} / {{total}} 轮',
+    skipBury: '跳过(不再复习)',
+    optionsLoadFailed: '题目选项加载失败',
+    regenerate: '重新生成题目',
+    checkAnswer: '检查答案',
+    nextQuestion: '下一题 →',
+    instructions: {
+      selectCorrect: '请选择正确的含义',
+      listenChoose: '听音选字',
+      matchPronunciation: '匹配发音',
+      consonantClass: '选择辅音类别',
+      initialSound: '识别声母',
+      finalSound: '识别韵母'
+    },
   },
   alphabetTest: {
     title: '字母测试',
@@ -142,5 +175,51 @@ export default {
     failed: '未通过',
     retry: '重新测试',
     backToHome: '返回首页',
+  },
+  components: {
+    phonics: {
+      title: '声调规则表',
+      interactive: '📌 交互示例',
+      understood: '明白了,继续学习 →'
+    },
+    completion: {
+      courseDone: '课程完成！',
+      roundDone: 'Round {{round}} 完成',
+      courseDoneMsg: '恭喜你完成了本节课程的所有学习内容！',
+      roundDoneMsg: '休息一下，准备进入下一轮学习\n每节课需完成3轮学习',
+      finishCourse: '完成课程',
+      backToCourses: '返回选课'
+    },
+    recovery: {
+      title: '继续上次学习？',
+      message: '检测到您在该课程存在未完成的轮次，是否继续之前的阶段？',
+      restart: '重新开始本轮',
+      continue: '继续学习'
+    },
+    miniReview: {
+      hint: '💡 提示:',
+      pitchCurve: '🎵 音高曲线',
+      playSound: '播放发音',
+      explanation: '💡 解释',
+      aspirated: '送气音 (aspirated)',
+      unaspirated: '不送气音 (unaspirated)',
+      voiceless: '清音 (voiceless)',
+      voiced: '浊音 (voiced)',
+      highClass: '高辅音',
+      midClass: '中辅音',
+      lowClass: '低辅音',
+      consonantClass: '辅音类'
+    },
+    aspirated: {
+      title: '送气音对比训练',
+      instruction: '🔊 先播放目标音频,然后从下方选项中选择对应的字母',
+      playTarget: '播放目标发音',
+      tipsTitle: '💡 区分技巧',
+      aspirated: '送气',
+      unaspirated: '不送气',
+      correctAns: '✅ 正确答案',
+      aspiratedDesc: '这是一个送气音,发音时有明显气流',
+      unaspiratedDesc: '这是一个不送气音,发音时气流较弱'
+    }
   }
 };

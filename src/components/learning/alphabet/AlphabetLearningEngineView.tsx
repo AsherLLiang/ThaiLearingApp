@@ -1,6 +1,7 @@
 // src/components/learning/alphabet/AlphabetLearningEngineView.tsx
 
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { View, ActivityIndicator, Text, SafeAreaView, TouchableOpacity } from 'react-native';
 import { ChevronLeft } from 'lucide-react-native';
 
@@ -50,16 +51,16 @@ interface AlphabetLearningEngineViewProps {
 }
 
 // Helper to get friendly phase name
-const getPhaseLabel = (phase: Phase) => {
+const getPhaseLabel = (phase: Phase, t: any) => {
   switch (phase) {
-    case 'new-learning': return 'New Letters';
-    case 'mini-review': return 'Quick Review';
-    case 'final-review': return 'Final Review';
-    case 'error-review': return 'Fix Mistakes';
+    case 'new-learning': return t('alphabet.phase.new', 'New Letters');
+    case 'mini-review': return t('alphabet.phase.review', 'Quick Review');
+    case 'final-review': return t('alphabet.phase.final', 'Final Review');
+    case 'error-review': return t('alphabet.phase.fix', 'Fix Mistakes');
     // 🔥 TODO-03: 统一使用 'previous-review'
-    case 'previous-review': return 'Warm Up';
-    case 'round-completed': return 'Round Done';
-    case 'finished': return 'Finished';
+    case 'previous-review': return t('alphabet.phase.warmup', 'Warm Up');
+    case 'round-completed': return t('alphabet.phase.completed', 'Round Done');
+    case 'finished': return t('alphabet.phase.finished', 'Finished');
     default: return phase;
   }
 };
@@ -79,6 +80,8 @@ function RoundHeader({
   onBack?: () => void;
   onSkipYesterdayReview?: () => void;
 }) {
+  const { t } = useTranslation();
+
   return (
     <View
       style={{
@@ -105,7 +108,7 @@ function RoundHeader({
               color: Colors.taupe,
             }}
           >
-            Round {currentRound} / 3
+            {t('alphabet.roundInfo', { current: currentRound, total: 3 })}
           </Text>
         </View>
 
@@ -121,7 +124,7 @@ function RoundHeader({
             fontSize: 12,
             color: Colors.ink
           }}>
-            {getPhaseLabel(phase)}
+            {getPhaseLabel(phase, t)}
           </Text>
         </View>
 
@@ -144,7 +147,7 @@ function RoundHeader({
               color: '#D00000',
               fontWeight: '600'
             }}>
-              Skip (Bury)
+              {t('alphabet.skipBury', 'Skip (Bury)')}
             </Text>
           </TouchableOpacity>
         )}

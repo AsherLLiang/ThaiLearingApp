@@ -111,10 +111,20 @@ async function getOrCreateMemory(db, userId, entityType, entityId, isLocked = fa
  * @param {string} quality - 答题质量
  * @returns {Promise<Object>} - 更新后的记忆记录
  */
-async function updateMemoryAfterReview(db, userId, entityType, entityId, quality) {
-    console.log('【测试】updateMemoryAfterReview 被调用了！', { userId, quality });
+/**
+ * 更新记忆状态(答题后调用)
+ * @param {Object} db - 数据库实例
+ * @param {string} userId - 用户ID
+ * @param {string} entityType - 实体类型
+ * @param {string} entityId - 实体ID
+ * @param {string} quality - 答题质量
+ * @param {boolean} isSkipped - 是否跳过 (新增参数)
+ * @returns {Promise<Object>} - 更新后的记忆记录
+ */
+async function updateMemoryAfterReview(db, userId, entityType, entityId, quality, isSkipped = false) {
+    console.log('【测试】updateMemoryAfterReview 被调用了！', { userId, quality, isSkipped });
     console.log('=== [updateMemoryAfterReview] 开始 ===');
-    console.log('参数:', JSON.stringify({ userId, entityType, entityId, quality }));
+    console.log('参数:', JSON.stringify({ userId, entityType, entityId, quality, isSkipped }));
 
     try {
         // 1. 获取当前记忆记录
@@ -122,68 +132,92 @@ async function updateMemoryAfterReview(db, userId, entityType, entityId, quality
         const memory = await getOrCreateMemory(db, userId, entityType, entityId);
         console.log('记忆记录:', JSON.stringify(memory));
 
-        // 2. 映射质量到SM-2评分
-        console.log('步骤2: 映射质量');
+        let newMasteryLevel, nextReviewAt, updateData;
+        let sm2Result = {};
+        let newCorrectCount = memory.correctCount;
+        let newWrongCount = memory.wrongCount;
+        let newStreakCorrect = memory.streakCorrect;
 
-        const sm2Quality = masteryToQuality(quality);
-        console.log('SM-2质量:', sm2Quality);
-
-        // 3. 计算新的SM-2参数
-        console.log('步骤3: 调用 calculateSM2');
-        console.log('调用参数:', {
-            quality,
-            intervalDays: memory.intervalDays,
-            easinessFactor: memory.easinessFactor,
-            reviewStage: memory.reviewStage
-        });
-        const sm2Result = calculateSM2(
-            quality,
-            memory.intervalDays,
-            memory.easinessFactor,
-            memory.reviewStage
-        );
-
-        console.log('SM-2结果:', JSON.stringify(sm2Result));
-
-        // 4. 更新掌握度
-        console.log('步骤4: 计算新掌握度');
-        let newMasteryLevel = memory.masteryLevel;
-        if (sm2Quality >= 4) {
-            newMasteryLevel = Math.min(1.0, memory.masteryLevel + 0.15);
-        } else if (sm2Quality >= 2) {
-            newMasteryLevel = Math.max(0.0, memory.masteryLevel + 0.05);
-        } else {
-            newMasteryLevel = Math.max(0.0, memory.masteryLevel - 0.2);
-        }
-        console.log('新掌握度:', newMasteryLevel);
-
-        // 5. 更新连胜和计数
-        console.log('步骤5: 计算连胜');
-        const newStreakCorrect = sm2Quality >= 4 ? memory.streakCorrect + 1 : 0;
-        const newCorrectCount = sm2Quality >= 4 ? memory.correctCount + 1 : memory.correctCount;
-        const newWrongCount = sm2Quality < 2 ? memory.wrongCount + 1 : memory.wrongCount;
-
-        // 6. 计算下次复习时间
-        console.log('步骤6: 计算下次复习时间');
         const now = new Date();
-        const nextReviewAt = new Date(now.getTime() + sm2Result.interval * 24 * 60 * 60 * 1000);
-        console.log('下次复习时间:', nextReviewAt);
 
-        // 7. 准备更新数据
+        // === 处理跳过逻辑 ===
+        if (isSkipped) {
+            console.log('步骤2 (SKIP): 处理跳过逻辑');
+            newMasteryLevel = 1.0;
+            // 设置为 100 年后，相当于永久移出复习队列
+            nextReviewAt = new Date(now.getTime() + 100 * 365 * 24 * 60 * 60 * 1000);
+
+            updateData = {
+                masteryLevel: newMasteryLevel,
+                nextReviewAt: nextReviewAt.toISOString(),
+                updatedAt: now.toISOString(),
+                // 跳过不影响 correct/wrong 计数，也不影响 streak
+                // 但为了保持字段完整性，可以选择保留原值或重置某些状态
+                // 这里选择仅更新调度相关的核心字段
+            };
+        } else {
+            // === 原有 SM-2 逻辑 ===
+            console.log('步骤2: 映射质量');
+
+            const sm2Quality = masteryToQuality(quality);
+            console.log('SM-2质量:', sm2Quality);
+
+            // 3. 计算新的SM-2参数
+            console.log('步骤3: 调用 calculateSM2');
+            console.log('调用参数:', {
+                quality,
+                intervalDays: memory.intervalDays,
+                easinessFactor: memory.easinessFactor,
+                reviewStage: memory.reviewStage
+            });
+            sm2Result = calculateSM2(
+                quality,
+                memory.intervalDays,
+                memory.easinessFactor,
+                memory.reviewStage
+            );
+
+            console.log('SM-2结果:', JSON.stringify(sm2Result));
+
+            // 4. 更新掌握度
+            console.log('步骤4: 计算新掌握度');
+            newMasteryLevel = memory.masteryLevel;
+            if (sm2Quality >= 4) {
+                newMasteryLevel = Math.min(1.0, memory.masteryLevel + 0.15);
+            } else if (sm2Quality >= 2) {
+                newMasteryLevel = Math.max(0.0, memory.masteryLevel + 0.05);
+            } else {
+                newMasteryLevel = Math.max(0.0, memory.masteryLevel - 0.2);
+            }
+            console.log('新掌握度:', newMasteryLevel);
+
+            // 5. 更新连胜和计数
+            console.log('步骤5: 计算连胜');
+            newStreakCorrect = sm2Quality >= 4 ? memory.streakCorrect + 1 : 0;
+            newCorrectCount = sm2Quality >= 4 ? memory.correctCount + 1 : memory.correctCount;
+            newWrongCount = sm2Quality < 2 ? memory.wrongCount + 1 : memory.wrongCount;
+
+            // 6. 计算下次复习时间
+            console.log('步骤6: 计算下次复习时间');
+            nextReviewAt = new Date(now.getTime() + sm2Result.interval * 24 * 60 * 60 * 1000);
+            console.log('下次复习时间:', nextReviewAt);
+
+            // 7. 准备更新数据
+            updateData = {
+                masteryLevel: newMasteryLevel,
+                reviewStage: sm2Result.repetitions,
+                easinessFactor: sm2Result.easinessFactor,
+                intervalDays: sm2Result.interval,
+                lastReviewAt: now.toISOString(),
+                nextReviewAt: nextReviewAt.toISOString(),
+                correctCount: newCorrectCount,
+                wrongCount: newWrongCount,
+                streakCorrect: newStreakCorrect,
+                updatedAt: now.toISOString()
+            };
+        }
+
         console.log('步骤7: 准备更新数据库');
-        const updateData = {
-            masteryLevel: newMasteryLevel,
-            reviewStage: sm2Result.repetitions,
-            easinessFactor: sm2Result.easinessFactor,
-            intervalDays: sm2Result.interval,
-            lastReviewAt: now.toISOString(),
-            nextReviewAt: nextReviewAt.toISOString(),
-            correctCount: newCorrectCount,
-            wrongCount: newWrongCount,
-            streakCorrect: newStreakCorrect,
-            updatedAt: now.toISOString()
-        };
-
         console.log('更新数据对象:', JSON.stringify(updateData));
 
         // 检查是否有 undefined
@@ -207,17 +241,21 @@ async function updateMemoryAfterReview(db, userId, entityType, entityId, quality
 
         console.log('✅ 更新成功');
 
+        // 返回结果增加 isSkipped 标识 (虽然不是必须，但方便调试)
+        // 如果是 skipped，返回的部分 SM-2 字段可能是 undefined 或旧值，这取决于是否需要前端处理
+        // 前端通常只关心是否成功
         return {
             entityId,
             entityType,
             masteryLevel: newMasteryLevel,
-            reviewStage: sm2Result.repetitions,
-            easinessFactor: sm2Result.easinessFactor,
-            intervalDays: sm2Result.interval,
+            reviewStage: sm2Result.repetitions || memory.reviewStage,
+            easinessFactor: sm2Result.easinessFactor || memory.easinessFactor,
+            intervalDays: sm2Result.interval || memory.intervalDays,
             nextReviewAt: nextReviewAt.toISOString(),
             correctCount: newCorrectCount,
             wrongCount: newWrongCount,
-            streakCorrect: newStreakCorrect
+            streakCorrect: newStreakCorrect,
+            isSkipped
         };
 
     } catch (error) {

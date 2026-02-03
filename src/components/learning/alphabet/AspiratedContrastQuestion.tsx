@@ -1,6 +1,7 @@
 // src/components/learning/alphabet/AspiratedContrastQuestion.tsx
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   View,
   Text,
@@ -20,13 +21,13 @@ import { Typography } from '@/src/constants/typography';
 interface AspiratedContrastQuestionProps {
   /** 目标字母 */
   target: Letter;
-  
+
   /** 对比字母组(最小对立组) */
   contrasts: Letter[];
-  
+
   /** 答题回调 */
   onAnswer: (isCorrect: boolean) => void;
-  
+
   /** 下一题回调 */
   onNext: () => void;
 }
@@ -39,11 +40,12 @@ export function AspiratedContrastQuestion({
   onAnswer,
   onNext,
 }: AspiratedContrastQuestionProps) {
+  const { t } = useTranslation();
   const [answered, setAnswered] = useState(false);
   const [selectedLetter, setSelectedLetter] = useState<string | null>(null);
   const [isPlayingTarget, setIsPlayingTarget] = useState(false);
   const [isPlayingContrast, setIsPlayingContrast] = useState<string | null>(null);
-  
+
   const soundRef = useRef<Audio.Sound | null>(null);
 
   // 所有选项(目标字母+对比字母)
@@ -53,7 +55,7 @@ export function AspiratedContrastQuestion({
   useEffect(() => {
     return () => {
       if (soundRef.current) {
-        soundRef.current.unloadAsync().catch(() => {});
+        soundRef.current.unloadAsync().catch(() => { });
         soundRef.current = null;
       }
     };
@@ -117,12 +119,12 @@ export function AspiratedContrastQuestion({
       {/* 题型标题 */}
       <View style={styles.header}>
         <Wind size={24} color={Colors.thaiGold} />
-        <Text style={styles.title}>送气音对比训练</Text>
+        <Text style={styles.title}>{t('components.aspirated.title', '送气音对比训练')}</Text>
       </View>
 
       {/* 说明 */}
       <Text style={styles.instruction}>
-        🔊 先播放目标音频,然后从下方选项中选择对应的字母
+        {t('components.aspirated.instruction', '🔊 先播放目标音频,然后从下方选项中选择对应的字母')}
       </Text>
 
       {/* 目标音频播放 */}
@@ -138,26 +140,26 @@ export function AspiratedContrastQuestion({
         }}
         disabled={isPlayingTarget}
         accessibilityRole="button"
-        accessibilityLabel="播放目标发音"
+        accessibilityLabel={t('components.aspirated.playTarget', '播放目标发音')}
       >
         {isPlayingTarget ? (
           <ActivityIndicator size="small" color={Colors.white} />
         ) : (
           <>
             <Text style={styles.targetAudioIcon}>🔊</Text>
-            <Text style={styles.targetAudioText}>播放目标发音</Text>
+            <Text style={styles.targetAudioText}>{t('components.aspirated.playTarget', '播放目标发音')}</Text>
           </>
         )}
       </TouchableOpacity>
 
       {/* 提示卡片 */}
       <View style={styles.hintCard}>
-        <Text style={styles.hintTitle}>💡 区分技巧</Text>
+        <Text style={styles.hintTitle}>{t('components.aspirated.tipsTitle', '💡 区分技巧')}</Text>
         <Text style={styles.hintText}>
-          • 送气音: 发音时有明显气流 (如 ข ถ ผ)
+          • {t('components.aspirated.aspiratedDesc', '送气音: 发音时有明显气流')} (如 ข ถ ผ)
         </Text>
         <Text style={styles.hintText}>
-          • 不送气音: 发音时气流较弱 (如 ก ด บ)
+          • {t('components.aspirated.unaspiratedDesc', '不送气音: 发音时气流较弱')} (如 ก ด บ)
         </Text>
         <Text style={styles.hintText}>
           • 用手放在嘴前感受气流强度!
@@ -190,12 +192,12 @@ export function AspiratedContrastQuestion({
               >
                 <Text style={styles.optionChar}>{letter.thaiChar}</Text>
                 <Text style={styles.optionName}>{letter.nameThai}</Text>
-                
+
                 {/* 送气标识 */}
                 {isAspirated(letter) && (
                   <View style={styles.aspiratedBadge}>
                     <Wind size={12} color={Colors.thaiGold} />
-                    <Text style={styles.aspiratedText}>送气</Text>
+                    <Text style={styles.aspiratedText}>{t('components.aspirated.aspirated', '送气')}</Text>
                   </View>
                 )}
 
@@ -238,11 +240,11 @@ export function AspiratedContrastQuestion({
       {answered && (
         <View style={styles.explanationCard}>
           <Text style={styles.explanationText}>
-            ✅ 正确答案: {target.thaiChar} ({target.nameThai})
+            {t('components.aspirated.correctAns', '✅ 正确答案')}: {target.thaiChar} ({target.nameThai})
             {'\n'}
             {isAspirated(target)
-              ? '这是一个送气音,发音时有明显气流'
-              : '这是一个不送气音,发音时气流较弱'}
+              ? t('components.aspirated.aspiratedDesc', '这是一个送气音,发音时有明显气流')
+              : t('components.aspirated.unaspiratedDesc', '这是一个不送气音,发音时气流较弱')}
           </Text>
         </View>
       )}
@@ -253,9 +255,9 @@ export function AspiratedContrastQuestion({
           style={styles.nextButton}
           onPress={onNext}
           accessibilityRole="button"
-          accessibilityLabel="下一题"
+          accessibilityLabel={t('alphabet.nextQuestion', '下一题 →')}
         >
-          <Text style={styles.nextButtonText}>下一题 →</Text>
+          <Text style={styles.nextButtonText}>{t('alphabet.nextQuestion', '下一题 →')}</Text>
         </TouchableOpacity>
       )}
     </View>
