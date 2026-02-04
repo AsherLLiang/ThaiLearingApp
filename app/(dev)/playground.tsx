@@ -47,6 +47,17 @@ export default function PlaygroundScreen() {
                         <Text style={styles.itemText}>Audio Cache Test</Text>
                         <ChevronRight size={16} color={Colors.taupe} />
                     </TouchableOpacity>
+                    <View style={styles.borderBottom} />
+                    <TouchableOpacity
+                        style={styles.item}
+                        onPress={() => router.push('/(dev)/audio-migration-test')}
+                    >
+                        <View style={styles.itemIcon}>
+                            <FlaskConical size={16} color={Colors.thaiGold} />
+                        </View>
+                        <Text style={styles.itemText}>Audio Migration Test (New Lib)</Text>
+                        <ChevronRight size={16} color={Colors.taupe} />
+                    </TouchableOpacity>
                 </View>
             </View>
 

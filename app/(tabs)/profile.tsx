@@ -9,7 +9,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { LanguageSwitcher } from '@/src/components/common/LanguageSwitcher';
 import { useModuleAccessStore } from '@/src/stores/moduleAccessStore';
 import { useUserStore } from '@/src/stores/userStore';
-import { useLearningStore } from '@/src/stores/learningStore';
+
 import { useLearningPreferenceStore } from '@/src/stores/learningPreferenceStore';
 import { Colors } from '@/src/constants/colors';
 import { Typography } from '@/src/constants/typography';
@@ -18,7 +18,7 @@ export default function ProfileScreen() {
   const { t } = useTranslation();
   const router = useRouter();
   const { currentUser, logout } = useUserStore();
-  const { progress } = useLearningStore();
+  const { streakDays } = useLearningPreferenceStore();
   const { userProgress } = useModuleAccessStore();
 
   const [dailyReminder, setDailyReminder] = React.useState(true);
@@ -48,7 +48,7 @@ export default function ProfileScreen() {
       id: 'streak7',
       icon: '🔥',
       label: t('profile.achievementBadges.streak7'),
-      unlocked: (progress?.streakDays || 0) >= 7,
+      unlocked: (streakDays || 0) >= 7,
     },
     {
       id: 'master',

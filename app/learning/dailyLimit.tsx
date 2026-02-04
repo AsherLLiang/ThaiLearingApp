@@ -50,7 +50,7 @@ export default function DailyLimitSetupScreen() {
                 <Slider
                     style={styles.slider}
                     minimumValue={5}
-                    maximumValue={500}
+                    maximumValue={200}
                     step={5}
                     value={limit}
                     onValueChange={(value) => setLimit(Math.round(value))}
@@ -60,7 +60,7 @@ export default function DailyLimitSetupScreen() {
                 />
                 <View style={styles.limitLabels}>
                     <Text style={styles.limitLabel}>5</Text>
-                    <Text style={styles.limitLabel}>500</Text>
+                    <Text style={styles.limitLabel}>200</Text>
                 </View>
 
                 <Pressable style={styles.startButton} onPress={handleConfirm}>
