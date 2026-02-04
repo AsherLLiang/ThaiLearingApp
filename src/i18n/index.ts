@@ -22,10 +22,10 @@ const getStoredLanguage = async (): Promise<string | null> => {
 const getDeviceLanguage = (): string => {
   const locales = Localization.getLocales();  // 获取区域设置数组
   if (!locales || locales.length === 0) {
-    return 'en'; // 默认英文
+    return 'zh'; // 默认中文
   }
   const languageCode = locales[0].languageCode;  // 例如: "zh" 或 "en"
-  return languageCode === 'en' ? 'en' : 'zh';  // 默认English
+  return languageCode === 'zh' ? 'zh' : 'en';  // 默认中文
 };
 
 // 【核心函数3】初始化 i18n
@@ -41,7 +41,7 @@ const initI18n = async () => {
         en: { translation: en },  // 英文
       },
       lng: initialLanguage,  // 初始语言
-      fallbackLng: 'zh',  // 如果翻译缺失,回退到中文
+      fallbackLng: 'en',  // 如果翻译缺失,回退到英文
       interpolation: {
         escapeValue: false,  // React 已经防 XSS 了
       },
