@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Volume2 } from 'lucide-react-native';
 import { Audio } from 'expo-av';
@@ -14,23 +14,39 @@ interface WordCardProps {
 
 export const WordCard: React.FC<WordCardProps> = ({ vocabulary, autoPlay = false }) => {
     const soundRef = useRef<Audio.Sound | null>(null);
+    const audioModeConfigured = useRef(false);
 
     const playAudio = async () => {
         try {
-            const url = await getVocabAudioUrl({ audioPath: vocabulary.audioPath });
+            const url = await getVocabAudioUrl(vocabulary.audioPath || '', vocabulary.source);
             if (!url) return;
+            console.log('🔊 [WordCard] Playing:', url);
 
-            if (soundRef.current) {
-                await soundRef.current.unloadAsync().catch(() => { });
+            // 配置音频模式（仅一次）
+            if (!audioModeConfigured.current) {
+                await Audio.setAudioModeAsync({
+                    allowsRecordingIOS: false,
+                    playsInSilentModeIOS: true,
+                    staysActiveInBackground: false,
+                    shouldDuckAndroid: true,
+                });
+                audioModeConfigured.current = true;
             }
 
+            // 清理旧 sound
+            if (soundRef.current) {
+                await soundRef.current.unloadAsync().catch(() => { });
+                soundRef.current = null;
+            }
+
+            // 创建并播放
             const { sound } = await Audio.Sound.createAsync(
                 { uri: url },
                 { shouldPlay: true }
             );
             soundRef.current = sound;
         } catch (error) {
-            console.warn('Playback failed:', error);
+            console.warn('❌ [WordCard] Playback failed:', error);
         }
     };
 
@@ -41,6 +57,7 @@ export const WordCard: React.FC<WordCardProps> = ({ vocabulary, autoPlay = false
         return () => {
             if (soundRef.current) {
                 soundRef.current.unloadAsync().catch(() => { });
+                soundRef.current = null;
             }
         };
     }, [vocabulary._id, autoPlay]);

@@ -1,13 +1,12 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Colors } from '@/src/constants/colors';
 import { Typography } from '@/src/constants/typography';
 import { WordCard } from '@/src/components/learning/vocabulary/WordCard';
 import { VocabularyDetailView } from '@/src/components/learning/vocabulary/VocabularyDetailView';
 import { useVocabularyStore } from '@/src/stores/vocabularyStore';
 import { Vocabulary } from '@/src/entities/types/vocabulary.types';
-import { X } from 'lucide-react-native';
 
 interface ReviewWordViewProps {
     vocabulary: Vocabulary;
@@ -17,16 +16,11 @@ interface ReviewWordViewProps {
 export const ReviewWordView: React.FC<ReviewWordViewProps> = ({ vocabulary, onNext }) => {
     const { t } = useTranslation();
     const [isRevealed, setIsRevealed] = useState(false);
-    const skipWord = useVocabularyStore(state => state.skipWord);
     const markSelfRating = useVocabularyStore(state => state.markSelfRating);
 
     const handleRate = (score: number) => {
         markSelfRating(score);
         setIsRevealed(true);
-    };
-
-    const handleSkip = () => {
-        skipWord(vocabulary._id);
     };
 
     // Extract first example sentence as context hint
@@ -35,12 +29,6 @@ export const ReviewWordView: React.FC<ReviewWordViewProps> = ({ vocabulary, onNe
 
     return (
         <View style={styles.container}>
-            {/* Top Right Skip Button */}
-            <Pressable style={styles.skipButton} onPress={handleSkip}>
-                <Text style={styles.skipText}>{t('learning.skip')}</Text>
-                <X size={16} color={Colors.taupe} />
-            </Pressable>
-
             <View style={styles.content}>
                 <WordCard vocabulary={vocabulary} autoPlay={true} />
 
@@ -100,29 +88,10 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: Colors.paper,
-        position: 'relative',
-    },
-    skipButton: {
-        position: 'absolute',
-        top: 10,
-        right: 20,
-        zIndex: 10,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: 'rgba(0,0,0,0.05)',
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 16,
-        gap: 4,
-    },
-    skipText: {
-        fontFamily: Typography.notoSerifRegular,
-        fontSize: 12,
-        color: Colors.taupe,
     },
     content: {
         flex: 1,
-        marginTop: 40,
+        marginTop: 0,
         paddingHorizontal: 20,
     },
     contextContainer: {

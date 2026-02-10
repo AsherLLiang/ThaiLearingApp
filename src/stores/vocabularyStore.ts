@@ -11,7 +11,7 @@ import {
     VocabularyResponse,
     VOCAB_SCORES,
 } from '@/src/entities/types/vocabulary.types';
-import { resolveVocabPath } from '@/src/utils/vocab/vocabAudioHelper';
+import { resolveVocabPath, getAllVocabAudioPaths } from '@/src/utils/vocab/vocabAudioHelper';
 import { downloadAudioBatch } from '@/src/utils/audioCache';
 import { buildVocabQueue } from '@/src/utils/vocab/buildVocabQueue';
 import { ModuleType } from './moduleAccessStore';
@@ -67,6 +67,7 @@ export const useVocabularyStore = create<VocabularyStore>()(
                     const finalLimit = typeof limit === 'string' ? parseInt(limit, 10) : limit;
                     const safeLimit = (typeof finalLimit === 'number' && isFinite(finalLimit)) ? finalLimit : 5;
                     console.log(`🚀 开始获取单词学习任务，限制为${safeLimit}`);
+                    console.log(`🚀 initSession params: source=${source}, limit=${limit}`);
                     const result: any = await callCloudFunction<VocabularyResponse>(
                         "getTodayMemories",
                         { userId, limit: safeLimit, entityType: 'word', source: source || get().currentCourseSource },
@@ -74,12 +75,24 @@ export const useVocabularyStore = create<VocabularyStore>()(
                     );
                     if (result.success && result.data?.items?.length > 0) {
                         const queue = buildVocabQueue(result.data);
-                        // Extract audio directly from the original items to avoid iterating over the doubled queue
-                        const audioUrls = result.data.items
-                            .map((item: any) => item.audioPath ? resolveVocabPath(item.audioPath) : null)
-                            .filter((url: any): url is string => !!url);
 
-                        downloadAudioBatch(audioUrls).catch(console.error);
+                        // DEBUG: Inspect data structure
+                        console.log('🔍 [Debug] First item fields:', Object.keys(result.data.items[0]));
+                        if (result.data.items[0].audioPath) {
+                            console.log('🔍 [Debug] audioPath found:', result.data.items[0].audioPath);
+                        }
+
+                        // Extract ALL associated audio (main, example, dialogue, cognates)
+                        const audioUrls = (result.data.items || []).flatMap((item: any) =>
+                            getAllVocabAudioPaths(item)
+                                .map((path: string) => resolveVocabPath(path, item.source))
+                                .filter(Boolean)
+                        );
+
+                        console.log(`📦 [Audio] Found ${audioUrls.length} total URLs to check`);
+                        if (audioUrls.length > 0) {
+                            downloadAudioBatch(audioUrls).catch(console.error);
+                        }
 
                         set({
                             queue,
@@ -315,7 +328,7 @@ export const useVocabularyStore = create<VocabularyStore>()(
 
                 await get().initSession(userId, { source, limit });
             },
-            
+
             finishSession: () => {
                 set({ phase: VocabSessionPhase.COMPLETED });
             }

@@ -11,7 +11,7 @@
   },
   {
     "id": "thai_2",
-    "source": "Thai_2",
+    "source": "BaseThai_2",
     "title": "courses.list.thai_2.title",
     "description": "courses.list.thai_2.description",
     "level": "courses.levels.elementary",
@@ -21,7 +21,7 @@
   },
   {
     "id": "thai_3",
-    "source": "Thai_3",
+    "source": "BaseThai_3",
     "title": "courses.list.thai_3.title",
     "description": "courses.list.thai_3.description",
     "level": "courses.levels.intermediate",
@@ -31,7 +31,7 @@
   },
   {
     "id": "thai_4",
-    "source": "Thai_4",
+    "source": "BaseThai_4",
     "title": "courses.list.thai_4.title",
     "description": "courses.list.thai_4.description",
     "level": "courses.levels.advanced",

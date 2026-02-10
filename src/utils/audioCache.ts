@@ -28,22 +28,41 @@ export async function getCachedAudioUri(remoteUrl: string): Promise<string> {
         const fileName = remoteUrl.split('/').pop() || `temp_${Date.now()}.mp3`;
         const localUri = `${CACHE_FOLDER}${fileName}`;
 
-        //Check if it exists locally (Check Local)
+        // 检查本地缓存是否存在且有效（大于 1KB 排除错误页面）
         const fileInfo = await FileSystem.getInfoAsync(localUri);
-        if (fileInfo.exists) {
-            //console.log(`Audio ${fileName} already cached`);
+        if (fileInfo.exists && fileInfo.size && fileInfo.size > 1024) {
             return localUri;
         }
 
-        //Download remote Uri
+        // 如果文件存在但过小（可能是损坏文件），先删除
+        if (fileInfo.exists) {
+            console.warn(`⚠️ [AudioCache] Removing corrupted file: ${fileName} (${fileInfo.size} bytes)`);
+            await FileSystem.deleteAsync(localUri, { idempotent: true });
+        }
+
+        // 下载并验证
         console.log(`[Downloading] Fetching from cloud: ${fileName}`);
         const downloadRes = await FileSystem.downloadAsync(remoteUrl, localUri);
-        return downloadRes.uri
+
+        // 验证 HTTP 状态码
+        if (downloadRes.status !== 200) {
+            console.warn(`⚠️ [AudioCache] Download failed for ${fileName}: HTTP ${downloadRes.status}`);
+            await FileSystem.deleteAsync(localUri, { idempotent: true });
+            return remoteUrl;
+        }
+
+        // 验证文件大小（有效 MP3 应该 > 1KB）
+        const downloadedInfo = await FileSystem.getInfoAsync(localUri);
+        if (!downloadedInfo.exists || (downloadedInfo.exists && downloadedInfo.size < 1024)) {
+            console.warn(`⚠️ [AudioCache] Downloaded file too small: ${fileName} (${downloadedInfo.exists ? downloadedInfo.size : 0} bytes)`);
+            await FileSystem.deleteAsync(localUri, { idempotent: true });
+            return remoteUrl;
+        }
+
+        return downloadRes.uri;
 
     } catch (error) {
         console.error("Error in getCachedAudioUri:", error);
-        // If caching fails, as a fallback solution, directly return the original network URL 
-        // to ensure that users can hear the sound.
         return remoteUrl;
     }
 }
@@ -55,9 +74,12 @@ export async function getCachedAudioUri(remoteUrl: string): Promise<string> {
  * @param batchSize 每批次下载数量，默认为 5
  */
 export async function downloadAudioBatch(urls: string[], batchSize: number = 5) {
-    console.log(`Starting batch download for ${urls.length} files...`);
+    if (!urls || urls.length === 0) {
+        console.log('⚠️ [AudioCache] downloadAudioBatch called with empty URLs');
+        return;
+    }
 
-    if(!urls || urls.length === 0) return;
+    console.log(`🚀 [AudioCache] Starting batch download for ${urls.length} files...`);
     await ensureCacheFolderExists();
     // 将 URL 数组分成小块 (Chunking)
     // [1,2,3,4,5,6,7] -> [[1,2,3,4,5], [6,7]]
@@ -69,4 +91,4 @@ export async function downloadAudioBatch(urls: string[], batchSize: number = 5) 
         console.log(`Processing batch ${i / batchSize + 1}...`);
     }
 }
-    
+
