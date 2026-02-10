@@ -19,24 +19,28 @@ import { useModuleAccessStore } from '@/src/stores/moduleAccessStore';
 import { LearningPhase } from '@/src/entities/enums/LearningPhase.enum';
 import { useUserStore } from '@/src/stores/userStore';
 import { useVocabularyLearningEngine } from '@/src/hooks/useVocabularyLearningEngine';
+import { VocabSessionPhase } from '@/src/entities/types/vocabulary.types';
 
 type SessionMode = 'REVIEW' | 'LEARN_NEW';
 type ModuleVariant = 'letter' | 'word';
 
-
 export default function LearningSession() {
+    const { t } = useTranslation();
+    const router = useRouter();
     const params = useLocalSearchParams();
     const moduleParam = typeof params.module === 'string' ? params.module : 'word';
     const moduleType: ModuleVariant = moduleParam === 'letter' ? 'letter' : 'word';
     const courseSource = typeof params.source === 'string' ? params.source : undefined;
     const rawLimit = params.limit ? parseInt(params.limit as string, 10) : undefined;
     const limit = (typeof rawLimit === 'number' && isFinite(rawLimit)) ? rawLimit : undefined;
-    const { startCourse, currentCourseSource } = useVocabularyStore();
+    const { startCourse, currentCourseSource, phase, queue } = useVocabularyStore();
+    const { currentUser } = useUserStore();
     const { dailyLimits } = useLearningPreferenceStore();
     const { userProgress } = useModuleAccessStore();
 
     useEffect(() => {
-        if (!courseSource) return;
+        // 确保有课程来源且用户信息已加载（startCourse 内部依赖 userId）
+        if (!courseSource || !currentUser?.userId) return;
 
         // ⭐ 1. 字母模块：不在这里自动 startCourse
         if (moduleType === 'letter') {
@@ -44,22 +48,34 @@ export default function LearningSession() {
         }
 
         // ⭐ 2. 核心初始化逻辑（单一数据源）
-        // 只有当：
-        // A. 当前 Store 里没有加载任何课程
-        // B. 或者 Store 里的课程跟 URL 参数不一致（用户切换了课程）
-        // 才触发 startCourse。
-        // 且 limit 必须强制使用 store 中的 dailyLimits (用户设置)，如果没有则兜底 20
-        if (!currentCourseSource || currentCourseSource !== courseSource) {
-            console.log(`🔄 Init Session: Switching from [${currentCourseSource}] to [${courseSource}]`);
+        // 触发条件：
+        // A. 课程来源不一致（切换课程）
+        // B. 当前处于 IDLE 初始状态
+        // C. 虽然显示处于 LEARNING 状态但内存中无数据（处理异常重启/热重载后的状态不一致）
+        const isDifferentSource = !currentCourseSource || currentCourseSource !== courseSource;
+        const isIdle = phase === VocabSessionPhase.IDLE;
+        const isDataMissing = phase === VocabSessionPhase.LEARNING && (!queue || queue.length === 0);
+
+        if (isDifferentSource || isIdle || isDataMissing) {
+            console.log(`🔄 Init Session: Phase[${phase}] Queue[${queue.length}] Source[${currentCourseSource} -> ${courseSource}]`);
 
             // 🔥 CRITICAL: Trust store only. Do not use URL params for limit.
-            console.log(`每日限制: ${dailyLimits.word}`);
             const effectiveLimit = userProgress?.dailyLimit || limit || 20;
             console.log(`有效限制: ${effectiveLimit}`);
 
             startCourse(courseSource, effectiveLimit, moduleType as any);
         }
-    }, [moduleType, courseSource, currentCourseSource, startCourse, dailyLimits.word]);
+    }, [
+        moduleType,
+        courseSource,
+        currentCourseSource,
+        phase,
+        queue.length,
+        currentUser?.userId,
+        startCourse,
+        dailyLimits.word,
+        userProgress?.dailyLimit
+    ]);
 
     if (moduleType === 'letter') {
         return <AlphabetSession />;
@@ -106,9 +122,9 @@ function WordSession() {
                     </View>
                 );
             case 'vocab-new':
-                return <NewWordView vocabulary={currentItem!.entity} onNext={() => handleAnswer(true)} />;
+                return <NewWordView key={currentItem!.entity._id} vocabulary={currentItem!.entity} onNext={() => handleAnswer(true)} />;
             case 'vocab-review':
-                return <ReviewWordView vocabulary={currentItem!.entity} onNext={() => handleAnswer(true)} />;
+                return <ReviewWordView key={currentItem!.entity._id} vocabulary={currentItem!.entity} onNext={() => handleAnswer(true)} />;
             case 'vocab-new-quiz':
             case 'vocab-rev-quiz':
             case 'vocab-error-retry':
@@ -121,11 +137,26 @@ function WordSession() {
         <SafeAreaView edges={['top', 'bottom']} style={styles.container}>
             <ThaiPatternBackground opacity={0.05} />
             <View style={styles.header}>
-                <Pressable onPress={handleClose} style={styles.closeButton}><X size={24} color={Colors.taupe} /></Pressable>
+                <Pressable onPress={handleClose} style={styles.closeButton}>
+                    <X size={24} color={Colors.taupe} />
+                </Pressable>
+
                 <View style={styles.progressBarContainer}>
                     <View style={[styles.progressBarFill, { width: `${progress * 100}%` }]} />
                 </View>
-                <View style={{ width: 44 }} />
+
+                {/* 跳过按钮 (置于进度条右侧) */}
+                {(componentType === 'vocab-new' || componentType === 'vocab-review') && currentItem?.entity?._id ? (
+                    <Pressable
+                        onPress={() => useVocabularyStore.getState().skipWord(currentItem.entity._id)}
+                        style={styles.headerSkipButton}
+                    >
+                        <Text style={styles.headerSkipText}>{t('learning.skip')}</Text>
+                        <X size={14} color={Colors.taupe} />
+                    </Pressable>
+                ) : (
+                    <View style={{ width: 44 }} />
+                )}
             </View>
             <View style={styles.content}>
                 {renderContent()}
@@ -307,6 +338,21 @@ const styles = StyleSheet.create({
         height: '100%',
         backgroundColor: Colors.thaiGold,
         borderRadius: 3,
+    },
+    headerSkipButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        backgroundColor: 'rgba(0,0,0,0.05)',
+        borderRadius: 12,
+        gap: 2,
+        marginRight: 4,
+    },
+    headerSkipText: {
+        fontFamily: Typography.notoSerifRegular,
+        fontSize: 12,
+        color: Colors.taupe,
     },
     content: {
         flex: 1,

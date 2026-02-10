@@ -16,42 +16,39 @@ interface VocabularyQuizViewProps {
 export const VocabularyQuizView: React.FC<VocabularyQuizViewProps> = ({ vocabulary }) => {
     const { t } = useTranslation();
     const [viewMode, setViewMode] = useState<'QUIZ' | 'DETAILS'>('QUIZ');
+    const [options, setOptions] = useState<QuizOption[]>([]);
 
     const queue = useVocabularyStore(state => state.queue);
     const submitResult = useVocabularyStore(state => state.submitResult);
 
-    // Reset mode when vocabulary changes
+    // Generate Options only when vocabulary changes
     useEffect(() => {
         setViewMode('QUIZ');
-    }, [vocabulary._id]);
 
-    // Generate Options
-    const options = useMemo<QuizOption[]>(() => {
-        // 1. Current word is correct option
         const correctOption: QuizOption = {
             id: vocabulary._id,
-            definition: vocabulary.meaning, // Question is Thai, Answer is Meaning
+            definition: vocabulary.meaning,
             isCorrect: true
         };
 
-        // 2. Pick distractors
-        // Filter out current word
-        const otherWords = queue.filter(w => w.id !== vocabulary._id);
+        const distractorPool = new Map<string, QuizOption>();
+        const shuffledQueue = [...queue].sort(() => 0.5 - Math.random());
 
-        // Shuffle others
-        const shuffledOthers = [...otherWords].sort(() => 0.5 - Math.random());
+        for (const item of shuffledQueue) {
+            if (item.id !== vocabulary._id && !distractorPool.has(item.id)) {
+                distractorPool.set(item.id, {
+                    id: item.id,
+                    definition: item.entity.meaning,
+                    isCorrect: false
+                });
+            }
+            if (distractorPool.size >= 3) break;
+        }
 
-        // Take top 3
-        const distributers = shuffledOthers.slice(0, 3).map(w => ({
-            id: w.id,
-            definition: w.entity.meaning,
-            isCorrect: false
-        }));
-
-        // 3. Combine and shuffle
-        const combined = [correctOption, ...distributers];
-        return combined.sort(() => 0.5 - Math.random());
-    }, [vocabulary._id, queue]); // Re-generate if ID or queue changes
+        const distractors = Array.from(distractorPool.values());
+        const combined = [correctOption, ...distractors];
+        setOptions(combined.sort(() => 0.5 - Math.random()));
+    }, [vocabulary._id]); // Only re-run when word changes
 
     const handleCorrect = () => {
         // Transition to Details view
