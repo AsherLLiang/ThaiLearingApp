@@ -70,6 +70,7 @@ async function ensureUserAlphabetProgress(db, userId) {
   }
 }
 
+//========================================================
 /**
  * 懒初始化：用户词汇进度表（传统进度表）
  * 说明：
@@ -122,6 +123,7 @@ async function ensureUserVocabularyProgress(db, userId) {
 }
 */
 
+//========================================================
 
 /**
  * @param {Object} db - 数据库实例
@@ -138,9 +140,8 @@ async function getTodayMemories(db, params) {
    */
   const start = Date.now();
   const { userId, entityType, limit, includeNew = true, roundNumber } = params;
-
   // 🔍 调试日志：打印收到的 userId
-  console.log('📥 [getTodayMemories] 收到请求，userId:', userId, ', entityType:', entityType);
+  console.log('📥 [getTodayMemories] 收到请求，userId:', userId, ', entityType:', entityType, ', limit:', limit, ', includeNew:', includeNew, ', roundNumber:', roundNumber);
 
   if (!userId || !entityType) {
     return createResponse(false, null, 'Missing userId or entityType', 'INVALID_PARAMS');
@@ -321,16 +322,27 @@ async function getTodayMemories(db, params) {
 
         newEntities = newEntitiesResult.data;
       }
+      //===============================单词模块获取逻辑====================================
       // 其他模块或未指定 lessonId：沿用原逻辑，按剩余名额和 lessonNumber 顺序获取
       else {
-        let queryRef = query;
+        let queryRef = query; // query 指向 db.collection('vocabulary')
         const cmd = db.command;
 
-        if (existingEntityIds.length > 0) {
-          queryRef = queryRef.where({
-            _id: cmd.nin(existingEntityIds)
-          });
+        if (entityType === 'word' && params.source) {
+          queryRef = queryRef
+            .where({
+              source: params.source
+            })
         }
+         // 确保今天学习的“新单词”里，不会包含那些“已经出现在复习列表里”的单词。
+        if (existingEntityIds.length > 0) {
+          queryRef = queryRef
+            .where({
+              _id: cmd.nin(existingEntityIds) //nin: not in ----- 不在（existingEntityIds）数组中的数据
+            });
+        }
+
+
 
         const newEntitiesResult = await queryRef
           .orderBy('lessonNumber', 'asc')

@@ -15,6 +15,7 @@ import { ReviewWordView } from '@/src/components/learning/vocabulary/ReviewWordV
 import { useVocabularyStore } from '@/src/stores/vocabularyStore';
 import { useLearningPreferenceStore } from '@/src/stores/learningPreferenceStore';
 import { useAlphabetStore } from '@/src/stores/alphabetStore';
+import { useModuleAccessStore } from '@/src/stores/moduleAccessStore';
 import { LearningPhase } from '@/src/entities/enums/LearningPhase.enum';
 import { useUserStore } from '@/src/stores/userStore';
 import { useVocabularyLearningEngine } from '@/src/hooks/useVocabularyLearningEngine';
@@ -32,6 +33,7 @@ export default function LearningSession() {
     const limit = (typeof rawLimit === 'number' && isFinite(rawLimit)) ? rawLimit : undefined;
     const { startCourse, currentCourseSource } = useVocabularyStore();
     const { dailyLimits } = useLearningPreferenceStore();
+    const { userProgress } = useModuleAccessStore();
 
     useEffect(() => {
         if (!courseSource) return;
@@ -51,9 +53,11 @@ export default function LearningSession() {
             console.log(`🔄 Init Session: Switching from [${currentCourseSource}] to [${courseSource}]`);
 
             // 🔥 CRITICAL: Trust store only. Do not use URL params for limit.
-            const effectiveLimit = dailyLimits.word || 20;
+            console.log(`每日限制: ${dailyLimits.word}`);
+            const effectiveLimit = userProgress?.dailyLimit || limit || 20;
+            console.log(`有效限制: ${effectiveLimit}`);
 
-            startCourse(courseSource, effectiveLimit);
+            startCourse(courseSource, effectiveLimit, moduleType as any);
         }
     }, [moduleType, courseSource, currentCourseSource, startCourse, dailyLimits.word]);
 

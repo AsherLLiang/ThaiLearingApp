@@ -47,15 +47,15 @@ export function AlphabetCourseCard({ course, isCurrent, progress, onStart }: Alp
         <View style={styles.info}>
           <View style={styles.header}>
             <Text style={styles.title} numberOfLines={1}>
-              {course.title}
+              {t(course.title)}
             </Text>
             <View style={styles.levelBadge}>
-              <Text style={styles.levelText}>{course.level}</Text>
+              <Text style={styles.levelText}>{t(course.level)}</Text>
             </View>
           </View>
 
           <Text style={styles.description} numberOfLines={2}>
-            {course.description}
+            {t(course.description)}
           </Text>
 
           <View style={styles.footer}>

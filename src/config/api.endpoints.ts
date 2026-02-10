@@ -321,6 +321,10 @@ export const MEMORY_ENDPOINTS = {
     cloudbase: '/memory-engine',
     java: '/api/memory/round-evaluation'
   } as EndpointMap,
+  SET_DAILY_LIMIT: {
+    cloudbase: '/memory-engine',
+    java: '/api/memory/set-daily-limit'
+  } as EndpointMap,
 };
 
 // ==================== 下载云存储 API ====================

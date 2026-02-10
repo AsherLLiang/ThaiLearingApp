@@ -1,10 +1,10 @@
 [
   {
     "id": "thai_1",
-    "source": "Thai_1",
-    "title": "基础泰语1",
-    "description": "从零开始学习泰语，掌握一点点词汇。",
-    "level": "入门",
+    "source": "BaseThai_1",
+    "title": "courses.list.thai_1.title",
+    "description": "courses.list.thai_1.description",
+    "level": "courses.levels.beginner",
     "image": "ThaiBase_1.png",
     "category": "word",
     "lessons": 20
@@ -12,9 +12,9 @@
   {
     "id": "thai_2",
     "source": "Thai_2",
-    "title": "基础泰语2",
-    "description": "掌握更多词汇，开始对话。",
-    "level": "初级",
+    "title": "courses.list.thai_2.title",
+    "description": "courses.list.thai_2.description",
+    "level": "courses.levels.elementary",
     "image": "ThaiBase_2.png",
     "category": "word",
     "lessons": 25
@@ -22,9 +22,9 @@
   {
     "id": "thai_3",
     "source": "Thai_3",
-    "title": "基础泰语3",
-    "description": "掌握更多词汇，比较熟料的对话。",
-    "level": "中级",
+    "title": "courses.list.thai_3.title",
+    "description": "courses.list.thai_3.description",
+    "level": "courses.levels.intermediate",
     "image": "ThaiBase_3.png",
     "category": "word",
     "lessons": 30
@@ -32,9 +32,9 @@
   {
     "id": "thai_4",
     "source": "Thai_4",
-    "title": "基础泰语4",
-    "description": "熟料掌握大部分泰语词汇。",
-    "level": "高级",
+    "title": "courses.list.thai_4.title",
+    "description": "courses.list.thai_4.description",
+    "level": "courses.levels.advanced",
     "image": "ThaiBase_4.png",
     "category": "word",
     "lessons": 35

@@ -284,7 +284,7 @@ export const useModuleAccessStore = create<ModuleAccessStore>()((set, get) => ({
         const fetchProgress = async (endpoint: string) => {
             return await callCloudFunction<UserProgressResponse>(
                 'getUserProgress',
-                { userId, entityType: 'letter' },  // 🔥 添加 entityType 参数
+                { userId, entityType: 'letter' },  // 添加 entityType 参数
                 { endpoint }
             );
         };
@@ -293,13 +293,8 @@ export const useModuleAccessStore = create<ModuleAccessStore>()((set, get) => ({
             // 1. Try Primary Endpoint (memory-engine)
             let result = await fetchProgress(API_ENDPOINTS.MEMORY.GET_TODAY_MEMORIES.cloudbase);
 
-            // 2. Fallback to Legacy Endpoint (learn-vocab) if failed
-            if (!result.success) {
-                console.warn(`⚠️ Primary endpoint failed (${result.error}), trying fallback...`);
-                result = await fetchProgress(API_ENDPOINTS.MODULE.CHECK_ACCESS.cloudbase);
-            }
-
             if (result.success && result.data) {
+                console.log(`🌐 后端返回的每日限额: ${result.data.progress.dailyLimit}`);
                 // 🔥 Step 3: 以后端数据为准，本地仅作缓存
                 const remoteCompleted = result.data.progress.completedLessons || [];
 
@@ -389,13 +384,31 @@ export const useModuleAccessStore = create<ModuleAccessStore>()((set, get) => ({
     },
 
     // ===== 更新每日学习量（前端缓存）=====
-    setDailyLimit: (moduleType: ModuleType, limit: number) => {
+    setDailyLimit: async (moduleType: ModuleType, limit: number) => {
+        // 1. 先更新本地 UI（保证响应速度）
         set((state) => ({
             userProgress: {
                 ...(state.userProgress || { ...defaultProgress }),
                 dailyLimit: limit,
             },
         }));
+        // 2. 立即推送到后端持久化
+        const userId = useUserStore.getState().currentUser?.userId;
+        if (userId) {
+            try {
+                await callCloudFunction(
+                    'setDailyLimit',
+                    {
+                        userId,
+                        dailyLimit: limit
+                    },
+                    { endpoint: API_ENDPOINTS.MEMORY.SET_DAILY_LIMIT.cloudbase }
+                );
+                console.log(`✅ 已成功同步 ${moduleType} 限额 ${limit} 到云端`);
+            } catch (error) {
+                console.error('❌ 更新每日学习量失败:', error);
+            }
+        };
 
         console.log(`📌 已更新 ${moduleType} dailyLimit 为 ${limit}`);
     },

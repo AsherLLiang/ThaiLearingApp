@@ -147,11 +147,9 @@ export const AlphabetLearningView = memo(function AlphabetLearningView({
   }, [exampleWordLocalPath, fullSoundLocalPath, coreSyllableLocalPath, resolveAudioPath, playLocalAudio]);
 
 
-  // --- Auto-Play Logic (2 times) ---
+  // --- Auto-Play Logic ---
 
   useEffect(() => {
-    // Reset counter on letter change
-    autoPlayCounter.current = 0;
 
     const playTwice = async () => {
       const path = resolveAudioPath(fullSoundLocalPath);
@@ -159,15 +157,6 @@ export const AlphabetLearningView = memo(function AlphabetLearningView({
 
       // First play
       await playLocalAudio(path);
-
-      // Wait a bit before second play
-      setTimeout(async () => {
-        // Check if still mounted/same letter context basically (ref check)
-        if (autoPlayCounter.current < 2) {
-          await playLocalAudio(path);
-          autoPlayCounter.current = 2; // Mark done
-        }
-      }, 1500); // 1.5s delay
     };
 
     void playTwice();

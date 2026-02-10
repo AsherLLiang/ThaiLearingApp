@@ -28,7 +28,7 @@ export default function DailyLimitSetupScreen() {
 
     const handleConfirm = async () => {
         setDailyLimit(moduleType, limit);
-        setProgressDailyLimit(moduleType, limit);
+        await setProgressDailyLimit(moduleType, limit);
         // User requested: Save setting and go back, do NOT start session immediately.
         router.back();
     };
