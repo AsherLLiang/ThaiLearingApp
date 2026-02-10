@@ -14,6 +14,7 @@ import {
 import { resolveVocabPath } from '@/src/utils/vocab/vocabAudioHelper';
 import { downloadAudioBatch } from '@/src/utils/audioCache';
 import { buildVocabQueue } from '@/src/utils/vocab/buildVocabQueue';
+import { ModuleType } from './moduleAccessStore';
 
 
 
@@ -27,7 +28,7 @@ interface VocabularyStore {
     pendingResults: Array<{ userId: string, entityId: string, entityType: string, quality: number }>;
     skippedIds: string[]; // Track skipped word IDs
     initSession: (userId: string, options?: { limit?: number, source?: string }) => Promise<void>;
-    startCourse: (source: string, limit?: number) => Promise<void>;
+    startCourse: (source: string, limit?: number, moduleType?: ModuleType) => Promise<void>;
     submitResult: (isCorrect: boolean, score?: number) => Promise<void>;
     markSelfRating: (rating: number) => void;
     skipWord: (id: string) => void;
@@ -65,7 +66,7 @@ export const useVocabularyStore = create<VocabularyStore>()(
                     // 确保 limit 是合法整数且不是 NaN
                     const finalLimit = typeof limit === 'string' ? parseInt(limit, 10) : limit;
                     const safeLimit = (typeof finalLimit === 'number' && isFinite(finalLimit)) ? finalLimit : 5;
-
+                    console.log(`🚀 开始获取单词学习任务，限制为${safeLimit}`);
                     const result: any = await callCloudFunction<VocabularyResponse>(
                         "getTodayMemories",
                         { userId, limit: safeLimit, entityType: 'word', source: source || get().currentCourseSource },
@@ -301,12 +302,20 @@ export const useVocabularyStore = create<VocabularyStore>()(
                     // But ideally we might want to retry? keeping it simple for now.
                 }
             },
-            startCourse: async (source: string, limit?: number) => {
+            startCourse: async (source: string, limit?: number, moduleType: ModuleType = 'word') => {
+                console.log(`🚀 开始课程：${source}，限制为${limit}`);
                 const userId = useUserStore.getState().currentUser?.userId;
                 if (!userId) return;
                 set({ currentCourseSource: source, currentIndex: 0, queue: [], pendingResults: [] });
+
+                if (moduleType === 'letter') {
+                    set({ phase: VocabSessionPhase.IDLE });
+                    return;
+                }
+
                 await get().initSession(userId, { source, limit });
             },
+            
             finishSession: () => {
                 set({ phase: VocabSessionPhase.COMPLETED });
             }

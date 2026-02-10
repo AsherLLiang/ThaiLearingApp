@@ -9,6 +9,7 @@ export default {
     loading: '加载中...',
     error: '错误',
     success: '成功',
+    all: '全部',
   },
   auth: {
     title: '泰Easy',
@@ -81,6 +82,35 @@ export default {
     searchPlaceholder: '搜索课程...',
     startBtnText: '开始学习',
     continue: '继续学习',
+    locked: '未解锁',
+    levels: {
+      beginner: '入门',
+      elementary: '初级',
+      intermediate: '中级',
+      advanced: '高级',
+    },
+    list: {
+      alphabet: {
+        title: '泰语字母表',
+        description: '从44个辅音到元音与声调，逐步掌握泰语读写基础。',
+      },
+      thai_1: {
+        title: '基础泰语1',
+        description: '从零开始学习泰语，掌握初步词汇。',
+      },
+      thai_2: {
+        title: '基础泰语2',
+        description: '掌握更多词汇，开始简单对话。',
+      },
+      thai_3: {
+        title: '基础泰语3',
+        description: '掌握更多词汇，进行比较熟练的对话。',
+      },
+      thai_4: {
+        title: '基础泰语4',
+        description: '熟练掌握大部分泰语高频词汇。',
+      },
+    },
   },
   learning: {
     basicDefinition: '基础释义',

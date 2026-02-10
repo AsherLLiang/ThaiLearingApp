@@ -18,9 +18,9 @@ import { useLearningPreferenceStore } from '@/src/stores/learningPreferenceStore
 import { useModuleAccessStore, type ModuleType } from '@/src/stores/moduleAccessStore';
 
 const CATEGORIES = [
-  { id: 'all', label: '全部', icon: Grid },
-  { id: 'letter', label: '字母', icon: Type },
-  { id: 'word', label: '单词', icon: BookOpen },
+  { id: 'all', label: 'common.all', icon: Grid },
+  { id: 'letter', label: 'modules.alphabet', icon: Type },
+  { id: 'word', label: 'modules.word', icon: BookOpen },
 ];
 
 type CourseItem = {
@@ -64,7 +64,6 @@ export default function CoursesScreen() {
   const [activeCategory, setActiveCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const { currentCourseSource, startCourse } = useVocabularyStore();
-  const { hasDailyLimit } = useLearningPreferenceStore();//该 Store 可能为历史设计遗留，后续需要调整或者删除
   const { userProgress, getUserProgress, checkAccess, accessCache } = useModuleAccessStore();
   const [modalVisible, setModalVisible] = useState(false);
   const [pendingCourse, setPendingCourse] = useState<CourseWithImage | null>(null);
@@ -128,11 +127,14 @@ export default function CoursesScreen() {
   const filteredCourses = useMemo(() => {
     return COURSES.filter(course => {
       const matchesCategory = activeCategory === 'all' || course.category === activeCategory;
+      const translatedTitle = t(course.title);
+      const translatedDescription = t(course.description);
       const matchesSearch =
-        course.title.includes(searchQuery) || course.description.includes(searchQuery);
+        translatedTitle.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        translatedDescription.toLowerCase().includes(searchQuery.toLowerCase());
       return matchesCategory && matchesSearch;
     });
-  }, [activeCategory, searchQuery]);
+  }, [activeCategory, searchQuery, t]);
 
 
 
@@ -191,9 +193,13 @@ export default function CoursesScreen() {
       setModalVisible(false);
       setPendingCourse(null);
 
+      // Notify store about course switch (even for letters to show golden box)
+
+
       // Special routing for Alphabet
       if (moduleType === 'letter') {
         router.push('/alphabet');
+        startCourse(pendingCourse.source, 200, 'letter');
       } else {
         router.push({
           pathname: '/learning',
@@ -253,7 +259,7 @@ export default function CoursesScreen() {
               >
                 <Icon size={14} color={isActive ? Colors.white : Colors.taupe} />
                 <Text style={[styles.categoryText, isActive && styles.categoryTextActive]}>
-                  {cat.label}
+                  {t(cat.label)}
                 </Text>
               </Pressable>
             );
@@ -307,7 +313,7 @@ export default function CoursesScreen() {
 
       <CourseSelectionModal
         visible={modalVisible}
-        courseTitle={pendingCourse?.title || ''}
+        courseTitle={pendingCourse ? t(pendingCourse.title) : ''}
         onConfirm={confirmSwitchCourse}
         onCancel={() => {
           setModalVisible(false);

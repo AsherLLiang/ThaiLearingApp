@@ -17,6 +17,7 @@ const submitRoundEvaluation = require('./handlers/submitRoundEvaluation');
 const checkModuleAccessHandler = require('./handlers/checkModuleAccess');
 const getUserProgress = require('./handlers/getUserProgress');
 const getAlphabetLessons = require('./handlers/getAlphabetLessons');
+const setDailyLimit = require('./handlers/setDailyLimit');
 
 // ===== Utils =====
 const { createResponse } = require('./utils/response');
@@ -98,8 +99,11 @@ exports.main = async (event, context) => {
         if (action === 'getAlphabetLessons') {
             return await getAlphabetLessons(db, data);
         }
+        if (action === 'setDailyLimit') {
+            return await setDailyLimit(db, data);
+        }
 
-        // ===== 未知Action =====
+        // ===== 支持的操作类型 =====
         const supportedActions = [
             'getTodayMemories',
             'submitMemoryResult',
@@ -107,6 +111,7 @@ exports.main = async (event, context) => {
             'checkModuleAccess',
             'getUserProgress',
             'getAlphabetLessons',
+            'setDailyLimit',
         ];
 
         return createResponse(

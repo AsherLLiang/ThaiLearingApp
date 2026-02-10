@@ -9,6 +9,7 @@ export default {
     loading: 'Loading...',
     error: 'Error',
     success: 'Success',
+    all: 'All',
   },
   auth: {
     title: 'ThaiEasy',
@@ -76,11 +77,40 @@ export default {
     hoursThisWeek: 'Hours this week',
   },
   courses: {
-    title: 'Choose a book, boy',
+    title: 'Choose a course',
     subtitle: 'Start your Thai language journey',
     searchPlaceholder: 'Search courses...',
     startBtnText: 'Start Learning',
     continue: 'Continue',
+    locked: 'Locked',
+    levels: {
+      beginner: 'Beginner',
+      elementary: 'Elementary',
+      intermediate: 'Intermediate',
+      advanced: 'Advanced',
+    },
+    list: {
+      alphabet: {
+        title: 'Thai Alphabet',
+        description: 'From 44 consonants to vowels and tones, master Thai reading and writing.',
+      },
+      thai_1: {
+        title: 'Basic Thai 1',
+        description: 'Start learning Thai from scratch, master basic vocabulary.',
+      },
+      thai_2: {
+        title: 'Basic Thai 2',
+        description: 'Master more vocabulary and start simple conversations.',
+      },
+      thai_3: {
+        title: 'Basic Thai 3',
+        description: 'Master more vocabulary and engage in more fluent conversations.',
+      },
+      thai_4: {
+        title: 'Basic Thai 4',
+        description: 'Master most high-frequency Thai vocabulary.',
+      },
+    },
   },
   learning: {
     basicDefinition: 'Basic Definition',
