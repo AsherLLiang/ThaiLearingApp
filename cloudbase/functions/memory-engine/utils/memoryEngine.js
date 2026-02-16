@@ -13,9 +13,10 @@ const { calculateSM2, masteryToQuality } = require('./sm2');
  * @param {string} entityType - 实体类型
  * @param {string} entityId - 实体ID
  * @param {boolean} isLocked - 是否锁定
+ * @param {number} vId - 词汇ID(可选)
  * @returns {Promise<Object>} - 记忆记录
  */
-async function createMemoryRecord(db, userId, entityType, entityId, isLocked = false) {
+async function createMemoryRecord(db, userId, entityType, entityId, vId, isLocked = false) {
 
     // 验证参数
     if (!userId || !entityType || !entityId) {
@@ -30,6 +31,7 @@ async function createMemoryRecord(db, userId, entityType, entityId, isLocked = f
         userId,               // 用户ID
         entityType,           // 实体类型
         entityId,             // 实体ID
+        vId,                  // 词汇ID(可选)
         masteryLevel: 0.0,    // 掌握度
         reviewStage: 0,       // 0: 初始状态，1: 已复习
         easinessFactor: 2.5,  // 易度因子,SM-2 算法的标准初始难度（2.5表示中等难度）
@@ -39,7 +41,7 @@ async function createMemoryRecord(db, userId, entityType, entityId, isLocked = f
         correctCount: 0,      // 正确次数
         wrongCount: 0,        // 错误次数
         streakCorrect: 0,     // 连续正确次数
-        isLocked,
+        isSkipped: false,     // 是否跳过
         createdAt: now.toISOString(),
         updatedAt: now.toISOString()
     };
@@ -75,15 +77,64 @@ async function createMemoryRecord(db, userId, entityType, entityId, isLocked = f
 }
 
 /**
+ * 更新用户在特定课程的进度指针 (vId)
+ * @param {Object} db
+ * @param {string} userId
+ * @param {string} source - e.g. "BaseThai_1"
+ * @param {number} vId - 当前学完的单词vId
+ */
+async function updateUserWordProgress(db, userId, source, vId) {
+    if (!source || !vId) return;
+    const cmd = db.command;
+    const progressRes = await db.collection('user_progress').where({ userId }).get();
+    
+    if (progressRes.data.length === 0) return; // Should not happen
+    const progressDoc = progressRes.data[0];
+    const progressId = progressDoc._id;
+    
+    // 1. Get current array
+    let wordProgress = progressDoc.wordProgress || [];
+    if (!Array.isArray(wordProgress)) wordProgress = []; // Safe fallback
+    // 2. Find index
+    const index = wordProgress.findIndex(item => item.source === source);
+    let needUpdate = false;
+    
+    if (index === -1) {
+        // New source
+        wordProgress.push({
+            source,
+            lastVId: vId,
+            updatedAt: new Date().toISOString()
+        });
+        needUpdate = true;
+    } else {
+        // Existing source, update if vId is larger
+        if (vId > (wordProgress[index].lastVId || 0)) {
+            wordProgress[index].lastVId = vId;
+            wordProgress[index].updatedAt = new Date().toISOString();
+            needUpdate = true;
+        }
+    }
+    // 3. Update DB
+    if (needUpdate) {
+        await db.collection('user_progress').doc(progressId).update({
+            wordProgress
+        });
+        console.log(`[Progress] Updated ${source} -> vId: ${vId}`);
+    }
+}
+
+/**
  * 获取已有的memory_status记录，若没有则调用 createMemoryRecord 创建新记录
  * @param {Object} db - 数据库实例
  * @param {string} userId - 用户ID
  * @param {string} entityType - 实体类型
  * @param {string} entityId - 实体ID
+ * @param {number} vId - 词汇ID(可选)
  * @param {boolean} isLocked - 是否锁定
  * @returns {Promise<Object>} - 记忆记录
  */
-async function getOrCreateMemory(db, userId, entityType, entityId, isLocked = false) {
+async function getOrCreateMemory(db, userId, entityType, entityId, vId, isLocked = false) {
     // 1. 尝试查询现有记录
     const existingMemory = await db.collection('memory_status')
         .where({
@@ -99,7 +150,7 @@ async function getOrCreateMemory(db, userId, entityType, entityId, isLocked = fa
     }
 
     // 3. 不存在则创建新记录
-    return await createMemoryRecord(db, userId, entityType, entityId, isLocked);
+    return await createMemoryRecord(db, userId, entityType, entityId, vId);
 }
 
 /**
@@ -121,7 +172,7 @@ async function getOrCreateMemory(db, userId, entityType, entityId, isLocked = fa
  * @param {boolean} isSkipped - 是否跳过 (新增参数)
  * @returns {Promise<Object>} - 更新后的记忆记录
  */
-async function updateMemoryAfterReview(db, userId, entityType, entityId, quality, isSkipped = false) {
+async function updateMemoryAfterReview(db, userId, entityType, entityId, quality, isSkipped = false, vId) {
     console.log('【测试】updateMemoryAfterReview 被调用了！', { userId, quality, isSkipped });
     console.log('=== [updateMemoryAfterReview] 开始 ===');
     console.log('参数:', JSON.stringify({ userId, entityType, entityId, quality, isSkipped }));
@@ -129,7 +180,7 @@ async function updateMemoryAfterReview(db, userId, entityType, entityId, quality
     try {
         // 1. 获取当前记忆记录
         console.log('步骤1: 获取记忆记录');
-        const memory = await getOrCreateMemory(db, userId, entityType, entityId);
+        const memory = await getOrCreateMemory(db, userId, entityType, entityId, vId);
         console.log('记忆记录:', JSON.stringify(memory));
 
         let newMasteryLevel, nextReviewAt, updateData;
@@ -151,6 +202,7 @@ async function updateMemoryAfterReview(db, userId, entityType, entityId, quality
                 masteryLevel: newMasteryLevel,
                 nextReviewAt: nextReviewAt.toISOString(),
                 updatedAt: now.toISOString(),
+                isSkipped: true,
                 // 跳过不影响 correct/wrong 计数，也不影响 streak
                 // 但为了保持字段完整性，可以选择保留原值或重置某些状态
                 // 这里选择仅更新调度相关的核心字段
@@ -204,6 +256,7 @@ async function updateMemoryAfterReview(db, userId, entityType, entityId, quality
 
             // 7. 准备更新数据
             updateData = {
+                isSkipped: false,
                 masteryLevel: newMasteryLevel,
                 reviewStage: sm2Result.repetitions,
                 easinessFactor: sm2Result.easinessFactor,
@@ -305,10 +358,11 @@ async function initUserProgress(db, userId) {
         letterCompleted: false,
         letterProgress: 0.0,
         wordUnlocked: false,
-        wordProgress: 0.0,
+        wordProgress: [],
         sentenceUnlocked: false,
-        sentenceProgress: 0.0,
+        sentenceProgress: [],
         articleUnlocked: false,
+        articleProgress: [],
         currentStage: 'letter',
         totalStudyDays: 0,
         streakDays: 0,
@@ -464,5 +518,6 @@ module.exports = {
     getTodayReviewEntities,
     // checkAndUnlockNextStage,
     initUserProgress,
-    checkModuleAccess
+    checkModuleAccess,
+    updateUserWordProgress
 };

@@ -55,7 +55,6 @@ export const VocabMultipleQuiz: React.FC<VocabMultipleQuizProps> = ({
         try {
             const url = await getVocabAudioUrl(vocabulary.audioPath || '', vocabulary.source);
             if (!url) return;
-            console.log('🔊 [Quiz] Playing:', url);
 
             // 配置音频模式（仅一次）
             if (!audioModeConfigured.current) {
