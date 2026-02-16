@@ -48,8 +48,10 @@ assets/courses/
 assets/data/
 
 # docs
-docs/Document/
-docs/OLD/
+/docs
+docs/Document
+docs/OLD
+docs/project-freeze
 /Rule
 # Environment variables
 .env.local

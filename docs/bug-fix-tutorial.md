@@ -50,7 +50,7 @@ flowchart LR
 
 > **Key Concept**: Every feature is a **chain of function calls**. When something breaks, one link in the chain is broken. Your job is to find *which* link.
 
-#### How to trace a chain in code:
+#### How to trace a chain in code
 
 **Step 1**: Find where the button is. Search for the [onPress](file:///Users/liangjianyu/LearnOnThailand/ThaiLearningApp/app/learning/index.tsx#104-105) handler (处理器, /ˈhæn.dlɚ/).
 
@@ -391,7 +391,7 @@ ConfettiEffect: renders at left={x}, top={y}
 🎆 Confetti appears (but in wrong place!)
 ```
 
-#### The wrong position code:
+#### The wrong position code
 
 ```typescript
 // In QuizOptionButton: capture the touch position
@@ -464,6 +464,7 @@ containerRef.current?.measure((_x, _y, _w, _h, pageX, pageY) => {
 ```
 
 > **The `?.` operator**: Called **optional chaining** (可选链). If `containerRef.current` is `null`, it does nothing instead of crashing. Same as:
+>
 > ```typescript
 > if (containerRef.current !== null) {
 >     containerRef.current.measure(...);
@@ -611,4 +612,225 @@ const result = await someAsyncFunction();
 
 ---
 
+## Part 5: The Senior Engineer Mindset (Entering a New Codebase) 🧠
+
+> **User Question**: "As a beginner joining a new project, how do I find the root cause (根本原因) of a bug? How does a Senior Engineer think?"
+
+Imagine you are a **detective** (侦探, /dɪˈtek.tɪv/) arriving at a crime scene. You don't know the house, but you need to solve the case.
+
+### 5.1 Don't Read Every Line (不要读每一行代码)
+
+A common mistake beginners make is trying to read *all* the code to understand the project.
+
+- **Beginner**: Reads files from top to bottom. Gets lost.
+- **Senior**: Ignores 90% of the code. Focuses only on the "crime scene".
+
+### 5.2 The "Reverse Trace" Technique (反向追踪法)
+
+Start from what you can see (the UI) and work backward to the code.
+
+**Scenario**: "The 'Submit' button is broken."
+
+1. **Find the "Anchor" (寻找锚点)**
+    - Look at the button text on screen: "Submit Answer".
+    - **Action**: Search the codebase (Cmd+Shift+F) for the string `"Submit Answer"`.
+    - **Result**: Found it in `QuizView.tsx`.
+
+2. **Find the Trigger (寻找触发器)**
+    - In `QuizView.tsx`, look for the button code:
+
+        ```tsx
+        <Button title="Submit Answer" onPress={handleSubmit} />
+        ```
+
+    - **Result**: The function is `handleSubmit`.
+
+3. **Trace the Logic (追踪逻辑)**
+    - Cmd+Click `handleSubmit`. What does it do?
+
+        ```typescript
+        const handleSubmit = () => {
+             // It calls the API
+             api.submitScore(score);
+        };
+        ```
+
+4. **Trace the Data (追踪数据)**
+    - Cmd+Click `api.submitScore`. Where does the data go?
+    - It goes to `src/utils/api.ts`.
+    - It sends a `POST` request to `/api/score`.
+
+**Conclusion**: You just mapped the entire path (UI → Component → Function → API) without reading the rest of the app!
+
+### 5.3 Isolate the Variable (控制变量)
+
+A senior engineer asks: *"Is the bug in the **Front** (App) or the **Back** (Server)?"*
+
+They cut the system in half to find out.
+
+- **Test**: Look at the Network logs (or `console.log` outcome).
+  - **If the request was sent** but failed (404/500) → **Backend Bug**.
+  - **If the request was NEVER sent** → **Frontend Bug**.
+
+### 5.4 Trust Nothing, Verify Everything (怀疑一切，验证一切)
+
+- **Beginner**: "The comment says this function saves to the database, so it must work."
+- **Senior**: "Comments lie (撒谎). Code changes, but comments stay the same. I will verify it with a log."
+
+**The Golden Rule**: If you didn't see it happen (in a log or debugger), it didn't happen.
+
+### 5.5 How to Ask for Help (Like a Senior)
+
+Don't say: *"It doesn't work."*
+
+Do say: *"I traced the 'Submit' button. It calls `handleSubmit`, and I see the log 'Starting request'. But the Network request never sends. I suspect (怀疑) the specific `api.ts` function is failing, but I don't see an error."*
+
+This shows you have **thought** like a detective.
+
 > **Final thought**: Debugging is not about being smart. It is about being **systematic** (系统化的, /ˌsɪs.təˈmæt.ɪk/). Follow the chain, read the logs, change one thing at a time. You will find the bug.
+
+---
+
+## Part 6: How to Write Code When You Don't Know How (The "Lego" Method) 🧱
+
+> **User Question**: "I found the bug! But I don't know how to write the code to fix it. I only know basic `if/else` and variables. I don't know what API functions exist. How do I start?"
+
+This is the **hardest part** for beginners. You feel like you need to memorize (背诵, /ˈmem.ə.raɪz/) a dictionary of code.
+
+**Secret**: Senior engineers don't memorize everything. They know **how to find the right structure (结构)** and **modify** it. We call this the **"Lego Method"**.
+
+### 6.1 Step 1: Write "Human Code" (Pseudocode) First 📝
+
+Before you write code, write **what you want to happen** in plain English (or Chinese). This is called **Pseudocode** (伪代码).
+
+**Example Scenario**: "I need to check if the file is an MP3 before playing it."
+
+**Bad Approach**: Staring at the screen, trying to remember "how to check string end javascript".
+
+**Good Approach (Pseudocode)**:
+
+```text
+// 1. Get the file name
+// 2. Check: Does it end with ".mp3"?
+// 3. If YES -> Play sound
+// 4. If NO -> Show error "Not an audio file"
+```
+
+Once you have this logic, you only need to translate (翻译) each line into code.
+
+### 6.2 Step 2: The "Google Pattern" (Finding the Missing Piece) 🔍
+
+You have the logic: *Check if string ends with ".mp3"*. But you don't know the code.
+
+**How to Search**:
+
+- **Format**: `[Language] [Verb] [concept]`
+- **Query**: `javascript check string ends with`
+- **Result**: You will find `.endsWith()`.
+
+**Now translate your Pseudocode**:
+
+```typescript
+// 2. Check: Does it end with ".mp3"?
+if (fileName.endsWith('.mp3')) { ... }
+```
+
+> **Why this works**: You broke a big problem ("Fix audio bug") into tiny problems ("Check string end"). You can always Google a tiny problem.
+
+### 6.3 Step 3: Copy, Paste, and MODIFY (The "Frankenstein" Method) 🧟‍♂️
+
+Senior engineers copy code all the time. But they follow a rule: **Never copy without modifying.**
+
+**Where to copy from?**
+
+1. **Internal Search (Your own project)**: The best code to copy is code that is *already working* in your app.
+    - *Task*: "I need to play a sound."
+    - *Search*: `Audio.Sound.createAsync` (Search your whole project).
+    - *Result*: You find `AlphabetView.tsx` plays sound correctly.
+    - *Action*: Copy that block. Paste it into your broken file. **Change the variable names** to match your file.
+
+2. **External Search (Docs / StackOverflow / AI)**:
+    - Find a snippet (代码片段).
+    - Paste it.
+    - **Rename variables immediately**. If the example uses `const myData`, change it to `const userProfile` (or whatever your real data is). This forces you to read and understand it.
+
+### 6.4 Step 4: "Console Driven Development" (Test Small Steps) `console.log`
+
+Don't write 50 lines of code and press "Run". You will have 10 errors and panic.
+
+Write **one specific logic**, then `console.log` it.
+
+**Example**:
+
+```typescript
+const url = "http://example.com/audio.mp3";
+
+// Step A: Just check if logic works
+const isAudio = url.endsWith('.mp3');
+console.log('👉 Is this audio?', isAudio);  // Run this! See "true" in terminal.
+
+// Step B: Now wrap it in "if"
+if (isAudio) {
+    console.log('👉 Planning to play...'); // Run this!
+    // await playSound(url);  // Add the real complex code LAST
+}
+```
+
+### 6.5 Summary: From "Beginner" to "Builder"
+
+| Beginner Mindset | Senior/Builder Mindset |
+| :--- | :--- |
+| "I must memorize all functions." | "I can Google any function if I know **what** I want." |
+| "I stare at a blank screen." | "I write Pseudocode comments first." |
+| "I write the whole function at once." | "I write one line, log it, verify it, then next line." |
+| "I don't know API naming." | "I let VS Code autocomplete (`Ctrl+Space`) show me options." |
+
+> **Homework**: Next time you are stuck, write comments like `// Step 1: Get data`, `// Step 2: Filter data`. Then just fill in the code under each comment. It makes coding 10x less scary!
+
+---
+
+## Part 7: AI-Assisted Engineering (Don't Be a Copy-Paster) 🤖
+
+> **User Question**: "I have ChatGPT/Claude. Can I just ask it to write the code? How do I use AI to learn faster without becoming 'useless' without it?"
+
+**The Trap**: If you ask AI "Fix this bug" and paste the result, you learn nothing. When the AI makes a mistake (and it will), you are dead stuck.
+
+**The Solution**: Treat AI as a **Senior Mentor**, not a **Ghostwriter**.
+
+### 7.1 The "Explain" Prompt (The Learning Booster) 🚀
+
+Instead of asking "Write this function", ask AI to **teach you**.
+
+- **Bad Prompt**: "Write a function to validation audio files."
+  - *Result*: You get code. You paste it. You don't understand it.
+- **Good Prompt (The "Junior" Prompt)**:
+    > "I need to validate audio files. I think I need to check file size and headers. **What concepts or Node.js APIs should I look at?** Don't write the full code yet, just point me in the right direction."
+  - *Result*: AI suggests `fs.stat` and `file-type` library. **YOU** write the code.
+
+### 7.2 The "Rubber Duck" Debugging Partner 🦆
+
+When you are stuck, use AI to **clarify your own thinking**.
+
+- **Prompt**:
+    > "I am debugging an audio bug. Here is my current understanding: The URL looks correct in logs, but the player throws error -11849. I suspect the file is corrupted. **Is there a flaw (缺陷) in my logic? What else could cause this specific error code?**"
+
+- **Why this works**: You are forcing yourself to articulate (清晰表达) the problem. AI then acts as a second pair of eyes to spot gaps in logic.
+
+### 7.3 The "Code Review" Request 🧐
+
+After you write your "Frankenstein" code (from Part 6), ask AI to review it.
+
+- **Prompt**:
+    > "I wrote this code to fix the cache issue. It works, but I feel it is messy. **Can you review it for potential edge cases (边缘情况) or performance issues? Explain WHY you suggest changes.**"
+
+- **Value**: You get immediate feedback on *your* code quality. This is how you grow from Junior to Senior fast.
+
+### 7.4 Summary: AI Interaction Rule
+
+| Don't Do This | Do This |
+| :--- | :--- |
+| "Fix this error: [Paste Log]" | "**Explain** what this error means and **why** it might happen in a React Native app." |
+| "Write a component for a ToDo list." | "I want to build a ToDo list. **Should I use `FlatList` or `ScrollView`? What are the pros and cons?**" |
+| "Refactor this code." | "Review my code. **Did I miss any TypeScript types?**" |
+
+> **Golden Rule**: **You must understand every line you commit.** If AI writes a line and you can't explain it to a 5-year-old, **delete it**. Ask AI to explain it again until you *do* understand.
