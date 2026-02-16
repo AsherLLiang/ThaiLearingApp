@@ -20,7 +20,7 @@ export const WordCard: React.FC<WordCardProps> = ({ vocabulary, autoPlay = false
         try {
             const url = await getVocabAudioUrl(vocabulary.audioPath || '', vocabulary.source);
             if (!url) return;
-            console.log('🔊 [WordCard] Playing:', url);
+
 
             // 配置音频模式（仅一次）
             if (!audioModeConfigured.current) {

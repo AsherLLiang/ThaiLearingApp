@@ -333,8 +333,17 @@ async function getTodayMemories(db, params) {
             .where({
               source: params.source
             })
+          if (userProgress && Array.isArray(userProgress.wordProgress)) {
+            const progressItem = userProgress.wordProgress.find(p => p.source === params.source);
+            if (progressItem && progressItem.lastVId) {
+              console.log(`[FastFetch] Using pointer vId > ${progressItem.lastVId} for ${params.source}`);
+              queryRef = queryRef.where({
+                vId: cmd.gt(progressItem.lastVId)
+              });
+            }
+          }
         }
-         // 确保今天学习的“新单词”里，不会包含那些“已经出现在复习列表里”的单词。
+        // 确保今天学习的“新单词”里，不会包含那些“已经出现在复习列表里”的单词。
         if (existingEntityIds.length > 0) {
           queryRef = queryRef
             .where({
@@ -345,8 +354,7 @@ async function getTodayMemories(db, params) {
 
 
         const newEntitiesResult = await queryRef
-          .orderBy('lessonNumber', 'asc')
-          .orderBy('_id', 'asc')
+          .orderBy('vId', 'asc') // ✅ 改用 vId 排序 (用户清洗后的顺序)
           .limit(Math.min(remainingSlots, MAX_GENERIC_DAILY_LIMIT))
           .get();
 
@@ -358,12 +366,33 @@ async function getTodayMemories(db, params) {
           ? newEntities.slice(0, MAX_NEW_LETTERS)
           : newEntities.slice(0, Math.min(remainingSlots, MAX_GENERIC_DAILY_LIMIT));
 
-      // 调用getOrCreateMemory函数，获取记忆任务
-      const memoryTasks = cappedNewEntities.map((entity) =>
-        getOrCreateMemory(db, userId, entityType, entity._id, false)
-      );
-      const memoryResults = await Promise.all(memoryTasks);
-      newMemories = memoryResults.filter(Boolean);
+      // ✅ 每一位新词，不再调用 getOrCreateMemory 写数据库
+      // 而是直接在内存里生成一个 "Virtual Memory Object"
+      const now = new Date().toISOString();
+      newMemories = cappedNewEntities.map((entity) => ({
+        _id: `temp_${entity.vId}`, // 临时ID，或者不给ID也可以，只要不报错
+        userId,
+        entityType,
+        entityId: entity.vId,
+
+        // SM-2 初始状态
+        masteryLevel: 0,
+        reviewStage: 0,
+        easinessFactor: 2.5,
+        intervalDays: 0,
+
+        // 计数器
+        correctCount: 0,
+        wrongCount: 0,
+        streakCorrect: 0,
+
+        // 时间
+        createdAt: now,
+        updatedAt: now,
+
+        // 关键标识
+        isNew: true
+      }));
     }
     /**
      * 第四层：数据富化 (Data Enrichment - 也是 map/filter 所在层)

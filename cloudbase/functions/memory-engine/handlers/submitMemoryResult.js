@@ -23,7 +23,7 @@
 'use strict';
 
 const { createResponse } = require('../utils/response');
-const { updateMemoryAfterReview } = require('../utils/memoryEngine');
+const { updateMemoryAfterReview, updateUserWordProgress } = require('../utils/memoryEngine');
 
 const MAX_RESULTS = 30;
 const BATCH_SIZE = 5;
@@ -33,8 +33,10 @@ const BATCH_SIZE = 5;
  * @param {Object} params - 请求参数（来自 index.js 中的 data）
  */
 async function submitMemoryResult(db, params) {
+  console.log('[submitMemoryResult] params:', params);
   const start = Date.now();
-  const { userId, entityType, entityId, quality, isSkipped, results } = params || {};
+  const { userId, entityType, entityId, quality, isSkipped, results } = params || {}; //Destructuring assignment
+                                                                                      //receive parameters from the client
 
   // 1. 基本校验：必须有 userId
   if (!userId) {
@@ -51,6 +53,7 @@ async function submitMemoryResult(db, params) {
 
   // 2.1 新版：data.results 是数组
   if (Array.isArray(results) && results.length > 0) {
+    //check if the number of results is greater than MAX_RESULTS
     if (results.length > MAX_RESULTS) {
       return createResponse(
         false,
@@ -59,6 +62,8 @@ async function submitMemoryResult(db, params) {
         'RESULTS_TOO_MANY'
       );
     }
+    //==========submit start here==========
+    //map the results to items
     items = results.map((r) => ({
       entityType: r.entityType,
       entityId: r.entityId,
@@ -84,11 +89,12 @@ async function submitMemoryResult(db, params) {
 
     // 3. 分批并发更新记忆状态（防止超时）
     for (let i = 0; i < items.length; i += BATCH_SIZE) {
+      //slice the items array into batches
       const batch = items.slice(i, i + BATCH_SIZE);
-
+      //map the batch to batchResults
       const batchResults = await Promise.all(
         batch.map(async (item) => {
-          const { entityType, entityId, quality, isSkipped } = item;
+          const { entityType, entityId, quality, isSkipped, vId, source } = item;
 
           // 防御性校验，避免 results 里混入空对象
           if (!entityType || !entityId) return null;
@@ -101,15 +107,20 @@ async function submitMemoryResult(db, params) {
             entityType,
             entityId,
             quality,
-            isSkipped
+            isSkipped,
+            vId
           );
+          if (userId && source && vId) {
+            await updateUserWordProgress(db, userId, source, vId);
+          }
 
           return {
             entityType,
             entityId,
             quality,
             isSkipped,
-            memoryState
+            memoryState,
+            vId
           };
         })
       );

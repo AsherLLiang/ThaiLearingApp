@@ -2,17 +2,20 @@
 
 export interface MemoryStatus {
   userId: string;
-  entityType: 'letter' | 'word' | 'sentence';
+  entityType: 'word' | 'sentence' | 'article';
   entityId: string;
+  vId?: number; // 词汇ID(可选)
   masteryLevel: number;
   reviewStage: number;
   easinessFactor: number;
   intervalDays: number;
+  lastReviewAt: string;
   nextReviewAt: string;
   correctCount: number;
   wrongCount: number;
   streakCorrect: number;
-  isLocked: boolean;
+  updatedAt: string;
+  isSkipped: boolean;
 }
 
 export interface UnlockInfo {

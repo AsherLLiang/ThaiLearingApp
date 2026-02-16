@@ -6,6 +6,7 @@
  */
 export interface Vocabulary {
     _id: string;
+    vId: number;                 // 单词的实际顺序 
     vocabularyId: string;        // 如 "BaseThai_1_218"
     thaiWord: string;            // 泰语单词
     pronunciation: string;       // 发音

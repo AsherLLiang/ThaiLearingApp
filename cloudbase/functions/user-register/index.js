@@ -86,10 +86,10 @@ exports.main = async (event, context) => {
       data: {
         userId,
         letterCompleted: false,
-        debugSkipLetter: false,
         letterProgress: 0.0,
-        wordProgress: 0.0,
-        sentenceProgress: 0.0,
+        wordProgress: [],
+        sentenceProgress: [],
+        articleProgress: [],
         totalStudyDays: 0,
         streakDays: 0,
         lastStudyDate: null,
