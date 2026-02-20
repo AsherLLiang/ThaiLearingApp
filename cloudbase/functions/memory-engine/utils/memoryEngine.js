@@ -25,7 +25,7 @@ async function createMemoryRecord(db, userId, entityType, entityId, vId, isLocke
     }
 
     const now = new Date();
-    const nextReviewAt = isLocked ? null : new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString();
+    const nextReviewDate = isLocked ? null : now.getTime() + 24 * 60 * 60 * 1000;
 
     const memoryRecord = {
         userId,               // 用户ID
@@ -33,11 +33,11 @@ async function createMemoryRecord(db, userId, entityType, entityId, vId, isLocke
         entityId,             // 实体ID
         vId,                  // 词汇ID(可选)
         masteryLevel: 0.0,    // 掌握度
-        reviewStage: 0,       // 0: 初始状态，1: 已复习
+        repetition: 0,        // 0: 初始状态，1: 已复习
         easinessFactor: 2.5,  // 易度因子,SM-2 算法的标准初始难度（2.5表示中等难度）
-        intervalDays: 1,      // 间隔天数
+        interval: 1,          // 间隔天数
         lastReviewAt: null,   // 上次复习时间
-        nextReviewAt,         // 下次复习时间
+        nextReviewDate,       // 下次复习时间 (数字)
         correctCount: 0,      // 正确次数
         wrongCount: 0,        // 错误次数
         streakCorrect: 0,     // 连续正确次数
@@ -48,7 +48,7 @@ async function createMemoryRecord(db, userId, entityType, entityId, vId, isLocke
 
     try {
         // 数据库写入记忆状态到 memory_status 集合
-        const result = await db.collection('memory_status').add(memoryRecord);// 入记忆状态到 memory_status 集合
+        const result = await db.collection('memory_status').add({ data: memoryRecord });// 入记忆状态到 memory_status 集合
 
         console.log('[createMemoryRecord] 创建成功:', { userId, entityType, entityId });
 
@@ -85,43 +85,43 @@ async function createMemoryRecord(db, userId, entityType, entityId, vId, isLocke
  */
 async function updateUserWordProgress(db, userId, source, vId) {
     if (!source || !vId) return;
-    const cmd = db.command;
     const progressRes = await db.collection('user_progress').where({ userId }).get();
-    
+
     if (progressRes.data.length === 0) return; // Should not happen
     const progressDoc = progressRes.data[0];
     const progressId = progressDoc._id;
-    
-    // 1. Get current array
-    let wordProgress = progressDoc.wordProgress || [];
-    if (!Array.isArray(wordProgress)) wordProgress = []; // Safe fallback
-    // 2. Find index
-    const index = wordProgress.findIndex(item => item.source === source);
-    let needUpdate = false;
-    
-    if (index === -1) {
-        // New source
-        wordProgress.push({
-            source,
-            lastVId: vId,
-            updatedAt: new Date().toISOString()
+
+    // 1. 获取当前 wordProgress，统一转为以 source 为 key 的 Map 对象
+    let wordProgress = progressDoc.wordProgress || {};
+
+    // 兼容迁移：旧数据可能是数组格式，自动转为 Map
+    if (Array.isArray(wordProgress)) {
+        const converted = {};
+        wordProgress.forEach(item => {
+            if (item.source) {
+                converted[item.source] = { lastVId: item.lastVId, updatedAt: item.updatedAt };
+            }
         });
-        needUpdate = true;
-    } else {
-        // Existing source, update if vId is larger
-        if (vId > (wordProgress[index].lastVId || 0)) {
-            wordProgress[index].lastVId = vId;
-            wordProgress[index].updatedAt = new Date().toISOString();
-            needUpdate = true;
-        }
+        wordProgress = converted;
     }
-    // 3. Update DB
-    if (needUpdate) {
-        await db.collection('user_progress').doc(progressId).update({
-            wordProgress
-        });
-        console.log(`[Progress] Updated ${source} -> vId: ${vId}`);
+
+    // 2. 只在 vId 更大时更新
+    const existing = wordProgress[source];
+    if (existing && vId <= (existing.lastVId || 0)) {
+        return; // 无需更新
     }
+
+    // 3. 写入新值
+    wordProgress[source] = {
+        lastVId: vId,
+        updatedAt: new Date().toISOString()
+    };
+
+    // 4. 使用 db.command.set 强制整体替换，防止 CloudBase 将对象拆解为数字 key
+    await db.collection('user_progress').doc(progressId).update({
+        data: { wordProgress: db.command.set(wordProgress) }
+    });
+    console.log(`[Progress] Updated ${source} -> vId: ${vId}`);
 }
 
 /**
@@ -196,11 +196,11 @@ async function updateMemoryAfterReview(db, userId, entityType, entityId, quality
             console.log('步骤2 (SKIP): 处理跳过逻辑');
             newMasteryLevel = 1.0;
             // 设置为 100 年后，相当于永久移出复习队列
-            nextReviewAt = new Date(now.getTime() + 100 * 365 * 24 * 60 * 60 * 1000);
+            const nextReviewDate = now.getTime() + 100 * 365 * 24 * 60 * 60 * 1000;
 
             updateData = {
                 masteryLevel: newMasteryLevel,
-                nextReviewAt: nextReviewAt.toISOString(),
+                nextReviewDate: nextReviewDate,
                 updatedAt: now.toISOString(),
                 isSkipped: true,
                 // 跳过不影响 correct/wrong 计数，也不影响 streak
@@ -215,18 +215,21 @@ async function updateMemoryAfterReview(db, userId, entityType, entityId, quality
             console.log('SM-2质量:', sm2Quality);
 
             // 3. 计算新的SM-2参数
+            const oldInterval = memory.interval !== undefined ? memory.interval : (memory.intervalDays || 1);
+            const oldRepetition = memory.repetition !== undefined ? memory.repetition : (memory.reviewStage || 0);
+
             console.log('步骤3: 调用 calculateSM2');
             console.log('调用参数:', {
                 quality,
-                intervalDays: memory.intervalDays,
+                interval: oldInterval,
                 easinessFactor: memory.easinessFactor,
-                reviewStage: memory.reviewStage
+                repetition: oldRepetition
             });
             sm2Result = calculateSM2(
                 quality,
-                memory.intervalDays,
+                oldInterval,
                 memory.easinessFactor,
-                memory.reviewStage
+                oldRepetition
             );
 
             console.log('SM-2结果:', JSON.stringify(sm2Result));
@@ -251,23 +254,24 @@ async function updateMemoryAfterReview(db, userId, entityType, entityId, quality
 
             // 6. 计算下次复习时间
             console.log('步骤6: 计算下次复习时间');
-            nextReviewAt = new Date(now.getTime() + sm2Result.interval * 24 * 60 * 60 * 1000);
-            console.log('下次复习时间:', nextReviewAt);
+            const nextReviewDate = now.getTime() + sm2Result.interval * 24 * 60 * 60 * 1000;
+            console.log('下次复习时间:', nextReviewDate);
 
             // 7. 准备更新数据
             updateData = {
                 isSkipped: false,
                 masteryLevel: newMasteryLevel,
-                reviewStage: sm2Result.repetitions,
+                repetition: sm2Result.repetitions,
                 easinessFactor: sm2Result.easinessFactor,
-                intervalDays: sm2Result.interval,
+                interval: sm2Result.interval,
                 lastReviewAt: now.toISOString(),
-                nextReviewAt: nextReviewAt.toISOString(),
+                nextReviewDate: nextReviewDate,
                 correctCount: newCorrectCount,
                 wrongCount: newWrongCount,
                 streakCorrect: newStreakCorrect,
                 updatedAt: now.toISOString()
             };
+            console.log('更新数据对象:', 'correctCount:', updateData.correctCount, 'nextReviewDate:', updateData.nextReviewDate);
         }
 
         console.log('步骤7: 准备更新数据库');
@@ -301,10 +305,10 @@ async function updateMemoryAfterReview(db, userId, entityType, entityId, quality
             entityId,
             entityType,
             masteryLevel: newMasteryLevel,
-            reviewStage: sm2Result.repetitions || memory.reviewStage,
+            repetition: sm2Result.repetitions || (memory.repetition !== undefined ? memory.repetition : memory.reviewStage),
             easinessFactor: sm2Result.easinessFactor || memory.easinessFactor,
-            intervalDays: sm2Result.interval || memory.intervalDays,
-            nextReviewAt: nextReviewAt.toISOString(),
+            interval: sm2Result.interval || (memory.interval !== undefined ? memory.interval : memory.intervalDays),
+            nextReviewDate: updateData.nextReviewDate,
             correctCount: newCorrectCount,
             wrongCount: newWrongCount,
             streakCorrect: newStreakCorrect,
@@ -334,9 +338,9 @@ async function getTodayReviewEntities(db, userId, entityType, limit = 20) {
             userId,
             entityType,
             isLocked: false,
-            nextReviewAt: db.command.lte(now)
+            nextReviewDate: db.command.lte(now.getTime())
         })
-        .orderBy('nextReviewAt', 'asc')
+        .orderBy('nextReviewDate', 'asc')
         .limit(limit)
         .get();
 
@@ -358,7 +362,7 @@ async function initUserProgress(db, userId) {
         letterCompleted: false,
         letterProgress: 0.0,
         wordUnlocked: false,
-        wordProgress: [],
+        wordProgress: {},  // Map 结构，以 source 为 key，如 { "BaseThai_1": { lastVId: 5, updatedAt: ... } }
         sentenceUnlocked: false,
         sentenceProgress: [],
         articleUnlocked: false,
@@ -371,7 +375,7 @@ async function initUserProgress(db, userId) {
         updatedAt: now
     };
 
-    await db.collection('user_progress').add(progressRecord);
+    await db.collection('user_progress').add({ data: progressRecord });
     return progressRecord;
 }
 

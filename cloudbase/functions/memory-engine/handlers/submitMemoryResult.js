@@ -35,7 +35,7 @@ const BATCH_SIZE = 5;
 async function submitMemoryResult(db, params) {
   console.log('[submitMemoryResult] params:', params);
   const start = Date.now();
-  const { userId, entityType, entityId, quality, isSkipped, results } = params || {}; //Destructuring assignment
+  const { userId, entityType, entityId, quality, isSkipped, results, source, vId } = params || {}; //Destructuring assignment
                                                                                       //receive parameters from the client
 
   // 1. 基本校验：必须有 userId
@@ -68,12 +68,14 @@ async function submitMemoryResult(db, params) {
       entityType: r.entityType,
       entityId: r.entityId,
       quality: r.quality,
-      isSkipped: r.isSkipped
+      isSkipped: r.isSkipped,
+      source: r.source,
+      vId: r.vId
     }));
   }
   // 2.2 兼容旧版：单条参数
   else if (entityType && entityId && (quality || isSkipped)) {
-    items = [{ entityType, entityId, quality, isSkipped }];
+    items = [{ entityType, entityId, quality, isSkipped, source, vId }];
   } else {
     // 两种格式都不满足
     return createResponse(

@@ -38,11 +38,11 @@ import {
 
 export interface MemoryStatus {
   masteryLevel: number;
-  reviewStage: number;
+  repetition: number;
   correctCount: number;
   wrongCount: number;
   streakCorrect: number;
-  nextReviewAt: string;
+  nextReviewDate: number;
   isNew: boolean;
 }
 
@@ -412,7 +412,7 @@ export const useAlphabetStore = create<AlphabetStoreState>()(
               letterId: item.alphabetId,
               thaiChar: item.thaiChar,
               isNew: item.memoryState?.isNew ?? null,
-              reviewStage: item.memoryState?.reviewStage ?? null,
+              repetition: item.memoryState?.repetition ?? null,
               source: item.source,
               round: item.round,
             }))

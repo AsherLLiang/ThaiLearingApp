@@ -25,7 +25,7 @@ interface VocabularyStore {
     currentIndex: number;
     totalSessionWords: number;
     completedCount: number;
-    pendingResults: Array<{ userId: string, entityId: string, entityType: string, quality: number }>;
+    pendingResults: Array<{ userId: string, entityId: string, entityType: string, quality: number, vId?: number, source?: string }>;
     skippedIds: string[]; // Track skipped word IDs
     initSession: (userId: string, options?: { limit?: number, source?: string }) => Promise<void>;
     startCourse: (source: string, limit?: number, moduleType?: ModuleType) => Promise<void>;
@@ -35,6 +35,7 @@ interface VocabularyStore {
     submitSkippedWords: () => Promise<void>;
     next: () => void;
     finishSession: () => void;
+    resetSession: () => void;
     flushResults: () => Promise<void>;
 }
 
@@ -59,6 +60,9 @@ export const useVocabularyStore = create<VocabularyStore>()(
             completedCount: 0,
             pendingResults: [],
             skippedIds: [],
+            //Above are the variables that are used to store the state of the vocabulary store
+
+            //================= 下面是函数=================
             initSession: async (userId: string, options: { limit?: number, source?: string } = {}) => {
                 try {
                     set({ phase: VocabSessionPhase.LOADING, pendingResults: [], skippedIds: [] }); // Clear pending & skipped
@@ -194,7 +198,9 @@ export const useVocabularyStore = create<VocabularyStore>()(
                             userId,
                             entityId: currentItem.id,
                             entityType: 'word',
-                            quality: finalQuality
+                            quality: finalQuality,
+                            vId: currentItem.entity.vId,
+                            source: currentItem.entity.source
                         };
                         set({ pendingResults: [...pendingResults, payload] });
                     }
@@ -319,7 +325,15 @@ export const useVocabularyStore = create<VocabularyStore>()(
                 console.log(`🚀 开始课程：${source}，限制为${limit}`);
                 const userId = useUserStore.getState().currentUser?.userId;
                 if (!userId) return;
-                set({ currentCourseSource: source, currentIndex: 0, queue: [], pendingResults: [] });
+                set(
+                    {
+                        currentCourseSource: source,
+                        currentIndex: 0,
+                        queue: [],
+                        pendingResults: [],
+                        phase: VocabSessionPhase.IDLE
+                    }
+                );//Reset state of vocabulary session
 
                 if (moduleType === 'letter') {
                     set({ phase: VocabSessionPhase.IDLE });
@@ -331,6 +345,9 @@ export const useVocabularyStore = create<VocabularyStore>()(
 
             finishSession: () => {
                 set({ phase: VocabSessionPhase.COMPLETED });
+            },
+            resetSession: () => {
+                set({ phase: VocabSessionPhase.IDLE });
             }
         }),
         {

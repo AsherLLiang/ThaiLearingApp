@@ -255,9 +255,10 @@ async function getTodayMemories(db, params) {
             const mem = await getOrCreateMemory(db, userId, entityType, letter._id, false);
             if (mem) {
               // 浅拷贝避免副作用
+              const rep = mem.repetition !== undefined ? mem.repetition : (mem.reviewStage || 0);
               const patched = {
                 ...mem,
-                reviewStage: Math.max(mem.reviewStage || 0, 1)
+                repetition: Math.max(rep, 1)
               };
               explicitPrevMemories.push(patched);
             }
@@ -333,8 +334,19 @@ async function getTodayMemories(db, params) {
             .where({
               source: params.source
             })
-          if (userProgress && Array.isArray(userProgress.wordProgress)) {
-            const progressItem = userProgress.wordProgress.find(p => p.source === params.source);
+          if (userProgress && userProgress.wordProgress && params.source) {
+            const wp = userProgress.wordProgress;
+            let progressItem;
+
+            // 优先：Map 格式（source 为 key），如 { "BaseThai_1": { lastVId: 5 } }
+            if (!Array.isArray(wp) && typeof wp === 'object') {
+              progressItem = wp[params.source];
+            }
+            // 兼容旧数组格式：[{ source: "BaseThai_1", lastVId: 5 }]
+            else if (Array.isArray(wp)) {
+              progressItem = wp.find(p => p.source === params.source);
+            }
+
             if (progressItem && progressItem.lastVId) {
               console.log(`[FastFetch] Using pointer vId > ${progressItem.lastVId} for ${params.source}`);
               queryRef = queryRef.where({
@@ -373,13 +385,14 @@ async function getTodayMemories(db, params) {
         _id: `temp_${entity.vId}`, // 临时ID，或者不给ID也可以，只要不报错
         userId,
         entityType,
-        entityId: entity.vId,
+        entityId: entity._id,
+        vId: entity.vId,
 
         // SM-2 初始状态
         masteryLevel: 0,
-        reviewStage: 0,
+        repetition: 0,
         easinessFactor: 2.5,
-        intervalDays: 0,
+        interval: 0,
 
         // 计数器
         correctCount: 0,
@@ -457,12 +470,12 @@ async function getTodayMemories(db, params) {
         ...entity,
         memoryState: {
           masteryLevel: memory.masteryLevel,     // 熟练度
-          reviewStage: memory.reviewStage,       // 复习阶段
+          repetition: memory.repetition !== undefined ? memory.repetition : memory.reviewStage, // 复习阶段
           correctCount: memory.correctCount,     // 正确次数
           wrongCount: memory.wrongCount,         // 错误次数
           streakCorrect: memory.streakCorrect,   // 连续正确次数
-          nextReviewAt: memory.nextReviewAt,     // 下次复习时间
-          isNew: memory.reviewStage === 0        // 是否是新内容
+          nextReviewDate: memory.nextReviewDate !== undefined ? memory.nextReviewDate : memory.nextReviewAt, // 下次复习时间
+          isNew: (memory.repetition !== undefined ? memory.repetition : memory.reviewStage) === 0 // 是否是新内容
         }
       };
     }).filter(Boolean); // 过滤掉 null 值

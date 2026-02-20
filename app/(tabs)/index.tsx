@@ -143,7 +143,7 @@ export default function HomeScreen() {
 
         <View style={styles.contentContainer}>
           {/* Floating Bubbles */}
-          <FloatingBubbles reviews={reviews} onOpenReview={handleBubbleClick} />
+          {/* <FloatingBubbles reviews={reviews} onOpenReview={handleBubbleClick} /> */}
 
           {/* Hero Progress Card */}
           <View>

@@ -6,11 +6,11 @@ export interface MemoryStatus {
   entityId: string;
   vId?: number; // 词汇ID(可选)
   masteryLevel: number;
-  reviewStage: number;
+  repetition: number;
   easinessFactor: number;
-  intervalDays: number;
+  interval: number;
   lastReviewAt: string;
-  nextReviewAt: string;
+  nextReviewDate: number;
   correctCount: number;
   wrongCount: number;
   streakCorrect: number;

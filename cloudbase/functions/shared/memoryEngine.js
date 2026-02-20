@@ -19,18 +19,18 @@ async function createMemoryRecord(db, userId, entityType, entityId, isLocked = f
     }
 
     const now = new Date();
-    const nextReviewAt = isLocked ? null : new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString();
+    const nextReviewDate = isLocked ? null : now.getTime() + 24 * 60 * 60 * 1000;
 
     const memoryRecord = {
         userId,
         entityType,
         entityId,
         masteryLevel: 0.0,
-        reviewStage: 0,
+        repetition: 0,
         easinessFactor: 2.5,
-        intervalDays: 1,
+        interval: 1,
         lastReviewAt: null,
-        nextReviewAt,
+        nextReviewDate,
         correctCount: 0,
         wrongCount: 0,
         streakCorrect: 0,
@@ -41,7 +41,7 @@ async function createMemoryRecord(db, userId, entityType, entityId, isLocked = f
 
     try {
         // 尝试插入
-        const result = await db.collection('memory_status').add(memoryRecord);
+        const result = await db.collection('memory_status').add({ data: memoryRecord });
 
         console.log('[createMemoryRecord] 创建成功:', { userId, entityType, entityId });
 
@@ -117,19 +117,22 @@ async function updateMemoryAfterReview(db, userId, entityType, entityId, quality
         console.log('SM-2质量:', sm2Quality);
 
         // 3. 计算新的SM-2参数
+        const oldInterval = memory.interval !== undefined ? memory.interval : (memory.intervalDays || 1);
+        const oldRepetition = memory.repetition !== undefined ? memory.repetition : (memory.reviewStage || 0);
+
         console.log('步骤3: 调用 calculateSM2');
         console.log('调用参数:', {
             quality,
-            intervalDays: memory.intervalDays,
+            interval: oldInterval,
             easinessFactor: memory.easinessFactor,
-            reviewStage: memory.reviewStage
+            repetition: oldRepetition
         });
 
         const sm2Result = calculateSM2(
             quality,
-            memory.intervalDays,
+            oldInterval,
             memory.easinessFactor,
-            memory.reviewStage
+            oldRepetition
         );
 
         console.log('SM-2结果:', JSON.stringify(sm2Result));
@@ -155,18 +158,18 @@ async function updateMemoryAfterReview(db, userId, entityType, entityId, quality
         // 6. 计算下次复习时间
         console.log('步骤6: 计算下次复习时间');
         const now = new Date();
-        const nextReviewAt = new Date(now.getTime() + sm2Result.interval * 24 * 60 * 60 * 1000);
-        console.log('下次复习时间:', nextReviewAt);
+        const nextReviewDate = now.getTime() + sm2Result.interval * 24 * 60 * 60 * 1000;
+        console.log('下次复习时间:', nextReviewDate);
 
         // 7. 准备更新数据
         console.log('步骤7: 准备更新数据库');
         const updateData = {
             masteryLevel: newMasteryLevel,
-            reviewStage: sm2Result.repetitions,
+            repetition: sm2Result.repetitions,
             easinessFactor: sm2Result.easinessFactor,
-            intervalDays: sm2Result.interval,
+            interval: sm2Result.interval,
             lastReviewAt: now.toISOString(),
-            nextReviewAt: nextReviewAt.toISOString(),
+            nextReviewDate: nextReviewDate,
             correctCount: newCorrectCount,
             wrongCount: newWrongCount,
             streakCorrect: newStreakCorrect,
@@ -200,10 +203,10 @@ async function updateMemoryAfterReview(db, userId, entityType, entityId, quality
             entityId,
             entityType,
             masteryLevel: newMasteryLevel,
-            reviewStage: sm2Result.repetitions,
+            repetition: sm2Result.repetitions,
             easinessFactor: sm2Result.easinessFactor,
-            intervalDays: sm2Result.interval,
-            nextReviewAt: nextReviewAt.toISOString(),
+            interval: sm2Result.interval,
+            nextReviewDate: nextReviewDate,
             correctCount: newCorrectCount,
             wrongCount: newWrongCount,
             streakCorrect: newStreakCorrect
@@ -227,9 +230,9 @@ async function getTodayReviewEntities(db, userId, entityType, limit = 20) {
             userId,
             entityType,
             isLocked: false,
-            nextReviewAt: db.command.lte(now)
+            nextReviewDate: db.command.lte(now.getTime())
         })
-        .orderBy('nextReviewAt', 'asc')
+        .orderBy('nextReviewDate', 'asc')
         .limit(limit)
         .get();
 
@@ -348,7 +351,7 @@ async function initUserProgress(db, userId) {
         updatedAt: now
     };
 
-    await db.collection('user_progress').add(progressRecord);
+    await db.collection('user_progress').add({ data: progressRecord });
     return progressRecord;
 }
 

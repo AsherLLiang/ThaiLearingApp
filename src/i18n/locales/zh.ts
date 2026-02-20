@@ -12,9 +12,10 @@ export default {
     all: '全部',
   },
   auth: {
-    title: '泰Easy',
+    title: '试试泰语',
     login: '登录',
     register: '注册',
+    registerSuccess: '注册成功',
     logout: '退出登录',
     email: '邮箱',
     password: '密码',

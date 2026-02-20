@@ -98,7 +98,7 @@ export const VocabMultipleQuiz: React.FC<VocabMultipleQuizProps> = ({
         }
 
         setSelectedOptionId(option.id);
-        console.log('[VocabQuiz] Option selected:', { wordId: vocabulary._id, optionId: option.id, isCorrect: option.isCorrect });
+        console.log('[VocabQuiz] Option selected:', { word: vocabulary.thaiWord, optionId: option.id, isCorrect: option.isCorrect });
 
         if (option.isCorrect) {
             // Correct handling
