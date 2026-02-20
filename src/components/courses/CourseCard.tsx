@@ -27,14 +27,16 @@ interface CourseCardProps {
     isLocked?: boolean; // Added: Locked state prop
 }
 
-export function CourseCard({
-    course,
-    isCurrent,
-    onStart,
-    onCardPress,
-    progress,
-    isLocked = false, // Default to unlocked
-}: CourseCardProps) {
+export function CourseCard(
+    {
+        course,
+        isCurrent,
+        onStart,
+        onCardPress,
+        progress,
+        isLocked = false, // Default to unlocked
+    }: CourseCardProps
+) {
     const { t } = useTranslation();
 
     const progressPercent = progress && progress.total > 0
@@ -100,10 +102,11 @@ export function CourseCard({
                         onPress={(e) => {
                             if (isLocked) return;
                             e.stopPropagation();
-                            onStart();
+                            onStart(); // <--- This calls the handler from courses.tsx
                         }}
                         disabled={isLocked}
                     >
+
                         <Text style={[
                             styles.startBtnText,
                             isCurrent && styles.activeStartBtnText,
@@ -114,6 +117,7 @@ export function CourseCard({
                                 : (isCurrent ? t('courses.continue', '继续学习') : t('courses.startBtnText', '开始学习'))
                             }
                         </Text>
+
                     </Pressable>
                 </View>
             </View>

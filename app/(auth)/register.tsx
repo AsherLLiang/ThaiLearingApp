@@ -20,7 +20,7 @@ import { useUserStore } from '@/src/stores/userStore';
 import { Colors } from '@/src/constants/colors';
 import { Typography } from '@/src/constants/typography';
 import { validateRegistrationForm } from '@/src/utils/validation';
-
+import { AppLogo } from '@/src/components/common/AppLogo';
 
 export default function RegisterScreen() {
   const { t } = useTranslation();
@@ -63,7 +63,7 @@ export default function RegisterScreen() {
       password,
     })
 
-     if (success) {
+    if (success) {
       Alert.alert(
         t('auth.registerSuccess'),
         'Your account has been created successfully!',
@@ -100,7 +100,7 @@ export default function RegisterScreen() {
             entering={FadeInDown.delay(100).duration(500)}
             style={styles.headerSection}
           >
-            <Text style={styles.logo}>ชา</Text>
+            <AppLogo />
             <Text style={styles.title}>{t('auth.title')}</Text>
             <Text style={styles.subtitle}>{t('auth.register')}</Text>
           </Animated.View>
@@ -206,12 +206,6 @@ const styles = StyleSheet.create({
   headerSection: {
     alignItems: 'center',
     marginBottom: 48,
-  },
-  logo: {
-    fontFamily: Typography.sarabunBold,
-    fontSize: 72,
-    color: Colors.thaiGold,
-    marginBottom: 8,
   },
   title: {
     fontFamily: Typography.playfairBold,

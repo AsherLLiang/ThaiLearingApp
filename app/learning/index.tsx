@@ -94,6 +94,14 @@ function WordSession() {
         handleAnswer
     } = useVocabularyLearningEngine();
 
+    useEffect(() => {
+        return () => {
+            if (useVocabularyStore.getState().phase === VocabSessionPhase.COMPLETED) {
+                useVocabularyStore.getState().resetSession();
+            }
+        };
+    }, []);
+
     // 处理退出
     const handleClose = () => {
         Alert.alert(

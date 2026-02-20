@@ -12,9 +12,10 @@ export default {
     all: 'All',
   },
   auth: {
-    title: 'ThaiEasy',
+    title: 'TRY THAI',
     login: 'Login',
     register: 'Register',
+    registerSuccess: 'Register successful',
     logout: 'Logout',
     email: 'Email',
     password: 'Password',

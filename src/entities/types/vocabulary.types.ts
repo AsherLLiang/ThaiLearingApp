@@ -187,15 +187,14 @@ export const VOCABULARY_CONFIG = {
  * 后端响应返回的数据：单词
  */
 export interface VocabularyResponse {
-    items: Array<Vocabulary&{
+    items: Array<Vocabulary & {
         memoryState: {
             masteryLevel: number;    // 0-5? or enum
-            repetitions: number;    // 记忆次数
-            reviewStage: number;    // 复习阶段
+            repetition: number;      // 记忆阶段
             correctCount: number;   // 正确次数
             wrongCount: number;     // 错误次数
             streakCorrect: number;  // 连续正确次数
-            nextReviewAt: string;   // 下次复习时间
+            nextReviewDate: number; // 下次复习时间戳
             isNew: boolean;          // Backend calculated field from getTodayMemories
         };
     }>;

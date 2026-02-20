@@ -10,6 +10,7 @@ import { LanguageSwitcher } from '@/src/components/common/LanguageSwitcher';
 import { useUserStore } from '@/src/stores/userStore';
 import { Colors } from '@/src/constants/colors';
 import { Typography } from '@/src/constants/typography';
+import { AppLogo } from '@/src/components/common/AppLogo';
 
 export default function LoginScreen() {
   const { t } = useTranslation();
@@ -76,8 +77,8 @@ export default function LoginScreen() {
         <View style={styles.content}>
           {/* Logo & Title */}
           <Animated.View entering={FadeInDown.delay(100).duration(500)} style={styles.headerSection}>
-            <Text style={styles.logo}>ชา</Text>
-            <Text style={styles.title}>Thai Learning</Text>
+            <AppLogo />
+            <Text style={styles.title}>{t('auth.title')}</Text>
             <Text style={styles.subtitle}>{t('auth.login')}</Text>
           </Animated.View>
 
@@ -162,12 +163,6 @@ const styles = StyleSheet.create({
   headerSection: {
     alignItems: 'center',
     marginBottom: 48,
-  },
-  logo: {
-    fontFamily: Typography.sarabunBold,
-    fontSize: 72,
-    color: Colors.thaiGold,
-    marginBottom: 8,
   },
   title: {
     fontFamily: Typography.playfairBold,
