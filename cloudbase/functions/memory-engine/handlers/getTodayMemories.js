@@ -326,52 +326,50 @@ async function getTodayMemories(db, params) {
       //===============================单词模块获取逻辑====================================
       // 其他模块或未指定 lessonId：沿用原逻辑，按剩余名额和 lessonNumber 顺序获取
       else {
-        let queryRef = query; // query 指向 db.collection('vocabulary')
         const cmd = db.command;
 
+        // 构建单词模块查询条件（必须合并到一个对象，CloudBase 链式 .where() 后者覆盖前者）
+        const whereCondition = {};
+
+        // 1. source 过滤（必须在同一词书内取词）
         if (entityType === 'word' && params.source) {
-          queryRef = queryRef
-            .where({
-              source: params.source
-            })
+          whereCondition.source = params.source;
+
+          // 2. vId 指针过滤（读取 user_progress.wordProgress 中存储的上次学习位置）
           if (userProgress && userProgress.wordProgress && params.source) {
             const wp = userProgress.wordProgress;
             let progressItem;
 
-            // 优先：Map 格式（source 为 key），如 { "BaseThai_1": { lastVId: 5 } }
+            // 优先 Map 格式：{ "BaseThai_1": { lastVId: 10 } }
             if (!Array.isArray(wp) && typeof wp === 'object') {
               progressItem = wp[params.source];
             }
-            // 兼容旧数组格式：[{ source: "BaseThai_1", lastVId: 5 }]
+            // 兼容旧数组格式：[{ source: "BaseThai_1", lastVId: 10 }]
             else if (Array.isArray(wp)) {
               progressItem = wp.find(p => p.source === params.source);
             }
 
             if (progressItem && progressItem.lastVId) {
               console.log(`[FastFetch] Using pointer vId > ${progressItem.lastVId} for ${params.source}`);
-              queryRef = queryRef.where({
-                vId: cmd.gt(progressItem.lastVId)
-              });
+              whereCondition.vId = cmd.gt(progressItem.lastVId);
             }
           }
         }
-        // 确保今天学习的“新单词”里，不会包含那些“已经出现在复习列表里”的单词。
+
+        // 3. 排除已在复习队列中的词（避免新词与复习词重复）
         if (existingEntityIds.length > 0) {
-          queryRef = queryRef
-            .where({
-              _id: cmd.nin(existingEntityIds) //nin: not in ----- 不在（existingEntityIds）数组中的数据
-            });
+          whereCondition._id = cmd.nin(existingEntityIds);
         }
 
-
-
-        const newEntitiesResult = await queryRef
-          .orderBy('vId', 'asc') // ✅ 改用 vId 排序 (用户清洗后的顺序)
+        const newEntitiesResult = await query
+          .where(whereCondition)
+          .orderBy('vId', 'asc')
           .limit(Math.min(remainingSlots, MAX_GENERIC_DAILY_LIMIT))
           .get();
 
         newEntities = newEntitiesResult.data;
       }
+
 
       const cappedNewEntities =   // →→→→→ 限制新内容的数量
         entityType === 'letter'
