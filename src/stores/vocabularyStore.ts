@@ -27,6 +27,7 @@ interface VocabularyStore {
     completedCount: number;
     pendingResults: Array<{ userId: string, entityId: string, entityType: string, quality: number, vId?: number, source?: string }>;
     skippedIds: string[]; // Track skipped word IDs
+    sessionPool: SessionWord[]; // 原始完整词列表快照，不受 skipWord 影响，用于干扰项生成
     initSession: (userId: string, options?: { limit?: number, source?: string }) => Promise<void>;
     startCourse: (source: string, limit?: number, moduleType?: ModuleType) => Promise<void>;
     submitResult: (isCorrect: boolean, score?: number) => Promise<void>;
@@ -37,6 +38,7 @@ interface VocabularyStore {
     finishSession: () => void;
     resetSession: () => void;
     flushResults: () => Promise<void>;
+    clearForLogout: () => void; // 登出时完整清除所有状态（含持久化字段）
 }
 
 /**
@@ -60,6 +62,7 @@ export const useVocabularyStore = create<VocabularyStore>()(
             completedCount: 0,
             pendingResults: [],
             skippedIds: [],
+            sessionPool: [], // 原始词列表快照
             //Above are the variables that are used to store the state of the vocabulary store
 
             //================= 下面是函数=================
@@ -100,8 +103,8 @@ export const useVocabularyStore = create<VocabularyStore>()(
 
                         set({
                             queue,
+                            sessionPool: queue, // 保存原始快照，skipWord 不修改此字段
                             currentIndex: 0,
-                            // ⭐ 关键修复：进度条应基于单词数而非 queue 长度
                             totalSessionWords: result.data.summary?.total || result.data.items.length,
                             completedCount: 0,
                             phase: VocabSessionPhase.LEARNING,
@@ -246,22 +249,19 @@ export const useVocabularyStore = create<VocabularyStore>()(
                 // 2. Remove from queue (all instances of this word)
                 const newQueue = queue.filter(w => w.id !== id);
 
-                // Adjust currentIndex if necessary (usually not needed if we just render newQueue[currentIndex])
-                // But if we removed the *current* item, the next item slides into currentIndex position.
-                // If we were at the end, currentIndex might now be out of bounds.
-
                 set({ queue: newQueue });
 
                 // Check bounds
                 if (currentIndex >= newQueue.length) {
-                    // If queue is empty or we are at end, calling next() or finish check might be needed
-                    // But simplest is to just ensure we are safe.
-                    // The view renders queue[currentIndex].
                     if (newQueue.length === 0) {
+                        // 先跳转完成页，网络请求后台静默执行，不阻塞 UI
                         get().finishSession();
+                        get().submitSkippedWords().catch(e => console.error('\u274c submitSkippedWords failed:', e));
+                        get().flushResults().catch(e => console.error('\u274c flushResults failed:', e));
                     }
                 }
             },
+
             submitSkippedWords: async () => {
                 const { skippedIds } = get();
                 const userId = useUserStore.getState().currentUser?.userId;
@@ -295,9 +295,10 @@ export const useVocabularyStore = create<VocabularyStore>()(
                 if (currentIndex + 1 < queue.length) {
                     set({ currentIndex: currentIndex + 1 });
                 } else {
-                    // Queue Exhausted - Trigger Flush
-                    await get().flushResults();
+                    // 先跳转完成页，网络请求后台静默执行，不阻塞 UI
                     get().finishSession();
+                    get().submitSkippedWords().catch(e => console.error('\u274c submitSkippedWords failed:', e));
+                    get().flushResults().catch(e => console.error('\u274c flushResults failed:', e));
                 }
             },
             flushResults: async () => {
@@ -348,6 +349,21 @@ export const useVocabularyStore = create<VocabularyStore>()(
             },
             resetSession: () => {
                 set({ phase: VocabSessionPhase.IDLE });
+            },
+            // 登出时调用：完整清除所有状态，包含持久化字段 currentCourseSource
+            // 防止不同用户在同一设备上共享学习进度
+            clearForLogout: () => {
+                set({
+                    phase: VocabSessionPhase.IDLE,
+                    currentCourseSource: null,
+                    queue: [],
+                    sessionPool: [],
+                    currentIndex: 0,
+                    totalSessionWords: 0,
+                    completedCount: 0,
+                    pendingResults: [],
+                    skippedIds: [],
+                });
             }
         }),
         {

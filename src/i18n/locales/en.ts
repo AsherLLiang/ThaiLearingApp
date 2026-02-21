@@ -180,7 +180,7 @@ export default {
   alphabet: {
     title: 'Thai Alphabet Learning',
     level: 'Basic',
-    description: 'Learn 44 consonants and 32 vowels,掌握 standard pronunciation',
+    description: 'Learn 44 consonants and 32 vowels, mastered standard pronunciation',
     continue: 'Continue Learning',
     start: 'Start Learning',
     phase: {

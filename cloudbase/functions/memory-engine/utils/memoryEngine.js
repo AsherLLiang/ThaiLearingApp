@@ -41,6 +41,7 @@ async function createMemoryRecord(db, userId, entityType, entityId, vId, isLocke
         correctCount: 0,      // 正确次数
         wrongCount: 0,        // 错误次数
         streakCorrect: 0,     // 连续正确次数
+        isLocked: isLocked,   // 修复：必须显式写入，否则缺失字段导致 isLocked: false 查询无法匹配
         isSkipped: false,     // 是否跳过
         createdAt: now.toISOString(),
         updatedAt: now.toISOString()
@@ -332,13 +333,15 @@ async function updateMemoryAfterReview(db, userId, entityType, entityId, quality
  */
 async function getTodayReviewEntities(db, userId, entityType, limit = 20) {
     const now = new Date();
+    const cmd = db.command;
 
     const result = await db.collection('memory_status')
         .where({
             userId,
             entityType,
-            isLocked: false,
-            nextReviewDate: db.command.lte(now.getTime())
+            isLocked: cmd.neq(true),    // neq(true) 兼容：字段不存在的旧记录 + 显式 false 的新记录
+            isSkipped: cmd.neq(true),   // 防御性过滤：跳过的词不进复习队列
+            nextReviewDate: cmd.lte(now.getTime())
         })
         .orderBy('nextReviewDate', 'asc')
         .limit(limit)

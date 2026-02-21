@@ -9,6 +9,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { LanguageSwitcher } from '@/src/components/common/LanguageSwitcher';
 import { useModuleAccessStore } from '@/src/stores/moduleAccessStore';
 import { useUserStore } from '@/src/stores/userStore';
+import { useVocabularyStore } from '@/src/stores/vocabularyStore';
 
 import { useLearningPreferenceStore } from '@/src/stores/learningPreferenceStore';
 import { Colors } from '@/src/constants/colors';
@@ -18,6 +19,8 @@ export default function ProfileScreen() {
   const { t } = useTranslation();
   const router = useRouter();
   const { currentUser, logout } = useUserStore();
+  const clearVocabForLogout = useVocabularyStore(state => state.clearForLogout);
+  const clearPrefForLogout = useLearningPreferenceStore(state => state.clearForLogout);
   const { streakDays } = useLearningPreferenceStore();
   const { userProgress } = useModuleAccessStore();
 
@@ -35,6 +38,8 @@ export default function ProfileScreen() {
           text: t('common.confirm'),
           style: 'destructive',
           onPress: () => {
+            clearVocabForLogout();    // 清除单词 Store 持久化状态
+            clearPrefForLogout();     // 清除 streakDays / dailyLimits
             logout();
             router.replace('/(auth)/login');
           },
