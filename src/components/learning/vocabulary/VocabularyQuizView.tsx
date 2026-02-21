@@ -18,7 +18,7 @@ export const VocabularyQuizView: React.FC<VocabularyQuizViewProps> = ({ vocabula
     const [viewMode, setViewMode] = useState<'QUIZ' | 'DETAILS'>('QUIZ');
     const [options, setOptions] = useState<QuizOption[]>([]);
 
-    const queue = useVocabularyStore(state => state.queue);
+    const sessionPool = useVocabularyStore(state => state.sessionPool);
     const submitResult = useVocabularyStore(state => state.submitResult);
 
     // Generate Options only when vocabulary changes
@@ -31,10 +31,18 @@ export const VocabularyQuizView: React.FC<VocabularyQuizViewProps> = ({ vocabula
             isCorrect: true
         };
 
-        const distractorPool = new Map<string, QuizOption>();
-        const shuffledQueue = [...queue].sort(() => 0.5 - Math.random());
+        // 从 sessionPool （原始完整词列表快照）取干扰项，不受 skipWord 影响
+        // sessionPool 中同一 id 可能出现多次（learn + quiz 两阶段），先去重
+        const seenIds = new Set<string>();
+        const uniquePool = sessionPool.filter(item => {
+            if (seenIds.has(item.id)) return false;
+            seenIds.add(item.id);
+            return true;
+        });
+        const shuffledPool = uniquePool.sort(() => 0.5 - Math.random());
 
-        for (const item of shuffledQueue) {
+        const distractorPool = new Map<string, QuizOption>();
+        for (const item of shuffledPool) {
             if (item.id !== vocabulary._id && !distractorPool.has(item.id)) {
                 distractorPool.set(item.id, {
                     id: item.id,

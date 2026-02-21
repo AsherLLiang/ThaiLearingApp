@@ -7,7 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { Colors } from '@/src/constants/colors';
 import { Typography } from '@/src/constants/typography';
 import { ThaiPatternBackground } from '@/src/components/common/ThaiPatternBackground';
-import { useLearningPreferenceStore } from '@/src/stores/learningPreferenceStore';
+import { useLearningPreferenceStore, DEFAULT_DAILY_LIMIT } from '@/src/stores/learningPreferenceStore';
 import { useModuleAccessStore, type ModuleType } from '@/src/stores/moduleAccessStore';
 import { useVocabularyStore } from '@/src/stores/vocabularyStore';
 
@@ -21,15 +21,20 @@ export default function DailyLimitSetupScreen() {
 
     const { dailyLimits, setDailyLimit } = useLearningPreferenceStore();
     const { setDailyLimit: setProgressDailyLimit } = useModuleAccessStore();
-    const { startCourse } = useVocabularyStore();
+    const { resetSession } = useVocabularyStore();
 
-    const initialLimit = useMemo(() => dailyLimits[moduleType] || 20, [dailyLimits, moduleType]);
+    // 优先使用本地已保存的值，否则使用系统默认值（与后端保持一致）
+    const initialLimit = useMemo(() => dailyLimits[moduleType] ?? DEFAULT_DAILY_LIMIT, [dailyLimits, moduleType]);
     const [limit, setLimit] = useState(initialLimit);
 
     const handleConfirm = async () => {
         setDailyLimit(moduleType, limit);
         await setProgressDailyLimit(moduleType, limit);
-        // User requested: Save setting and go back, do NOT start session immediately.
+        // 重置当前 session，让用户下次进入学习时按新 limit 重新拉取
+        // （不在这里直接 initSession，因为用户可能还没有確认要进入哪个课程）
+        if (moduleType === 'word') {
+            resetSession(); // phase 设为 IDLE，下次进入学习页触发重新拉取
+        }
         router.back();
     };
 
