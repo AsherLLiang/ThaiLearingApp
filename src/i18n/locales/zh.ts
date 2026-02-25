@@ -263,5 +263,49 @@ export default {
       aspiratedDesc: '这是一个送气音,发音时有明显气流',
       unaspiratedDesc: '这是一个不送气音,发音时气流较弱'
     }
-  }
+  },
+  alphabetCourse: {
+    title: '字母课程',
+    back: '返回',
+    headerSubtitle: '共 {{count}} 课 · 已完成 {{percent}}%',
+    currentBadge: '当前',
+    letterCount: '{{count}} 个字母',
+    start: '开始',
+    takeTest: '参加测试以解锁全部课程',
+    drawer: {
+      expectedTime: '预计用时：15 分钟',
+      description: '简介',
+      contentPreview: '内容预览（{{count}} 个字母）',
+    },
+    lessons: {
+      lesson1: {
+        title: '第一课：基础拼读能力',
+        description: '掌握最基础的中辅音和常见长元音，建立 CV 拼读概念',
+      },
+      lesson2: {
+        title: '第二课：前置元音系统',
+        description: '学习前置元音（เ แ โ）和更多高频辅音',
+      },
+      lesson3: {
+        title: '第三课：声调入门',
+        description: '掌握送气/不送气对比，引入基础声调系统',
+      },
+      lesson4: {
+        title: '第四课：辅音类与声调',
+        description: '理解高/中/低辅音对声调的影响，掌握完整声调系统',
+      },
+      lesson5: {
+        title: '第五课：复合元音系统',
+        description: '掌握三合元音（เอีย เอือ อัว）等复杂元音组合',
+      },
+      lesson6: {
+        title: '第六课：完整覆盖（常用进阶）',
+        description: '补充常用进阶辅音与复合元音，掌握特殊规则（如 ห นำ 等）',
+      },
+      lesson7: {
+        title: '第七课：罕用字母与特殊元音',
+        description: '集中学习现代泰语中较少使用的辅音与复杂元音，用于阅读古文与特殊专有名词',
+      },
+    },
+  },
 };

@@ -17,6 +17,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ArrowLeft, X, BookOpen, ChevronRight } from 'lucide-react-native';
+import { useTranslation } from 'react-i18next';
 
 import { Colors } from '@/src/constants/colors';
 import { Typography } from '@/src/constants/typography';
@@ -54,6 +55,7 @@ interface LessonDrawerProps {
 }
 
 const LessonDrawer = ({ visible, lesson, onClose, onStart, unlocked }: LessonDrawerProps) => {
+  const { t } = useTranslation();
   const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -115,7 +117,7 @@ const LessonDrawer = ({ visible, lesson, onClose, onStart, unlocked }: LessonDra
           <View style={drawerStyles.header}>
             <View style={{ flex: 1 }}>
               <Text style={drawerStyles.title}>{lesson.title}</Text>
-              <Text style={drawerStyles.subtitle}>Expected time: 15 mins</Text>
+              <Text style={drawerStyles.subtitle}>{t('alphabetCourse.drawer.expectedTime')}</Text>
             </View>
             <Pressable onPress={onClose} style={drawerStyles.closeButton}>
               <X size={24} color={Colors.taupe} />
@@ -123,10 +125,12 @@ const LessonDrawer = ({ visible, lesson, onClose, onStart, unlocked }: LessonDra
           </View>
 
           <ScrollView contentContainerStyle={drawerStyles.content}>
-            <Text style={drawerStyles.sectionTitle}>Description</Text>
-            <Text style={drawerStyles.description}>{lesson.description}</Text>
+            <Text style={drawerStyles.sectionTitle}>{t('alphabetCourse.drawer.description')}</Text>
+            <Text style={drawerStyles.description}>
+              {t(`alphabetCourse.lessons.${lesson.id}.description`, { defaultValue: lesson.description })}
+            </Text>
 
-            <Text style={drawerStyles.sectionTitle}>Content Preview ({allLetters.length} items)</Text>
+            <Text style={drawerStyles.sectionTitle}>{t('alphabetCourse.drawer.contentPreview', { count: allLetters.length })}</Text>
             <View style={drawerStyles.grid}>
               {allLetters.map((char, index) => (
                 <View key={index} style={drawerStyles.gridItem}>
@@ -144,7 +148,7 @@ const LessonDrawer = ({ visible, lesson, onClose, onStart, unlocked }: LessonDra
               disabled={!unlocked}
             >
               <Text style={drawerStyles.startButtonText}>
-                {unlocked ? 'Start Learning' : 'Locked'}
+                {unlocked ? t('alphabet.start') : t('courses.locked')}
               </Text>
               {unlocked && <ChevronRight size={20} color={Colors.white} />}
             </Pressable>
@@ -159,6 +163,7 @@ const LessonDrawer = ({ visible, lesson, onClose, onStart, unlocked }: LessonDra
 
 export default function AlphabetCoursesScreen() {
   const router = useRouter();
+  const { t } = useTranslation();
 
   const [lessons, setLessons] = useState<LessonCardProps[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -269,14 +274,14 @@ export default function AlphabetCoursesScreen() {
       <View style={styles.backRow}>
         <Pressable onPress={() => router.back()} style={styles.backButton}>
           <ArrowLeft size={24} color={Colors.taupe} />
-          <Text style={styles.backText}>Back</Text>
+          <Text style={styles.backText}>{t('alphabetCourse.back')}</Text>
         </Pressable>
       </View>
 
       <View style={styles.headerContainer}>
-        <Text style={styles.headerTitle}>Alphabet Course</Text>
+        <Text style={styles.headerTitle}>{t('alphabetCourse.title')}</Text>
         <Text style={styles.headerSubtitle}>
-          {lessons.length} Lessons · {overallProgressPercent}% Completed
+          {t('alphabetCourse.headerSubtitle', { count: lessons.length, percent: overallProgressPercent })}
         </Text>
       </View>
 
@@ -307,23 +312,23 @@ export default function AlphabetCoursesScreen() {
                     <View style={styles.info}>
                       <View style={styles.cardHeader}>
                         <Text style={styles.title} numberOfLines={1}>
-                          {lesson.title}
+                          {t(`alphabetCourse.lessons.${lesson.id}.title`, { defaultValue: lesson.title })}
                         </Text>
                         {isCurrent && (
                           <View style={styles.currentBadge}>
-                            <Text style={styles.currentBadgeText}>Current</Text>
+                            <Text style={styles.currentBadgeText}>{t('alphabetCourse.currentBadge')}</Text>
                           </View>
                         )}
                       </View>
 
                       <Text style={styles.description} numberOfLines={2}>
-                        {lesson.description}
+                        {t(`alphabetCourse.lessons.${lesson.id}.description`, { defaultValue: lesson.description })}
                       </Text>
 
                       <View style={styles.footer}>
                         <View style={styles.metaColumn}>
                           <Text style={styles.lessonMeta}>
-                            {lesson.letterKeys.length} letters
+                            {t('alphabetCourse.letterCount', { count: lesson.letterKeys.length })}
                           </Text>
                         </View>
 
@@ -347,7 +352,7 @@ export default function AlphabetCoursesScreen() {
                               isCurrent && styles.activeStartBtnText,
                             ]}
                           >
-                            {unlocked ? 'Start' : 'Locked'}
+                            {unlocked ? t('alphabetCourse.start') : t('courses.locked')}
                           </Text>
                         </Pressable>
                       </View>
@@ -370,7 +375,7 @@ export default function AlphabetCoursesScreen() {
               onPress={() => router.push('/alphabet/test')}
             >
               <Text style={styles.unlockAllText}>
-                Take Test to Unlock All
+                {t('alphabetCourse.takeTest')}
               </Text>
             </Pressable>
           </View>

@@ -263,5 +263,49 @@ export default {
       aspiratedDesc: 'This is an aspirated sound (strong airflow)',
       unaspiratedDesc: 'This is an unaspirated sound (weak airflow)'
     }
-  }
+  },
+  alphabetCourse: {
+    title: 'Alphabet Course',
+    back: 'Back',
+    headerSubtitle: '{{count}} Lessons · {{percent}}% Completed',
+    currentBadge: 'Current',
+    letterCount: '{{count}} letters',
+    start: 'Start',
+    takeTest: 'Take Test to Unlock All',
+    drawer: {
+      expectedTime: 'Expected time: 15 mins',
+      description: 'Description',
+      contentPreview: 'Content Preview ({{count}} items)',
+    },
+    lessons: {
+      lesson1: {
+        title: 'Lesson 1: CV Reading Basics',
+        description: 'Master the core mid-class consonants and common long vowels. Build your first CV syllable-reading ability.',
+      },
+      lesson2: {
+        title: 'Lesson 2: Leading Vowel System',
+        description: 'Learn leading vowels (เ แ โ) and more high-frequency consonants.',
+      },
+      lesson3: {
+        title: 'Lesson 3: Tone Fundamentals',
+        description: 'Understand aspirated vs. unaspirated sounds and introduce the basic Thai tone system.',
+      },
+      lesson4: {
+        title: 'Lesson 4: Consonant Classes & Tones',
+        description: 'Understand how high, mid, and low consonant classes affect tone. Master the full tone system.',
+      },
+      lesson5: {
+        title: 'Lesson 5: Compound Vowels',
+        description: 'Master complex vowel clusters such as เอีย, เอือ, and อัว.',
+      },
+      lesson6: {
+        title: 'Lesson 6: Full Coverage (Advanced)',
+        description: 'Supplement advanced consonants and compound vowels. Grasp special rules like ห นำ.',
+      },
+      lesson7: {
+        title: 'Lesson 7: Rare Letters & Special Vowels',
+        description: 'Study rarely-used consonants and special vowels found in classical texts and proper nouns.',
+      },
+    },
+  },
 };
