@@ -308,4 +308,18 @@ export default {
       },
     },
   },
+  questionType: {
+    soundToLetter: '听音选字母',
+    letterToSound: '看字母选发音',
+    syllable: '拼读组合',
+    reverseSyllable: '音素分离',
+    missingLetter: '缺字填空',
+    aspiratedContrast: '送气音对比',
+    vowelLengthContrast: '元音长短对比',
+    finalConsonant: '尾音规则',
+    tonePerception: '声调听辨',
+    classChoice: '辅音分类',
+    letterName: '字母名称',
+    initialSound: '首音判断',
+  },
 };

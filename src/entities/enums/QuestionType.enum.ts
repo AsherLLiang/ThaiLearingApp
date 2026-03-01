@@ -49,18 +49,18 @@ export enum QuestionType {
  * 题型显示名称映射
  */
 export const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
-    [QuestionType.SOUND_TO_LETTER]: '听音选字母',
-    [QuestionType.LETTER_TO_SOUND]: '看字母选发音',
-    [QuestionType.SYLLABLE]: '拼读组合',
-    [QuestionType.REVERSE_SYLLABLE]: '音素分离',
-    [QuestionType.MISSING_LETTER]: '缺字填空',
-    [QuestionType.ASPIRATED_CONTRAST]: '送气音对比',
-    [QuestionType.VOWEL_LENGTH_CONTRAST]: '元音长短对比',
-    [QuestionType.FINAL_CONSONANT]: '尾音规则',
-    [QuestionType.TONE_PERCEPTION]: '声调听辨',
-    [QuestionType.CLASS_CHOICE]: '辅音分类',
-    [QuestionType.LETTER_NAME]: '字母名称',
-    [QuestionType.INITIAL_SOUND]: '首音判断',
+    [QuestionType.SOUND_TO_LETTER]: 'questionType.soundToLetter',
+    [QuestionType.LETTER_TO_SOUND]: 'questionType.letterToSound',
+    [QuestionType.SYLLABLE]: 'questionType.syllable',
+    [QuestionType.REVERSE_SYLLABLE]: 'questionType.reverseSyllable',
+    [QuestionType.MISSING_LETTER]: 'questionType.missingLetter',
+    [QuestionType.ASPIRATED_CONTRAST]: 'questionType.aspiratedContrast',
+    [QuestionType.VOWEL_LENGTH_CONTRAST]: 'questionType.vowelLengthContrast',
+    [QuestionType.FINAL_CONSONANT]: 'questionType.finalConsonant',
+    [QuestionType.TONE_PERCEPTION]: 'questionType.tonePerception',
+    [QuestionType.CLASS_CHOICE]: 'questionType.classChoice',
+    [QuestionType.LETTER_NAME]: 'questionType.letterName',
+    [QuestionType.INITIAL_SOUND]: 'questionType.initialSound',
 };
 
 /**

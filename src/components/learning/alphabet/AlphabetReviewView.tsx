@@ -436,7 +436,7 @@ export function AlphabetReviewView({
                   adjustsFontSizeToFit
                   numberOfLines={1}
                 >
-                  {displayValue}
+                  {question.gameType === AlphabetGameType.CONSONANT_CLASS ? t(displayValue) : displayValue}
                 </Text>
               )}
 

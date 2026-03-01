@@ -247,9 +247,9 @@ export default {
       unaspirated: 'Unaspirated',
       voiceless: 'Voiceless',
       voiced: 'Voiced',
-      highClass: 'High Class',
-      midClass: 'Mid Class',
-      lowClass: 'Low Class',
+      highClass: 'High',
+      midClass: 'Mid',
+      lowClass: 'Low',
       consonantClass: 'Class'
     },
     aspirated: {
@@ -307,5 +307,19 @@ export default {
         description: 'Study rarely-used consonants and special vowels found in classical texts and proper nouns.',
       },
     },
+  },
+  questionType: {
+    soundToLetter: 'Sound to Letter',
+    letterToSound: 'Letter to Sound',
+    syllable: 'Syllables',
+    reverseSyllable: 'Reverse Syllable',
+    missingLetter: 'Missing Letter',
+    aspiratedContrast: 'Aspirated Contrast',
+    vowelLengthContrast: 'Vowel Length Contrast',
+    finalConsonant: 'Final Consonant Rule',
+    tonePerception: 'Tone Perception',
+    classChoice: 'Consonant Class',
+    letterName: 'Letter Name',
+    initialSound: 'Initial Sound',
   },
 };

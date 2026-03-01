@@ -147,9 +147,9 @@ function generateLetterToSoundQuestion(
 function generateConsonantClassQuestion(letter: Letter): AlphabetQuestion {
   // 固定的三个选项: 高辅音、中辅音、低辅音
   const classOptions: Letter[] = [
-    { ...letter, thaiChar: '高辅音', class: 'high' } as Letter,
-    { ...letter, thaiChar: '中辅音', class: 'mid' } as Letter,
-    { ...letter, thaiChar: '低辅音', class: 'low' } as Letter,
+    { ...letter, thaiChar: 'components.miniReview.highClass', class: 'high' } as Letter,
+    { ...letter, thaiChar: 'components.miniReview.midClass', class: 'mid' } as Letter,
+    { ...letter, thaiChar: 'components.miniReview.lowClass', class: 'low' } as Letter,
   ];
 
   return {
@@ -262,9 +262,9 @@ function shuffle<T>(arr: T[]): T[] {
  * 将辅音类别映射为中文标签
  */
 function mapClassToLabel(cls: string): string {
-  if (cls === 'mid') return '中辅音';
-  if (cls === 'high') return '高辅音';
-  return '低辅音';
+  if (cls === 'mid') return 'components.miniReview.midClass';
+  if (cls === 'high') return 'components.miniReview.highClass';
+  return 'components.miniReview.lowClass';
 }
 
 // ===== 向后兼容的导出 =====

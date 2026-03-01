@@ -183,16 +183,16 @@ export function MiniReviewQuestion({
           {QUESTION_TYPE_ICONS[question.type] || '📝'}
         </Text>
         <Text style={styles.typeLabel}>
-          {QUESTION_TYPE_LABELS[question.type]}
+          {t(QUESTION_TYPE_LABELS[question.type])}
         </Text>
       </View>
 
       {/* 题干 */}
-      <Text style={styles.question}>{question.question}</Text>
+      <Text style={styles.question}>{t(question.question)}</Text>
 
       {/* 副标题 */}
       {question.subtitle && (
-        <Text style={styles.subtitle}>{question.subtitle}</Text>
+        <Text style={styles.subtitle}>{t(question.subtitle)}</Text>
       )}
 
       {/* 音频播放按钮 */}
@@ -247,10 +247,10 @@ export function MiniReviewQuestion({
                     isSelected && styles.optionLabelSelected,
                   ]}
                 >
-                  {option.label}
+                  {t(option.label)}
                 </Text>
                 {option.example && (
-                  <Text style={styles.optionExample}>{option.example}</Text>
+                  <Text style={styles.optionExample}>{t(option.example)}</Text>
                 )}
               </View>
               {answered && (
@@ -267,7 +267,7 @@ export function MiniReviewQuestion({
       {answered && question.explanation && (
         <View style={styles.explanationContainer}>
           <Text style={styles.explanationText}>
-            💡 {question.explanation}
+            💡 {t(question.explanation)}
           </Text>
         </View>
       )}
