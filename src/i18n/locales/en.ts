@@ -76,6 +76,13 @@ export default {
     reviewDue: 'Reviews Due',
     streak: 'Current Streak',
     hoursThisWeek: 'Hours this week',
+    aiError: 'AI query failed',
+    typeThaiOrChinese: 'Search genuine Thai...',
+  },
+  ai: {
+    title: 'AI In-depth Analysis',
+    analysis: '✨ AI Breakdown',
+    examples: '📖 Immersive Examples',
   },
   courses: {
     title: 'Choose a course',

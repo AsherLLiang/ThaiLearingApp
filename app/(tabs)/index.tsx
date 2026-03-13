@@ -13,6 +13,13 @@ import { Typography } from '@/src/constants/typography';
 import { ReviewItem } from '@/src/entities/types/entities';
 import { useUserStore } from '@/src/stores/userStore';
 import { useModuleAccessStore } from '@/src/stores/moduleAccessStore';
+// === AI Dictionary Imports ===
+import { TextInput, ActivityIndicator, Modal } from 'react-native';
+import { Search, X } from 'lucide-react-native';
+import { AiService } from '@/src/services/aiService';
+import { AiExplanationView } from '@/src/components/ai/AiExplanationView';
+import type { ExplainVocabularyResponse } from '@/src/entities/types/ai.types';
+import i18n from '@/src/i18n';
 
 const MOCK_REVIEWS: ReviewItem[] = [
   { id: '1', char: 'ข', phonetic: 'Khor Khai', type: 'Review', dueIn: 'Today' },
@@ -29,6 +36,44 @@ export default function HomeScreen() {
   // Stores
   const { currentUser } = useUserStore();
   const { userProgress } = useModuleAccessStore();
+  
+  //=========================================================================
+  // === AI Dictionary State ===
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [aiResult, setAiResult] = useState<ExplainVocabularyResponse | null>(null);
+  const [showAiModal, setShowAiModal] = useState(false);
+
+  // === AI Dictionary Action ===
+  const handleAiSearch = async () => {
+    if (!searchQuery.trim()) return;
+    
+    setIsSearching(true);
+    setSearchError(null);
+    setShowAiModal(true); // Open modal early to show loading state
+    
+    // 将当前 UI 语言一并传给 AI，让它用对应语言回应
+    const response = await AiService.explainVocabulary(searchQuery.trim(), currentUser?.userId || 'guest', i18n.language);
+    
+    setIsSearching(false);
+
+    if (!response.success || !response.data) {
+      setSearchError(response.error || t('home.aiError'));
+      return;
+    }
+
+    // Now we can set the much cleaner response directly!
+    setAiResult(response.data);
+  };
+
+  const closeAiModal = () => {
+    setShowAiModal(false);
+    setAiResult(null);
+    setSearchError(null);
+    setSearchQuery('');
+  };
+  //=========================================================================
 
   useEffect(() => {
     setTimeout(() => setReviews(MOCK_REVIEWS), 800);
@@ -142,6 +187,30 @@ export default function HomeScreen() {
         </View>
 
         <View style={styles.contentContainer}>
+          
+          {/* AI Dictionary Search Bar */}
+          <View style={styles.searchContainer}>
+            <View style={styles.searchInputWrapper}>
+              <Search size={20} color={Colors.taupe} style={styles.searchIcon} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder={t('home.typeThaiOrChinese') || "搜你遇见的纯正泰语..."}
+                placeholderTextColor={Colors.taupe}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                onSubmitEditing={handleAiSearch}
+                returnKeyType="search"
+                editable={!isSearching}
+              />
+              {searchQuery.length > 0 && !isSearching && (
+                <Pressable onPress={() => setSearchQuery('')} style={styles.clearSearchButton}>
+                  <X size={16} color={Colors.taupe} />
+                </Pressable>
+              )}
+            </View>
+          </View>
+          {/* ========================================= */}
+
           {/* Floating Bubbles */}
           {/* <FloatingBubbles reviews={reviews} onOpenReview={handleBubbleClick} /> */}
 
@@ -266,6 +335,44 @@ export default function HomeScreen() {
           )}
         </View>
       </ScrollView>
+
+      {/* AI Search Result Modal */}
+      <Modal
+        visible={showAiModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={closeAiModal}
+      >
+        <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+                <View style={styles.modalHeader}>
+                   <Text style={styles.modalTitle}>{t('ai.title')}</Text>
+                   <Pressable onPress={closeAiModal} style={styles.closeModalBtn}>
+                       <X size={24} color={Colors.ink} />
+                   </Pressable>
+                </View>
+
+                {isSearching ? (
+                   <View style={styles.modalLoadingState}>
+                      <ActivityIndicator size="large" color={Colors.thaiGold} />
+                      <Text style={styles.modalLoadingText}>{t('common.loading')}</Text>
+                   </View>
+                ) : searchError ? (
+                   <View style={styles.modalErrorState}>
+                      <Text style={styles.modalErrorText}>{searchError}</Text>
+                      <Pressable style={styles.retryBtn} onPress={handleAiSearch}>
+                         <Text style={styles.retryBtnText}>{t('common.confirm')}</Text>
+                      </Pressable>
+                   </View>
+                ) : aiResult ? (
+                   <View style={styles.aiResultWrapper}>
+                       <AiExplanationView data={aiResult} />
+                   </View>
+                ) : null}
+            </View>
+        </View>
+      </Modal>
+
     </SafeAreaView>
   );
 }
@@ -595,4 +702,112 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     marginVertical: 4,
   },
+  // AI Dictionary Styles
+  searchContainer: {
+    marginBottom: 24,
+    marginTop: -8, // Pull slightly up towards header
+  },
+  searchInputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.white,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: Colors.sand,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+    height: 56,
+  },
+  searchIcon: {
+    marginRight: 12,
+  },
+  searchInput: {
+    flex: 1,
+    fontFamily: Typography.notoSerifRegular,
+    fontSize: 16,
+    color: Colors.ink,
+    height: '100%',
+  },
+  clearSearchButton: {
+    padding: 8,
+    backgroundColor: 'rgba(0,0,0,0.03)',
+    borderRadius: 12,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: Colors.paper,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    height: '85%',
+    width: '100%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 10,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.sand,
+  },
+  modalTitle: {
+    fontFamily: Typography.notoSerifBold,
+    fontSize: 18,
+    color: Colors.ink,
+  },
+  closeModalBtn: {
+    padding: 4,
+  },
+  modalLoadingState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 16,
+  },
+  modalLoadingText: {
+    fontFamily: Typography.notoSerifRegular,
+    fontSize: 14,
+    color: Colors.taupe,
+  },
+  modalErrorState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+    gap: 16,
+  },
+  modalErrorText: {
+    fontFamily: Typography.notoSerifRegular,
+    fontSize: 16,
+    color: '#D32F2F',
+    textAlign: 'center',
+  },
+  retryBtn: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    backgroundColor: Colors.ink,
+    borderRadius: 12,
+  },
+  retryBtnText: {
+    color: Colors.white,
+    fontFamily: Typography.notoSerifBold,
+    fontSize: 16,
+  },
+  aiResultWrapper: {
+    flex: 1,
+    paddingTop: 16,
+  }
 });

@@ -76,6 +76,13 @@ export default {
     reviewDue: '待复习内容',
     streak: '连续打卡',
     hoursThisWeek: '本周小时数',
+    aiError: 'AI 查询失败，请稍后再试',
+    typeThaiOrChinese: '搜你遇见的纯正泰语...',
+  },
+  ai: {
+    title: 'AI 智能解析',
+    analysis: '✨ AI 深度剖析',
+    examples: '📖 沉浸例句',
   },
   courses: {
     title: '选择一本吧少年',

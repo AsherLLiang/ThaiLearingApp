@@ -339,6 +339,14 @@ export const STORAGE_ENDPOINTS = {
   } as EndpointMap,
 };
 
+//=====================AI Function API ====================
+
+export const AI_ENDPOINTS = {
+  ENGINE: {
+    cloudbase: '/ai-engine',
+    java: '/api/ai/engine',
+  } as EndpointMap,
+};
 // ==================== 汇总所有端点 ====================
 export const API_ENDPOINTS = {
   AUTH: AUTH_ENDPOINTS,
@@ -352,4 +360,5 @@ export const API_ENDPOINTS = {
   MODULE: MODULE_ENDPOINTS,
   MEMORY: MEMORY_ENDPOINTS,
   STORAGE: STORAGE_ENDPOINTS,
+  AI: AI_ENDPOINTS,
 };
