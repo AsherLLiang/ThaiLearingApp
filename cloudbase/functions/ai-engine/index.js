@@ -13,6 +13,7 @@ const client = new OpenAI({
   baseURL: 'https://api.deepseek.com/v1', // 这里的魔法在于，不管是什么模型，只要兼容，改个 URL 即可
 });
 const explainVocab = require('./handlers/explainVocab');
+const generateMicroReading = require('./handlers/generateMicroReading');
     
 
 exports.main = async (event, context) => {
@@ -55,6 +56,8 @@ exports.main = async (event, context) => {
         switch(action){
             case 'explainVocab':
                 return await explainVocab(client, data);
+            case 'generateMicroReading':
+                return await generateMicroReading(client, data);
             default:
                 return createResponse(false, null, 'Unknown action', 'ERR_UNKNOWN_ACTION');
         }

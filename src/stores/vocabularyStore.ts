@@ -28,6 +28,7 @@ interface VocabularyStore {
     pendingResults: Array<{ userId: string, entityId: string, entityType: string, quality: number, vId?: number, source?: string }>;
     skippedIds: string[]; // Track skipped word IDs
     sessionPool: SessionWord[]; // 原始完整词列表快照，不受 skipWord 影响，用于干扰项生成
+    recentWrongWords: SessionWord[]; // 本轮 mistakeCount > 2 的词，会话结束时填充，下次开始时清空
     initSession: (userId: string, options?: { limit?: number, source?: string }) => Promise<void>;
     startCourse: (source: string, limit?: number, moduleType?: ModuleType) => Promise<void>;
     submitResult: (isCorrect: boolean, score?: number) => Promise<void>;
@@ -63,12 +64,19 @@ export const useVocabularyStore = create<VocabularyStore>()(
             pendingResults: [],
             skippedIds: [],
             sessionPool: [], // 原始词列表快照
+            recentWrongWords: [], // 本轮错词（完成后填充）
             //Above are the variables that are used to store the state of the vocabulary store
 
             //================= 下面是函数=================
             initSession: async (userId: string, options: { limit?: number, source?: string } = {}) => {
                 try {
-                    set({ phase: VocabSessionPhase.LOADING, pendingResults: [], skippedIds: [] }); // Clear pending & skipped
+                    set({ 
+                        phase: VocabSessionPhase.LOADING, 
+                        pendingResults: [], 
+                        skippedIds: [] ,
+                        recentWrongWords: []
+                    }); // Clear pending, skipped & wrong words
+                    
                     const { limit, source } = options;
                     // 确保 limit 是合法整数且不是 NaN
                     const finalLimit = typeof limit === 'string' ? parseInt(limit, 10) : limit;
@@ -285,7 +293,8 @@ export const useVocabularyStore = create<VocabularyStore>()(
                     );
 
                     console.log("✅ Skipped words submitted.");
-                    set({ skippedIds: [] });
+                    // 不在这里清空 skippedIds，避免用户进入 session-summary 时丢失“跳过词”展示。
+                    // skippedIds 会在下一次 initSession/startCourse 时被重置。
                 } catch (e) {
                     console.error("❌ Failed to submit skipped words:", e);
                 }
@@ -345,7 +354,20 @@ export const useVocabularyStore = create<VocabularyStore>()(
             },
 
             finishSession: () => {
-                set({ phase: VocabSessionPhase.COMPLETED });
+                const { queue } = get();
+                // 去重：同一个词可以在 queue 里出现多次（原始项 + retry 副本）
+                // mistakeCount 只在非 retry 项上自增，所以只取 source !== 'vocab-error-retry' 的项
+                const seen = new Set<string>();
+                const wrongWords = queue
+                    .filter(w => w.source !== 'vocab-error-retry' && w.mistakeCount > 1)
+                    .filter(w => { const ok = !seen.has(w.id); seen.add(w.id); return ok; });
+
+                // 只有本轮有错词时才覆盖，否则保留上次的错词列表
+                if (wrongWords.length > 0) {
+                    set({ phase: VocabSessionPhase.COMPLETED, recentWrongWords: wrongWords });
+                } else {
+                    set({ phase: VocabSessionPhase.COMPLETED });
+                }
             },
             resetSession: () => {
                 set({ phase: VocabSessionPhase.IDLE });
@@ -363,6 +385,7 @@ export const useVocabularyStore = create<VocabularyStore>()(
                     completedCount: 0,
                     pendingResults: [],
                     skippedIds: [],
+                    recentWrongWords: [],
                 });
             }
         }),
@@ -370,7 +393,8 @@ export const useVocabularyStore = create<VocabularyStore>()(
             name: 'vocabulary-learning-storage',
             storage: createJSONStorage(() => AsyncStorage),
             partialize: (state) => ({
-                currentCourseSource: state.currentCourseSource
+                currentCourseSource: state.currentCourseSource,
+                recentWrongWords: state.recentWrongWords,
             }),
         }
     )

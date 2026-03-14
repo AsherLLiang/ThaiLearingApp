@@ -94,6 +94,11 @@ function WordSession() {
         handleAnswer
     } = useVocabularyLearningEngine();
 
+    const handleBackToCourses = () => {
+        useVocabularyStore.getState().resetSession();
+        router.replace('/(tabs)/courses');
+    };
+
     useEffect(() => {
         return () => {
             if (useVocabularyStore.getState().phase === VocabSessionPhase.COMPLETED) {
@@ -124,8 +129,11 @@ function WordSession() {
                 return (
                     <View style={styles.completeContainer}>
                         <Text style={styles.completeTitle}>{t('learning.sessionComplete')}</Text>
-                        <Pressable style={styles.completeButton} onPress={() => router.back()}>
-                            <Text style={styles.completeButtonText}>{t('learning.backToHome')}</Text>
+                        <Pressable style={styles.completeButton} onPress={() => router.push('/learning/session-summary')}>
+                            <Text style={styles.completeButtonText}>{t('microReading.title', '微阅读')}</Text>
+                        </Pressable>
+                        <Pressable style={styles.completeButton} onPress={handleBackToCourses}>
+                            <Text style={styles.completeButtonText}>{t('learning.backToHome', '返回首页')}</Text>
                         </Pressable>
                     </View>
                 );
@@ -244,7 +252,10 @@ function AlphabetSession() {
             <SafeAreaView style={styles.container}>
                 <View style={styles.centerContent}>
                     <Text style={styles.completeTitle}>{t('learning.sessionComplete', '今日学习完成!')}</Text>
-                    <Pressable style={styles.completeButton} onPress={() => router.back()}>
+                    <Pressable style={styles.microReadingButton} onPress={() => router.push('/learning/session-summary')}>
+                        <Text style={styles.completeButtonText}>{t('microReading.title', '微阅读')}</Text>
+                    </Pressable>
+                    <Pressable style={styles.completeButton} onPress={() => router.push('/courses')}>
                         <Text style={styles.completeButtonText}>{t('learning.backToHome', '返回首页')}</Text>
                     </Pressable>
                 </View>
@@ -376,11 +387,19 @@ const styles = StyleSheet.create({
         color: Colors.ink,
         marginBottom: 24,
     },
+    microReadingButton: {
+        backgroundColor: Colors.ink,
+        paddingHorizontal: 32,
+        paddingVertical: 16,
+        borderRadius: 12,
+        marginBottom: 12,
+    },
     completeButton: {
         backgroundColor: Colors.ink,
         paddingHorizontal: 32,
         paddingVertical: 16,
         borderRadius: 12,
+        marginTop: 12,
     },
     completeButtonText: {
         color: Colors.white,

@@ -2,7 +2,8 @@
 
 import { callCloudFunction } from '../utils/apiClient';
 import { API_ENDPOINTS } from '../config/api.endpoints';
-import type { ExplainVocabularyResponse } from '../entities/types/ai.types';
+import { API_TIMEOUT } from '../config/constants';
+import type { ExplainVocabularyResponse, MicroReadingResponse, MicroReadingWord } from '../entities/types/ai.types';
 import type { ApiResponse } from '../entities/types/api.types';
 
 /**
@@ -41,7 +42,7 @@ export class AiService {
           language,             // 将语言传将给云端，让 AI 返回正确语言的解析
           appSecret: 'ThaiApp_2026_Secure' // ✅ 初级防御：我们给云端发送一个约定好的暗号
         },
-        { endpoint }
+        { endpoint, timeout: API_TIMEOUT.AI }
       );
 
       return response;
@@ -54,4 +55,38 @@ export class AiService {
       };
     }
   }
+
+  /**
+   * 调用云端 generateMicroReading，根据勾选词汇生成一段泰文短文
+   *
+   * @param words   用户勾选的词汇列表 [{ thaiWord, meaning }]
+   * @param language 当前 UI 语言 'zh' | 'en'
+   */
+  static async generateMicroReading(
+    words: MicroReadingWord[],
+    language: string = 'zh'
+  ): Promise<ApiResponse<MicroReadingResponse>> {
+    const endpoint = API_ENDPOINTS.AI.ENGINE;
+
+    try {
+      const response = await callCloudFunction<MicroReadingResponse>(
+        'generateMicroReading',   // 必须与云端 switch case 名称一致
+        {
+          words,
+          language,
+          appSecret: 'ThaiApp_2026_Secure',
+        },
+        { endpoint, timeout: API_TIMEOUT.AI }
+      );
+      return response;
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.message || '微阅读生成失败',
+        code: 'AI_SERVICE_ERROR',
+      };
+    }
+  }
 }
+
+

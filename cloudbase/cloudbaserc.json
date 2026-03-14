@@ -50,7 +50,7 @@
     },
     {
       "name": "ai-engine",
-      "timeout": 20,
+      "timeout": 200,
       "runtime": "Nodejs18.15",
       "handler": "index.main",
       "installDependency": true

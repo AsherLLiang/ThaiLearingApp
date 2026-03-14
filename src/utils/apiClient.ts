@@ -23,6 +23,8 @@ export interface CloudFunctionOptions {
    * 若项目中存在其他云函数（如 '/memory-engine'），请在调用时显式传入。
    */
   endpoint?: string | EndpointMap;
+  /** 请求超时（毫秒），不传则使用 API_TIMEOUT.DEFAULT。AI 类请求建议传 API_TIMEOUT.AI。 */
+  timeout?: number;
 }
 
 class ApiClient {
@@ -264,10 +266,11 @@ export async function callCloudFunction<T>(
 
   try {
     // 统一的请求体结构：{ action, data }
-    const response = await apiClient.post<T>(endpoint, {
-      action,
-      data,
-    });
+    const response = await apiClient.post<T>(
+      endpoint,
+      { action, data },
+      options?.timeout != null ? { timeout: options.timeout } : undefined
+    );
 
     // 直接返回后端的标准结构，调用方只需要判断 `success`
     return response;

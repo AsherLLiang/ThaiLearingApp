@@ -17,3 +17,19 @@ export interface ExplainVocabularyResponse {
     breakdown: string;
     extraExamples: AiExample[];
 }
+
+/**
+ * AI 微阅读生成结果
+ * 字段名称与 generateMicroReading.js 中 Prompt 要求的 JSON 完全一致
+ */
+export interface MicroReadingResponse {
+    thaiText: string;      // AI 生成的泰文短文（80-150 词）
+    translation: string;   // 中文逐段辅助翻译
+    wordsUsed: string[];   // AI 确认用到的目标词列表（用于校验）
+}
+
+/** 发给 AI 的单个词汇条目 */
+export interface MicroReadingWord {
+    thaiWord: string;
+    meaning: string;
+}

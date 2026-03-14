@@ -1,3 +1,5 @@
+import { Split } from "lucide-react-native";
+
 // src/i18n/locales/en.ts
 export default {
   common: {
@@ -71,7 +73,8 @@ export default {
     greeting: 'Hello',
     todayProgress: "Today's learning goal completed",
     currentCourse: 'Current Course',
-    recentMastered: 'Recently Mastered',
+    recentWrong: 'Recent Wrong Words',
+    noWrongWords: 'No mistakes this session 🎉',
     mastered: 'Mastered',
     reviewDue: 'Reviews Due',
     streak: 'Current Streak',
@@ -161,6 +164,8 @@ export default {
     nextStep: 'Next',
     cognates: 'Cognates',
     memoryTips: 'Memory Tips',
+    split: 'Split',
+    memoryPhrase: 'Memory Phrase',
   },
   modules: {
     alphabet: 'Alphabet',
@@ -328,5 +333,25 @@ export default {
     classChoice: 'Consonant Class',
     letterName: 'Letter Name',
     initialSound: 'Initial Sound',
+  },
+  sessionSummary: {
+    title: 'Session Summary',
+    wrongWords: 'Difficult Words',
+    newWords: 'New Words',
+    skippedWords: 'Skipped Words',
+    cancelSkip: 'Un-skip',
+    generateBtn: 'Generate Reading ({{count}} selected)',
+    noWords: 'No words to select this round',
+    generating: 'AI Generating...',
+    errorTitle: 'Generation Failed',
+    errorMessage: 'AI generation encountered an issue. Please try again.',
+    retry: 'Retry',
+  },
+  microReading: {
+    title: 'AI Micro-Reading',
+    voicePlaceholder: 'Reading Practice - Coming Soon',
+    translationLabel: 'Translation',
+    backToHome: 'Back to Previous Page',
+    wordsUsed: 'Words in this passage',
   },
 };

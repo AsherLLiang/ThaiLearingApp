@@ -4,21 +4,23 @@ import { useTranslation } from 'react-i18next';
 import { ScrollView, View, Text, Pressable, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Play, TrendingUp, Clock, Award, Star, Wrench } from 'lucide-react-native';
+import { Play, TrendingUp, Clock, Award, AlertCircle, Wrench } from 'lucide-react-native';
 import { BlurView } from 'expo-blur';
 import { ThaiPatternBackground } from '@/src/components/common/ThaiPatternBackground';
-import { FloatingBubbles } from '@/src/components/common/FloatingBubbles';
+// import { FloatingBubbles } from '@/src/components/common/FloatingBubbles';
 import { Colors } from '@/src/constants/colors';
 import { Typography } from '@/src/constants/typography';
 import { ReviewItem } from '@/src/entities/types/entities';
 import { useUserStore } from '@/src/stores/userStore';
 import { useModuleAccessStore } from '@/src/stores/moduleAccessStore';
+import { useVocabularyStore } from '@/src/stores/vocabularyStore';
 // === AI Dictionary Imports ===
 import { TextInput, ActivityIndicator, Modal } from 'react-native';
 import { Search, X } from 'lucide-react-native';
 import { AiService } from '@/src/services/aiService';
 import { AiExplanationView } from '@/src/components/ai/AiExplanationView';
 import type { ExplainVocabularyResponse } from '@/src/entities/types/ai.types';
+import { Vocabulary } from '@/src/entities/types/vocabulary.types';
 import i18n from '@/src/i18n';
 
 const MOCK_REVIEWS: ReviewItem[] = [
@@ -28,7 +30,7 @@ const MOCK_REVIEWS: ReviewItem[] = [
   { id: '4', char: 'จ', phonetic: 'Jor Jan', type: 'Review', dueIn: 'Today' },
 ];
 
-export default function HomeScreen() {
+export default function HomeScreen({ vocabulary }: { vocabulary: Vocabulary }) {
   const { t } = useTranslation();
   const [reviews, setReviews] = useState<ReviewItem[]>([]);
   const router = useRouter();
@@ -36,6 +38,7 @@ export default function HomeScreen() {
   // Stores
   const { currentUser } = useUserStore();
   const { userProgress } = useModuleAccessStore();
+  const recentWrongWords = useVocabularyStore(s => s.recentWrongWords);
   
   //=========================================================================
   // === AI Dictionary State ===
@@ -291,25 +294,28 @@ export default function HomeScreen() {
             </View>
           </View>
 
-          {/* Recent Achievements */}
+          {/* Recent Wrong Words */}
           <View style={styles.achievementsSection}>
             <View style={styles.achievementsHeader}>
-              <Star size={16} color={Colors.thaiGold} fill={Colors.thaiGold} />
-              <Text style={styles.achievementsTitle}>{t('home.recentMastered')}</Text>
+              <AlertCircle size={16} color={Colors.thaiGold} />
+              <Text style={styles.achievementsTitle}>{t('home.recentWrong')}</Text>
             </View>
 
             <View style={styles.achievementsList}>
-              <AchievementItem
-                char="ข"
-                name="Khor Khai (蛋)"
-                category="高辅音"
-              />
-              <View style={styles.divider} />
-              <AchievementItem
-                char="สี"
-                name="Sii (颜色)"
-                category="上声"
-              />
+              {recentWrongWords.length === 0 ? (
+                <Text style={styles.emptyHint}>{t('home.noWrongWords')}</Text>
+              ) : (
+                recentWrongWords.map((w, i) => (
+                  <View key={w.id}>
+                    {i > 0 && <View style={styles.divider} />}
+                    <AchievementItem
+                      char={w.entity.thaiWord}
+                      meaning={w.entity.meaning}
+                      category={`×${w.mistakeCount}`}
+                    />
+                  </View>
+                ))
+              )}
             </View>
           </View>
           {/* Dev Playground Entry - Only visible in DEV */}
@@ -379,23 +385,22 @@ export default function HomeScreen() {
 
 interface AchievementItemProps {
   char: string;
-  name: string;
+  meaning: string;
   category: string;
 }
 
-const AchievementItem: React.FC<AchievementItemProps> = ({ char, name, category }) => (
+const AchievementItem: React.FC<AchievementItemProps> = ({ char, meaning, category }) => (
   <Pressable style={styles.achievementItem}>
     <View style={styles.achievementLeft}>
       <View style={styles.achievementIconBox}>
         <Text style={styles.achievementChar}>{char}</Text>
       </View>
       <View>
-        <Text style={styles.achievementName}>{name}</Text>
-        <Text style={styles.achievementCategory}>{category}</Text>
+        <Text style={styles.achievementName}>{meaning}</Text>
       </View>
     </View>
     <View style={styles.masteredBadge}>
-      <Text style={styles.masteredText}>已掌握</Text>
+      <Text style={styles.masteredText}>{category}</Text>
     </View>
   </Pressable>
 );
@@ -641,6 +646,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.sand,
     padding: 8,
+  },
+  emptyHint: {
+    fontFamily: Typography.notoSerifRegular,
+    fontSize: 13,
+    color: Colors.ink,
+    opacity: 0.5,
+    textAlign: 'center',
+    paddingVertical: 16,
   },
   achievementItem: {
     flexDirection: 'row',
