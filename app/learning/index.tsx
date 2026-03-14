@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { View, Text, StyleSheet, Pressable, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -21,6 +21,7 @@ import { useUserStore } from '@/src/stores/userStore';
 import { useVocabularyLearningEngine } from '@/src/hooks/useVocabularyLearningEngine';
 import { VocabSessionPhase } from '@/src/entities/types/vocabulary.types';
 
+
 type SessionMode = 'REVIEW' | 'LEARN_NEW';
 type ModuleVariant = 'letter' | 'word';
 
@@ -37,6 +38,9 @@ export default function LearningSession() {
     const { currentUser } = useUserStore();
     const { dailyLimits } = useLearningPreferenceStore();
     const { userProgress } = useModuleAccessStore();
+    // 用于判断是否是本次 mount 后的第一次初始化
+    // 每次组件重新挂载（新实例），useRef(true) 会重置为 true
+    const isFirstMountRef = useRef(true);
 
     useEffect(() => {
         // 确保有课程来源且用户信息已加载（startCourse 内部依赖 userId）
@@ -49,14 +53,15 @@ export default function LearningSession() {
 
         // ⭐ 2. 核心初始化逻辑（单一数据源）
         // 触发条件：
-        // A. 课程来源不一致（切换课程）
-        // B. 当前处于 IDLE 初始状态
-        // C. 虽然显示处于 LEARNING 状态但内存中无数据（处理异常重启/热重载后的状态不一致）
+        // A. 本次 mount 后首次运行（替代原来的 isIdle，避免依赖 phase 引发竞态）
+        // B. 课程来源不一致（切换课程）
+        // C. 虽然处于 LEARNING 状态但内存中无数据（处理异常重启/热重载后的状态不一致）
+        const isFirstMount = isFirstMountRef.current;
         const isDifferentSource = !currentCourseSource || currentCourseSource !== courseSource;
-        const isIdle = phase === VocabSessionPhase.IDLE;
         const isDataMissing = phase === VocabSessionPhase.LEARNING && (!queue || queue.length === 0);
 
-        if (isDifferentSource || isIdle || isDataMissing) {
+        if (isFirstMount || isDifferentSource || isDataMissing) {
+            isFirstMountRef.current = false;
             console.log(`🔄 Init Session: Phase[${phase}] Queue[${queue.length}] Source[${currentCourseSource} -> ${courseSource}]`);
 
             // 🔥 CRITICAL: Trust store only. Do not use URL params for limit.
@@ -69,13 +74,16 @@ export default function LearningSession() {
         moduleType,
         courseSource,
         currentCourseSource,
-        phase,
+        // phase 不放入依赖数组：WordSession.cleanup 调 resetSession() 会改变 phase，
+        // 若 phase 在依赖里，卸载过程中会意外触发 startCourse → getTodayMemories
         queue.length,
         currentUser?.userId,
         startCourse,
         dailyLimits.word,
         userProgress?.dailyLimit
     ]);
+
+    
 
     if (moduleType === 'letter') {
         return <AlphabetSession />;
@@ -95,7 +103,6 @@ function WordSession() {
     } = useVocabularyLearningEngine();
 
     const handleBackToCourses = () => {
-        useVocabularyStore.getState().resetSession();
         router.replace('/(tabs)/courses');
     };
 

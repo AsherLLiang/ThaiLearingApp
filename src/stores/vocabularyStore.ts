@@ -74,7 +74,6 @@ export const useVocabularyStore = create<VocabularyStore>()(
                         phase: VocabSessionPhase.LOADING, 
                         pendingResults: [], 
                         skippedIds: [] ,
-                        recentWrongWords: []
                     }); // Clear pending, skipped & wrong words
                     
                     const { limit, source } = options;

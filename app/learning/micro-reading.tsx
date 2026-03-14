@@ -54,6 +54,8 @@ export default function MicroReadingScreen() {
                     <>
                         {/* 泰文短文主体 */}
                         <View style={styles.thaiCard}>
+                            <Text style={styles.thaiTitle}>{reading.title}</Text> 
+                            <View style={styles.thaiTitleLine} />
                             <Text style={styles.thaiText}>{reading.thaiText}</Text>
                         </View>
 
@@ -153,6 +155,17 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.08,
         shadowRadius: 8,
         elevation: 3,
+    },
+    thaiTitle: {
+        fontFamily: Typography.notoSerifBold,
+        fontSize: Typography.h1,
+        color: Colors.ink,
+        marginBottom: 10,
+    },
+    thaiTitleLine: {
+        height: 2,
+        backgroundColor: Colors.ink,
+        marginBottom: 10,
     },
     thaiText: {
         fontFamily: Typography.sarabunRegular,

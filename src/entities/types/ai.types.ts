@@ -23,6 +23,7 @@ export interface ExplainVocabularyResponse {
  * 字段名称与 generateMicroReading.js 中 Prompt 要求的 JSON 完全一致
  */
 export interface MicroReadingResponse {
+    title: string;         // AI 生成的泰文短文标题
     thaiText: string;      // AI 生成的泰文短文（80-150 词）
     translation: string;   // 中文逐段辅助翻译
     wordsUsed: string[];   // AI 确认用到的目标词列表（用于校验）

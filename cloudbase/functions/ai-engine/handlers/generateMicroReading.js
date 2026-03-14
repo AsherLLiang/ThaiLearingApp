@@ -31,27 +31,32 @@ async function generateMicroReading(client, data) {
         .join('、');
 
     // ── 4. System Prompt：告诉 AI 它的角色 ────────────────────────────
-    const systemPrompt = `You are a creative Thai language teacher who writes vivid, 
-natural short stories for language learners. 
-Always respond in JSON format only (no markdown, no code fences).`;
+    const systemPrompt = 
+    `
+        You are a creative Thai language teacher who writes vivid, engaging,
+        natural short stories for language learners. 
+        Always respond in JSON format only (no markdown, no code fences).
+    `;
 
     // ── 5. User Prompt：精确描述任务和输出格式 ────────────────────────
-    const userPrompt = `
-Create a short Thai reading passage that naturally incorporates ALL of these vocabulary words:
-${wordList}
+    const userPrompt = 
+    `
+        Create a short Thai reading passage that naturally incorporates ALL of these vocabulary words:
+        ${wordList}
 
-Requirements:
-1. Length: 80-150 Thai words (a full paragraph, NOT just 1-2 sentences)
-2. Story type: a vivid everyday scene (market, restaurant, travel, etc.)
-3. ALL vocabulary words listed above MUST appear in the passage naturally
-4. After the Thai passage, provide a ${targetLanguage} translation paragraph by paragraph
+        Requirements:
+        1. Length: 80-150 Thai words (a full paragraph, NOT just 1-2 sentences, use onlyA1 level Thai vocabulary)
+        2. Story type: a vivid everyday scene (market, restaurant, travel, etc.)
+        3. ALL vocabulary words listed above MUST appear in the passage naturally
+        4. After the Thai passage, provide a ${targetLanguage} translation paragraph by paragraph
 
-Return ONLY valid JSON in this exact format:
-{
-  "thaiText": "<the full Thai passage here>",
-  "translation": "<the full ${targetLanguage} translation here>",
-  "wordsUsed": ["<thaiWord1>", "<thaiWord2>"]
-}
+        Return ONLY valid JSON in this exact format:
+        {
+        "title": "<the Thai title of the story here>",
+        "thaiText": "<the full Thai passage here>",
+        "translation": "<the full ${targetLanguage} translation here>",
+        "wordsUsed": ["<thaiWord1>", "<thaiWord2>"]
+        }
     `;
 
     // ── 6. 调用 AI，与 explainVocab 完全相同的防超时机制 ──────────────
