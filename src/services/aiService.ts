@@ -3,7 +3,7 @@
 import { callCloudFunction } from '../utils/apiClient';
 import { API_ENDPOINTS } from '../config/api.endpoints';
 import { API_TIMEOUT } from '../config/constants';
-import type { ExplainVocabularyResponse, MicroReadingResponse, MicroReadingWord } from '../entities/types/ai.types';
+import type { ExplainVocabularyResponse, MicroReadingResponse, MicroReadingWord, PronunciationFeedbackResponse, ExtractClozeHintsResponse } from '../entities/types/ai.types';
 import type { ApiResponse } from '../entities/types/api.types';
 
 /**
@@ -87,6 +87,79 @@ export class AiService {
       };
     }
   }
+
+  /**
+   * 调用云端 analyzePronunciation，上传录音 base64 + 参考原文，获取 AI 发音分析
+   */
+  static async analyzePronunciation(
+    audioBase64: string,
+    referenceText: string,
+    language: string = 'zh'
+  ): Promise<ApiResponse<PronunciationFeedbackResponse>> {
+    const endpoint = API_ENDPOINTS.AI.ENGINE;
+
+    try {
+      const response = await callCloudFunction<PronunciationFeedbackResponse>(
+        'analyzePronunciation',
+        {
+          audioBase64,
+          referenceText,
+          language,
+          appSecret: 'ThaiApp_2026_Secure',
+        },
+        { endpoint, timeout: API_TIMEOUT.AI }
+      );
+      return response;
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.message || '发音分析失败',
+        code: 'AI_SERVICE_ERROR',
+      };
+    }
+  }
+
+  /**
+   * 调用云端 extractClozeHints，从泰语文章中提取半挖空提示性关键词
+   */
+  static async extractClozeHints(thaiText: string): Promise<ApiResponse<ExtractClozeHintsResponse>> {
+    const endpoint = API_ENDPOINTS.AI.ENGINE;
+
+    try {
+      const response = await callCloudFunction<ExtractClozeHintsResponse>(
+        'extractClozeHints',
+        {
+          thaiText,
+          appSecret: 'ThaiApp_2026_Secure',
+        },
+        { endpoint, timeout: API_TIMEOUT.AI }
+      );
+      return response;
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.message || '提示词提取失败',
+        code: 'AI_SERVICE_ERROR',
+      };
+    }
+  }
+
+  /* SHELVED: cursor-tracking TTS — 云端 TTS + 逐字时间戳，因 GFW 封存，参见 git 历史
+  static async textToSpeech(
+    text: string,
+    voiceName?: string
+  ): Promise<ApiResponse<TtsResponse>> {
+    const endpoint = API_ENDPOINTS.AI.ENGINE;
+    try {
+      const response = await callCloudFunction<TtsResponse>(
+        'textToSpeech',
+        { text, voiceName, appSecret: 'ThaiApp_2026_Secure' },
+        { endpoint, timeout: API_TIMEOUT.AI }
+      );
+      return response;
+    } catch (error: any) {
+      return { success: false, error: error.message || '语音合成失败', code: 'AI_SERVICE_ERROR' };
+    }
+  }
+  */
 }
-
-

@@ -1,5 +1,6 @@
 // src/utils/apiClient.ts
 
+import { Platform } from 'react-native';
 import {
   getApiBaseUrl,
   CURRENT_BACKEND,
@@ -185,8 +186,8 @@ class ApiClient {
         };
       }
 
-      // 网络错误
-      if (!navigator.onLine) {
+      // 网络错误：仅 Web 环境使用 navigator.onLine（RN 中不可用/不可靠）
+      if (Platform.OS === 'web' && typeof navigator !== 'undefined' && !navigator.onLine) {
         console.error('📡 网络未连接');
         return {
           success: false,

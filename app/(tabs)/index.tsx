@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { ScrollView, View, Text, Pressable, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Play, TrendingUp, Clock, Award, AlertCircle, Wrench } from 'lucide-react-native';
+import { Play, TrendingUp, Clock, Award, AlertCircle, Wrench, BookOpen } from 'lucide-react-native';
 import { BlurView } from 'expo-blur';
 import { ThaiPatternBackground } from '@/src/components/common/ThaiPatternBackground';
 // import { FloatingBubbles } from '@/src/components/common/FloatingBubbles';
@@ -268,6 +268,23 @@ export default function HomeScreen({ vocabulary }: { vocabulary: Vocabulary }) {
               );
             })()}
           </View>
+
+          {/* Reading Practice Entry */}
+          <Pressable
+            style={styles.readingPracticeButton}
+            onPress={() => router.push('/learning/article-practice-list')}
+          >
+            <View style={styles.readingPracticeLeft}>
+              <View style={styles.readingPracticeIcon}>
+                <BookOpen size={18} color={Colors.thaiGold} />
+              </View>
+              <View>
+                <Text style={styles.readingPracticeTitle}>{t('articlePractice.listTitle')}</Text>
+                <Text style={styles.readingPracticeHint}>{t('articlePractice.tapWordHint')}</Text>
+              </View>
+            </View>
+            <Play size={16} fill={Colors.taupe} color={Colors.taupe} />
+          </Pressable>
 
           {/* Stats Grid */}
           <View style={styles.statsGrid}>
@@ -577,6 +594,48 @@ const styles = StyleSheet.create({
     height: 160,
     borderRadius: 80,
     backgroundColor: 'rgba(184, 149, 106, 0.2)',
+  },
+  readingPracticeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: Colors.sand,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  readingPracticeLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  readingPracticeIcon: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+    backgroundColor: 'rgba(212, 175, 55, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(212, 175, 55, 0.2)',
+  },
+  readingPracticeTitle: {
+    fontFamily: Typography.notoSerifBold,
+    fontSize: 14,
+    color: Colors.ink,
+  },
+  readingPracticeHint: {
+    fontFamily: Typography.notoSerifRegular,
+    fontSize: 11,
+    color: Colors.taupe,
+    marginTop: 2,
   },
   statsGrid: {
     flexDirection: 'row',

@@ -14,6 +14,10 @@ const client = new OpenAI({
 });
 const explainVocab = require('./handlers/explainVocab');
 const generateMicroReading = require('./handlers/generateMicroReading');
+const analyzePronunciation = require('./handlers/analyzePronunciation');
+const extractClozeHints = require('./handlers/extractClozeHints');
+// SHELVED: cursor-tracking TTS — 因 GFW 封存
+// const textToSpeech = require('./handlers/textToSpeech');
     
 
 exports.main = async (event, context) => {
@@ -58,6 +62,13 @@ exports.main = async (event, context) => {
                 return await explainVocab(client, data);
             case 'generateMicroReading':
                 return await generateMicroReading(client, data);
+            case 'analyzePronunciation':
+                return await analyzePronunciation(client, data);
+            case 'extractClozeHints':
+                return await extractClozeHints(client, data);
+            // SHELVED: cursor-tracking TTS
+            // case 'textToSpeech':
+            //     return await textToSpeech(data);
             default:
                 return createResponse(false, null, 'Unknown action', 'ERR_UNKNOWN_ACTION');
         }

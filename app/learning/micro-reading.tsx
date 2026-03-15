@@ -1,25 +1,29 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
     View,
     Text,
     StyleSheet,
     ScrollView,
     Pressable,
+    ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { ChevronLeft, Mic } from 'lucide-react-native';
+import { ChevronLeft, BookmarkPlus, Check } from 'lucide-react-native';
 import { ThaiPatternBackground } from '@/src/components/common/ThaiPatternBackground';
 import { Colors } from '@/src/constants/colors';
 import { Typography } from '@/src/constants/typography';
-import type { MicroReadingResponse } from '@/src/entities/types/ai.types';
+import { saveArticle } from '@/src/utils/articleStorage';
+import type { MicroReadingResponse, SavedArticle } from '@/src/entities/types/ai.types';
 
 
 export default function MicroReadingScreen() {
     const { t } = useTranslation();
     const router = useRouter();
     const params = useLocalSearchParams<{ result: string }>();
+
+    const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
 
     // 从 Expo Router params 解析 AI 返回结果
     const reading = useMemo<MicroReadingResponse | null>(() => {
@@ -30,6 +34,28 @@ export default function MicroReadingScreen() {
         }
     }, [params.result]);
 
+    const handleSaveArticle = async () => {
+        if (!reading || saveState === 'saving' || saveState === 'saved') return;
+
+        setSaveState('saving');
+        try {
+            const thaiWords = reading.thaiText.trim().split(/\s+/);
+            const newArticle: SavedArticle = {
+                id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+                title: reading.title,
+                thaiText: reading.thaiText,
+                translation: reading.translation,
+                wordsUsed: reading.wordsUsed || [],
+                createdAt: Date.now(),
+                wordCount: thaiWords.length,
+            };
+
+            await saveArticle(newArticle);
+            setSaveState('saved');
+        } catch {
+            setSaveState('error');
+        }
+    };
 
     return (
         <SafeAreaView edges={['top', 'bottom']} style={styles.container}>
@@ -59,13 +85,38 @@ export default function MicroReadingScreen() {
                             <Text style={styles.thaiText}>{reading.thaiText}</Text>
                         </View>
 
-                        {/* 语音占位符 */}
-                        <View style={styles.voicePlaceholder}>
-                            <Mic size={20} color={Colors.taupe} />
-                            <Text style={styles.voicePlaceholderText}>
-                                {t('microReading.voicePlaceholder')}
+                        {/* 保存到练习库 */}
+                        <Pressable
+                            style={[
+                                styles.saveArticleButton,
+                                saveState === 'saved' && styles.saveArticleButtonDone,
+                            ]}
+                            onPress={handleSaveArticle}
+                            disabled={saveState === 'saving' || saveState === 'saved'}
+                        >
+                            {saveState === 'saving' ? (
+                                <ActivityIndicator size="small" color={Colors.thaiGold} />
+                            ) : saveState === 'saved' ? (
+                                <Check size={18} color={Colors.success} />
+                            ) : (
+                                <BookmarkPlus size={18} color={Colors.thaiGold} />
+                            )}
+                            <Text
+                                style={[
+                                    styles.saveArticleText,
+                                    saveState === 'saved' && { color: Colors.success },
+                                    saveState === 'error' && { color: Colors.error },
+                                ]}
+                            >
+                                {saveState === 'saving'
+                                    ? t('microReading.saving')
+                                    : saveState === 'saved'
+                                    ? t('microReading.saveSuccess')
+                                    : saveState === 'error'
+                                    ? t('microReading.saveError')
+                                    : t('microReading.saveArticle')}
                             </Text>
-                        </View>
+                        </Pressable>
 
                         {/* 中文辅助翻译 */}
                         <View style={styles.translationCard}>
@@ -173,22 +224,26 @@ const styles = StyleSheet.create({
         color: Colors.ink,
         lineHeight: 38,
     },
-    voicePlaceholder: {
+    saveArticleButton: {
         flexDirection: 'row',
         alignItems: 'center',
+        justifyContent: 'center',
         gap: 8,
-        backgroundColor: Colors.sand,
-        borderRadius: 12,
+        backgroundColor: 'rgba(212, 175, 55, 0.1)',
+        borderRadius: 14,
         paddingHorizontal: 16,
         paddingVertical: 14,
         borderWidth: 1,
-        borderColor: Colors.taupe + '30',
-        borderStyle: 'dashed',
+        borderColor: 'rgba(212, 175, 55, 0.25)',
     },
-    voicePlaceholderText: {
-        fontFamily: Typography.notoSerifRegular,
+    saveArticleButtonDone: {
+        backgroundColor: 'rgba(42, 157, 143, 0.08)',
+        borderColor: 'rgba(42, 157, 143, 0.2)',
+    },
+    saveArticleText: {
+        fontFamily: Typography.notoSerifBold,
         fontSize: Typography.caption,
-        color: Colors.taupe,
+        color: Colors.accent,
     },
     translationCard: {
         backgroundColor: Colors.white,

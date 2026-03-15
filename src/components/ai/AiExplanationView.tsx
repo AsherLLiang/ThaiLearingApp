@@ -1,7 +1,9 @@
 // src/components/ai/AiExplanationView.tsx
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import React, { useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { useTranslation } from 'react-i18next';
+import * as Speech from 'expo-speech';
+import { Volume2 } from 'lucide-react-native';
 import { Colors } from '@/src/constants/colors';
 import { Typography } from '@/src/constants/typography';
 import type { ExplainVocabularyResponse } from '@/src/entities/types/ai.types';
@@ -13,6 +15,11 @@ interface AiExplanationViewProps {
 export const AiExplanationView: React.FC<AiExplanationViewProps> = ({ data }) => {
   const { t } = useTranslation();
 
+  const speakWord = useCallback((text: string) => {
+    Speech.stop();
+    Speech.speak(text, { language: 'th-TH', rate: 0.85 });
+  }, []);
+
   return (
     <ScrollView 
       style={styles.container} 
@@ -21,7 +28,12 @@ export const AiExplanationView: React.FC<AiExplanationViewProps> = ({ data }) =>
     >
       {/* 头部区域：单词和释义 */}
       <View style={styles.header}>
-        <Text style={styles.thaiWord}>{data.thaiWord}</Text>
+        <Pressable onPress={() => speakWord(data.thaiWord)} style={styles.wordRow}>
+          <Text style={styles.thaiWord}>{data.thaiWord}</Text>
+          <View style={styles.speakerIcon}>
+            <Volume2 size={20} color={Colors.thaiGold} />
+          </View>
+        </Pressable>
         {data.pronunciation ? (
           <View style={styles.pronunciationBadge}>
             <Text style={styles.pronunciationText}>{data.pronunciation}</Text>
@@ -46,7 +58,10 @@ export const AiExplanationView: React.FC<AiExplanationViewProps> = ({ data }) =>
             {data.extraExamples.map((ex, index) => (
               <View key={index} style={styles.exampleItem}>
                  <Text style={styles.exampleScene}>【{ex.scene}】</Text>
-                 <Text style={styles.exampleThai}>{ex.thai}</Text>
+                 <Pressable onPress={() => speakWord(ex.thai)} style={styles.exampleThaiRow}>
+                   <Text style={styles.exampleThai}>{ex.thai}</Text>
+                   <Volume2 size={14} color={Colors.taupe} />
+                 </Pressable>
                  <Text style={styles.exampleChinese}>{ex.chinese}</Text>
               </View>
             ))}
@@ -73,10 +88,23 @@ const styles = StyleSheet.create({
     gap: 12,
     marginBottom: 8,
   },
+  wordRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   thaiWord: {
     fontFamily: Typography.sarabunBold,
     fontSize: 50,
     color: Colors.ink,
+  },
+  speakerIcon: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 16,
+    backgroundColor: 'rgba(212, 175, 55, 0.1)',
   },
   pronunciationBadge: {
     backgroundColor: 'rgba(212, 175, 55, 0.1)',
@@ -132,11 +160,16 @@ const styles = StyleSheet.create({
     color: Colors.taupe,
     marginBottom: 4,
   },
+  exampleThaiRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 4,
+  },
   exampleThai: {
     fontFamily: Typography.sarabunRegular,
     fontSize: 18,
     color: Colors.ink,
-    marginBottom: 4,
   },
   exampleChinese: {
     fontFamily: Typography.notoSerifRegular,

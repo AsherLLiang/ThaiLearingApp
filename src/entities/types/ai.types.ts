@@ -34,3 +34,50 @@ export interface MicroReadingWord {
     thaiWord: string;
     meaning: string;
 }
+
+/* SHELVED: cursor-tracking TTS — 因 GFW 封存，参见 git 历史
+export interface TtsSubtitle {
+    Text: string;
+    BeginTime: number;
+    EndTime: number;
+    BeginIndex: number;
+    EndIndex: number;
+    Phoneme: string | null;
+}
+
+export interface TtsResponse {
+    audio: string;
+    subtitles: TtsSubtitle[];
+}
+*/
+
+/** 发音分析 — 单维度评分 */
+export interface PronunciationDimension {
+    name: string;
+    score: number;       // 1-10
+    comment: string;
+}
+
+/** 发音分析 — AI 返回的完整反馈 */
+export interface PronunciationFeedbackResponse {
+    overallScore: number;
+    dimensions: PronunciationDimension[];
+    suggestions: string[];
+    transcription: string;
+}
+
+/** 半挖空提示词提取 — AI 返回的关键词列表 */
+export interface ExtractClozeHintsResponse {
+    keywords: string[];
+}
+
+/** 持久化到 AsyncStorage 的文章对象 */
+export interface SavedArticle {
+    id: string;
+    title: string;
+    thaiText: string;
+    translation: string;
+    wordsUsed: string[];
+    createdAt: number;
+    wordCount: number;
+}
