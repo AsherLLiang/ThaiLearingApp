@@ -68,6 +68,12 @@ export interface UserProgress {
      */
     completedAlphabetLessons?: string[];
 
+    /**
+     * 按课程来源的单词掌握数（CoursePage 进度条用）
+     * 例: { BaseThai_1: { mastered: 5 }, BaseThai_2: { mastered: 3 }, ... }
+     */
+    wordProgressBySource?: Record<string, { mastered: number }>;
+
     // 设置
     dailyLimit?: number;              // 每日学习数量设置
 }
@@ -297,6 +303,14 @@ export const useModuleAccessStore = create<ModuleAccessStore>()((set, get) => ({
                 console.log(`🌐 后端返回的每日限额: ${result.data.progress.dailyLimit}`);
                 // 🔥 Step 3: 以后端数据为准，本地仅作缓存
                 const remoteCompleted = result.data.progress.completedLessons || [];
+                const stats = (result.data.progress as any).statistics;
+
+                // 🔥 映射后端 statistics 为前端期望的扁平字段（CoursePage 进度条依赖）
+                const letterMasteredCount = stats?.letter?.mastered ?? result.data.progress.letterMasteredCount ?? 0;
+                const letterTotalCount = stats?.letter?.total ?? result.data.progress.letterTotalCount ?? 44;
+                const wordMasteredCount = stats?.word?.mastered ?? result.data.progress.wordMasteredCount ?? 0;
+                const wordTotalCount = stats?.word?.total ?? result.data.progress.wordTotalCount ?? 0;
+                const wordProgressBySource = stats?.wordProgressBySource ?? result.data.progress.wordProgressBySource ?? {};
 
                 // 🔥 更新本地缓存（用于离线时加速）
                 const storageKey = getCompletedLessonsStorageKey(userId);
@@ -307,13 +321,21 @@ export const useModuleAccessStore = create<ModuleAccessStore>()((set, get) => ({
                 set({
                     userProgress: {
                         ...result.data.progress,
-                        completedAlphabetLessons: remoteCompleted  // 🔥 字段映射
+                        completedAlphabetLessons: remoteCompleted,
+                        letterMasteredCount,
+                        letterTotalCount,
+                        wordMasteredCount,
+                        wordTotalCount,
+                        wordProgressBySource,
                     },
                     isLoading: false,
                 });
                 console.log('✅ 用户进度数据已更新 (Backend-first):', {
-                    ...result.data.progress,
-                    completedAlphabetLessons: remoteCompleted
+                    letterMasteredCount,
+                    letterTotalCount,
+                    wordMasteredCount,
+                    wordTotalCount,
+                    completedAlphabetLessons: remoteCompleted,
                 });
             } else {
                 // 🔥 后端失败时，尝试从本地缓存加载（降级方案）

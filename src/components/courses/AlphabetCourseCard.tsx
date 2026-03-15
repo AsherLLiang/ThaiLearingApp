@@ -1,7 +1,6 @@
 // src/components/courses/AlphabetCourseCard.tsx
 import React from 'react';
 import { View, Text, StyleSheet, Pressable, Image, ImageSourcePropType } from 'react-native';
-import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { Colors } from '@/src/constants/colors';
 import { Typography } from '@/src/constants/typography';
@@ -17,28 +16,12 @@ interface AlphabetCourseCardProps {
     lessons: number;
   };
   isCurrent: boolean;
-  progress?: {
-    completed: number;
-    total: number;
-  };
+  progress?: { completed: number; total: number }; // 保留以兼容调用方，字母模块暂不显示
   onStart: () => void;
 }
 
-export function AlphabetCourseCard({ course, isCurrent, progress, onStart }: AlphabetCourseCardProps) {
-  const router = useRouter();
+export function AlphabetCourseCard({ course, isCurrent, onStart }: AlphabetCourseCardProps) {
   const { t } = useTranslation();
-
-  const progressPercent = (() => {
-    if (!progress) {
-      return null;
-    }
-    const completed = progress.completed || 0;
-    const total = progress.total || 44; // Default total if not provided
-    if (total === 0) {
-      return 0; // Or null, depending on desired behavior for 0 total
-    }
-    return Math.min(100, Math.round((completed / total) * 100));
-  })();
 
   return (
     <View style={[styles.card, isCurrent && styles.activeCard]}>
@@ -59,20 +42,8 @@ export function AlphabetCourseCard({ course, isCurrent, progress, onStart }: Alp
           </Text>
 
           <View style={styles.footer}>
-            <View style={styles.metaColumn}>
-              {progressPercent !== null ? (
-                <>
-                  <View style={styles.progressBar}>
-                    <View style={[styles.progressFill, { width: `${progressPercent}%` }]} />
-                  </View>
-                  <Text style={styles.metaText}>
-                    {progress?.completed}/{progress?.total} ({progressPercent}%)
-                  </Text>
-                </>
-              ) : (
-                <Text style={styles.metaText}>{course.lessons} 课时</Text>
-              )}
-            </View>
+            {/* 字母模块不显示课时/进度 */}
+            <View style={styles.metaColumn} />
 
             {/* Start Learning 按钮 */}
             <Pressable

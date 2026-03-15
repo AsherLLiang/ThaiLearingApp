@@ -88,7 +88,7 @@ export function CourseCard(
                                     </Text>
                                 </>
                             ) : (
-                                <Text style={styles.metaText}>{course.lessons} 课时</Text>
+                                <Text style={styles.metaText}>{course.lessons} {t('courses.lessons')}</Text>
                             )
                         )}
                     </View>

@@ -14,6 +14,13 @@ import { ReviewItem } from '@/src/entities/types/entities';
 import { useUserStore } from '@/src/stores/userStore';
 import { useModuleAccessStore } from '@/src/stores/moduleAccessStore';
 import { useVocabularyStore } from '@/src/stores/vocabularyStore';
+import { useLearningPreferenceStore } from '@/src/stores/learningPreferenceStore';
+import { useTodayStudyTime } from '@/src/hooks/useTodayStudyTime';
+import { CourseSelectionModal } from '@/src/components/courses/CourseSelectionModal';
+import coursesData from '@/assets/courses/courses.json';
+import alphabetCourses from '@/assets/courses/alphabetCourses.json';
+import type { ModuleType } from '@/src/stores/moduleAccessStore';
+import type { ImageSourcePropType } from 'react-native';
 // === AI Dictionary Imports ===
 import { TextInput, ActivityIndicator, Modal } from 'react-native';
 import { Search, X } from 'lucide-react-native';
@@ -30,6 +37,42 @@ const MOCK_REVIEWS: ReviewItem[] = [
   { id: '4', char: 'จ', phonetic: 'Jor Jan', type: 'Review', dueIn: 'Today' },
 ];
 
+type CourseItem = {
+  id: string;
+  source: string;
+  title: string;
+  description: string;
+  level: string;
+  image: string;
+  category: string;
+  lessons: number;
+};
+
+type CourseWithImage = CourseItem & { imageSource: ImageSourcePropType };
+
+const COURSE_IMAGE_MAP: Record<string, ImageSourcePropType> = {
+  'ThaiBase_1.png': require('@/assets/images/courses/ThaiBase_1.png'),
+  'ThaiBase_2.png': require('@/assets/images/courses/ThaiBase_2.png'),
+  'ThaiBase_3.png': require('@/assets/images/courses/ThaiBase_3.png'),
+  'ThaiBase_4.png': require('@/assets/images/courses/ThaiBase_4.png'),
+  'thai_alphabet.png': require('@/assets/images/courses/thai_alphabet.png'),
+  default: require('@/assets/images/courses/ThaiBase_1.png'),
+};
+
+const COURSES: CourseWithImage[] = [
+  ...(alphabetCourses as CourseItem[]),
+  ...(coursesData as CourseItem[]),
+].map((c) => ({ ...c, imageSource: COURSE_IMAGE_MAP[c.image] || COURSE_IMAGE_MAP.default }));
+
+function getModuleType(course: CourseWithImage): ModuleType {
+  switch (course.category) {
+    case 'letter': return 'letter';
+    case 'sentence': return 'sentence';
+    case 'article': return 'article';
+    default: return 'word';
+  }
+}
+
 export default function HomeScreen({ vocabulary }: { vocabulary: Vocabulary }) {
   const { t } = useTranslation();
   const [reviews, setReviews] = useState<ReviewItem[]>([]);
@@ -37,8 +80,14 @@ export default function HomeScreen({ vocabulary }: { vocabulary: Vocabulary }) {
 
   // Stores
   const { currentUser } = useUserStore();
-  const { userProgress } = useModuleAccessStore();
+  const { currentCourseSource, startCourse } = useVocabularyStore();
   const recentWrongWords = useVocabularyStore(s => s.recentWrongWords);
+  const { streakDays, checkIn, hasCheckedInToday } = useLearningPreferenceStore();
+  const { value: studyTimeValue, unit: studyTimeUnit } = useTodayStudyTime();
+
+  // 英雄卡：切换课程确认弹窗
+  const [modalVisible, setModalVisible] = useState(false);
+  const [pendingCourse, setPendingCourse] = useState<CourseWithImage | null>(null);
   
   //=========================================================================
   // === AI Dictionary State ===
@@ -87,75 +136,52 @@ export default function HomeScreen({ vocabulary }: { vocabulary: Vocabulary }) {
     setTimeout(() => setReviews([]), 500);
   };
 
-  // Helper to determine current course based on progress
-  const getCurrentCourse = () => {
-    if (!userProgress) {
-      return {
-        name: t('modules.alphabet'),
-        level: t('alphabet.level'),
-        progress: 0,
-        route: '/learning' as const,
-        module: 'letter' as const,
-        thaiText: 'กขฃค',
-        translation: t('alphabet.description'),
-      };
+  // 英雄卡：根据 currentCourseSource 获取当前课程，无则默认第一个（字母课）
+  const heroCourse = COURSES.find((c) => c.source === currentCourseSource) ?? COURSES[0];
+  const isHeroCurrent = currentCourseSource === heroCourse.source;
+
+  // 英雄卡：与 courses 页一致的 Start/Continue 逻辑
+  const handleHeroStartLearning = (course: CourseWithImage) => {
+    const moduleType = getModuleType(course);
+    const { checkAccessLocally, accessCache: cachedAccess } = useModuleAccessStore.getState();
+    const devOverrideUnlocked = __DEV__ && cachedAccess.get(moduleType) === true;
+    const isLocked = moduleType !== 'letter' && !devOverrideUnlocked && !checkAccessLocally(moduleType);
+    if (isLocked) return;
+
+    // 当前课或尚未选课：直接跳转
+    if (!currentCourseSource || currentCourseSource === course.source) {
+      if (moduleType === 'letter') {
+        router.push('/alphabet');
+      } else {
+        router.push({
+          pathname: '/learning',
+          params: { module: moduleType, source: course.source },
+        });
+      }
+      return;
     }
 
-    const { letterProgress, wordProgress, sentenceProgress } = userProgress;
-
-    // 1. Alphabet Phase
-    // 后端 letterProgress 为 0-1，这里用 80% 作为阶段切换阈值
-    if (letterProgress < 0.8) {
-      return {
-        name: t('modules.alphabet'),
-        level: t('alphabet.level'),
-        progress: Math.round(letterProgress * 100),
-        route: '/learning' as const,
-        module: 'letter' as const,
-        thaiText: 'ก ข ฃ ค',
-        translation: t('alphabet.description'),
-      };
-    }
-
-    // 2. Vocabulary Phase
-    if (wordProgress < 80) {
-      return {
-        name: t('modules.word'),
-        level: 'Intermediate 1', // TODO: Add to i18n
-        progress: wordProgress,
-        route: '/learning' as const, // Points to app/learning/index.tsx
-        module: 'word' as const,
-        thaiText: 'คำศัพท์',
-        translation: 'Expand your vocabulary',
-      };
-    }
-
-    // 3. Sentence Phase
-    if (sentenceProgress < 80) {
-      return {
-        name: t('modules.sentence'),
-        level: 'Intermediate 2',
-        progress: sentenceProgress,
-        route: '/learning' as const, // Placeholder
-        module: 'sentence' as const,
-        thaiText: 'ประโยค',
-        translation: 'Master sentence structures',
-      };
-    }
-
-    // 4. Article Phase
-    return {
-      name: t('modules.article'),
-      level: 'Advanced',
-      progress: userProgress.articleProgress || 0,
-      route: '/learning' as const, // Placeholder
-      module: 'article' as const,
-      thaiText: 'บทความ',
-      translation: 'Read authentic articles',
-    };
+    // 切换课程：弹确认框
+    setPendingCourse(course);
+    setModalVisible(true);
   };
 
-  const currentCourse = getCurrentCourse();
+  const confirmSwitchCourse = async () => {
+    if (!pendingCourse) return;
+    const moduleType = getModuleType(pendingCourse);
+    setModalVisible(false);
+    setPendingCourse(null);
+    if (moduleType === 'letter') {
+      router.push('/alphabet');
+      startCourse(pendingCourse.source, 200, 'letter');
+    } else {
+      router.push({
+        pathname: '/learning',
+        params: { module: moduleType, source: pendingCourse.source },
+      });
+    }
+  };
+
   const displayName = currentUser?.displayName || 'Student';
 
   return (
@@ -177,9 +203,6 @@ export default function HomeScreen({ vocabulary }: { vocabulary: Vocabulary }) {
                 <Text style={styles.greetingText}>ສະບາຍດີ, {displayName}</Text>
                 <Text style={styles.greetingDot}>.</Text>
               </View>
-              <Text style={styles.subtitleText}>
-                {t('home.todayProgress')} {currentCourse.progress}%
-              </Text>
             </View>
 
             <View style={styles.awardBadge}>
@@ -217,43 +240,42 @@ export default function HomeScreen({ vocabulary }: { vocabulary: Vocabulary }) {
           {/* Floating Bubbles */}
           {/* <FloatingBubbles reviews={reviews} onOpenReview={handleBubbleClick} /> */}
 
-          {/* Hero Progress Card */}
+          {/* Hero Progress Card：根据 currentCourseSource 显示课程，与 courses 页一致的 Start/Continue 逻辑 */}
           <View>
             {(() => {
-              // 🔒 Lock Check for Hero Card
+              const moduleType = getModuleType(heroCourse);
               const { checkAccessLocally } = useModuleAccessStore.getState();
-              const isHeroLocked = currentCourse.module !== 'letter' && !checkAccessLocally(currentCourse.module);
+              const isHeroLocked = moduleType !== 'letter' && !checkAccessLocally(moduleType);
 
               return (
                 <Pressable
-                  style={[styles.heroCard, isHeroLocked && { opacity: 0.8, backgroundColor: '#333' }]} // Visual feedback
+                  style={[styles.heroCard, isHeroLocked && { opacity: 0.8, backgroundColor: '#333' }]}
                   disabled={isHeroLocked}
-                  onPress={() => {
-                    if (isHeroLocked) return;
-
-                    router.push({
-                      pathname: currentCourse.route,
-                      params: { module: currentCourse.module }
-                    });
-                  }}
+                  onPress={() => handleHeroStartLearning(heroCourse)}
                 >
                   <View style={styles.heroContent}>
                     <View style={styles.heroTopRow}>
                       <View>
                         <Text style={styles.courseLabel}>{t('home.currentCourse')}</Text>
                         <Text style={styles.courseName}>
-                          {currentCourse.name} {isHeroLocked ? '(Locked)' : ''}
+                          {t(heroCourse.title)} {isHeroLocked ? '(Locked)' : ''}
                         </Text>
                       </View>
                       <View style={styles.levelBadge}>
-                        <Text style={styles.levelText}>{currentCourse.level}</Text>
+                        <Text style={styles.levelText}>{t(heroCourse.level)}</Text>
                       </View>
                     </View>
 
                     <View style={styles.heroBottomRow}>
                       <View style={styles.heroTextContainer}>
-                        <Text style={styles.thaiText}>{currentCourse.thaiText}</Text>
-                        <Text style={styles.translationText}>{currentCourse.translation}</Text>
+                        {heroCourse.category !== 'letter' && (
+                          <Text style={styles.heroProgressText}>
+                            {heroCourse.lessons} {t('courses.lessons')}
+                          </Text>
+                        )}
+                        <Text style={styles.translationText} numberOfLines={2}>
+                          {t(heroCourse.description)}
+                        </Text>
                       </View>
 
                       <View style={[styles.playButtonLarge, isHeroLocked && { backgroundColor: '#666' }]}>
@@ -268,6 +290,16 @@ export default function HomeScreen({ vocabulary }: { vocabulary: Vocabulary }) {
               );
             })()}
           </View>
+
+          <CourseSelectionModal
+            visible={modalVisible}
+            courseTitle={pendingCourse ? t(pendingCourse.title) : ''}
+            onConfirm={confirmSwitchCourse}
+            onCancel={() => {
+              setModalVisible(false);
+              setPendingCourse(null);
+            }}
+          />
 
           {/* Reading Practice Entry */}
           <Pressable
@@ -288,16 +320,28 @@ export default function HomeScreen({ vocabulary }: { vocabulary: Vocabulary }) {
 
           {/* Stats Grid */}
           <View style={styles.statsGrid}>
-            <View style={styles.statCard}>
+            <Pressable
+              style={[styles.statCard, !hasCheckedInToday() && styles.statCardCheckedIn]}
+              onPress={() => {
+                if (hasCheckedInToday()) return;
+                const success = checkIn();
+                if (success) {
+                  // 可选：轻触反馈
+                }
+              }}
+              disabled={hasCheckedInToday()}
+            >
               <View style={styles.statTopRow}>
                 <View style={styles.statIconContainer}>
-                  <TrendingUp size={20} color={Colors.ink} />
+                  <TrendingUp size={20} color={!hasCheckedInToday() ? Colors.taupe : Colors.ink} />
                 </View>
-                <Text style={styles.statLabel}>{t('profile.streakDays')}</Text>
+                <Text style={styles.statLabel}>
+                  {hasCheckedInToday() ? t('home.checkInToday') : t('profile.streakDays')}
+                </Text>
               </View>
-              <Text style={styles.statValue}>12</Text>
+              <Text style={styles.statValue}>{streakDays ?? 0}</Text>
               <Text style={styles.statUnit}>{t('home.streak')}</Text>
-            </View>
+            </Pressable>
 
             <View style={styles.statCard}>
               <View style={styles.statTopRow}>
@@ -306,8 +350,8 @@ export default function HomeScreen({ vocabulary }: { vocabulary: Vocabulary }) {
                 </View>
                 <Text style={styles.statLabel}>{t('profile.studyTime')}</Text>
               </View>
-              <Text style={styles.statValue}>4.5</Text>
-              <Text style={styles.statUnit}>{t('home.hoursThisWeek')}</Text>
+              <Text style={styles.statValue}>{studyTimeValue}</Text>
+              <Text style={styles.statUnit}>{studyTimeUnit === 'hrs' ? t('home.hoursToday') : t('home.minutesToday')}</Text>
             </View>
           </View>
 
@@ -549,6 +593,12 @@ const styles = StyleSheet.create({
   heroTextContainer: {
     flex: 1,
   },
+  heroProgressText: {
+    fontFamily: Typography.notoSerifBold,
+    fontSize: 18,
+    color: Colors.white,
+    marginBottom: 6,
+  },
   thaiText: {
     fontFamily: Typography.sarabunRegular,
     fontSize: 48,
@@ -654,6 +704,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 4,
     elevation: 2,
+  },
+  statCardCheckedIn: {
+    opacity: 0.85,
+    borderColor: 'rgba(212, 175, 55, 0.3)',
+    backgroundColor: 'rgba(212, 175, 55, 0.06)',
   },
   statTopRow: {
     flexDirection: 'row',

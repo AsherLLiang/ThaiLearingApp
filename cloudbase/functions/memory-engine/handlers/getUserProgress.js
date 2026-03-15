@@ -73,6 +73,23 @@ async function getUserProgress(db, params) {
       .where({ userId, entityType: 'word', masteryLevel: db.command.gte(0.7) })
       .count();
 
+    // 🔥 按课程统计单词掌握数（entityId 格式: BaseThai_1_7, BaseThai_2_15 等）
+    const WORD_SOURCES = ['BaseThai_1', 'BaseThai_2', 'BaseThai_3', 'BaseThai_4'];
+    const wordProgressBySource = {};
+    for (const source of WORD_SOURCES) {
+      const prefix = `${source}_`;
+      const nextSource = source.replace(/\d+$/, (m) => String(parseInt(m, 10) + 1));
+      const masteredResult = await db.collection('memory_status')
+        .where({
+          userId,
+          entityType: 'word',
+          masteryLevel: db.command.gte(0.7),
+          entityId: db.command.gte(prefix).and(db.command.lt(nextSource))
+        })
+        .count();
+      wordProgressBySource[source] = { mastered: masteredResult.total };
+    }
+
     // 4. 组装
     const result = {
       ...progress,
@@ -94,7 +111,8 @@ async function getUserProgress(db, params) {
           learned: wordCountResult.total,
           mastered: wordMasteredResult.total,
           progress: wordCountResult.total > 0 ? (wordMasteredResult.total / 3500).toFixed(2) : 0
-        }
+        },
+        wordProgressBySource  // 🔥 按课程：{ BaseThai_1: { mastered: N }, ... }
       },
       unlockStatus: {
         letter: true,

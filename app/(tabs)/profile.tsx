@@ -1,6 +1,6 @@
 // app/(tabs)/profile.tsx
 import React from 'react';
-import { View, Text, Pressable, ScrollView, StyleSheet, Switch, Alert } from 'react-native';
+import { View, Text, Pressable, ScrollView, StyleSheet, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -12,6 +12,7 @@ import { useUserStore } from '@/src/stores/userStore';
 import { useVocabularyStore } from '@/src/stores/vocabularyStore';
 
 import { useLearningPreferenceStore } from '@/src/stores/learningPreferenceStore';
+import { cancelDailyReminder } from '@/src/utils/reminderNotification';
 import { Colors } from '@/src/constants/colors';
 import { Typography } from '@/src/constants/typography';
 
@@ -24,8 +25,7 @@ export default function ProfileScreen() {
   const { streakDays } = useLearningPreferenceStore();
   const { userProgress } = useModuleAccessStore();
 
-  const [dailyReminder, setDailyReminder] = React.useState(true);
-
+  const { dailyReminderEnabled, dailyReminderTime } = useLearningPreferenceStore();
 
 
   const handleLogout = () => {
@@ -37,7 +37,8 @@ export default function ProfileScreen() {
         {
           text: t('common.confirm'),
           style: 'destructive',
-          onPress: () => {
+          onPress: async () => {
+            await cancelDailyReminder();
             clearVocabForLogout();    // 清除单词 Store 持久化状态
             clearPrefForLogout();     // 清除 streakDays / dailyLimits
             logout();
@@ -92,35 +93,37 @@ export default function ProfileScreen() {
             </View>
           </View>
           <Text style={styles.displayName}>{currentUser?.displayName || 'Unknow'}</Text>
-          <Text style={styles.subtitle}>显示当前登录邮箱</Text>
+          <Text style={styles.subtitle}>{currentUser?.email || ''}</Text>
         </Animated.View>
 
-        {/* Achievements Section */}
-        <Animated.View entering={FadeInDown.delay(200).duration(500)} style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Award size={20} color={Colors.ink} />
-            <Text style={styles.sectionTitle}>{t('profile.achievements')}</Text>
-          </View>
-
-          <View style={styles.achievementsContainer}>
-            <View style={styles.achievementsGrid}>
-              {achievements.map((achievement, index) => (
-                <View
-                  key={achievement.id}
-                  style={[
-                    styles.achievementBadge,
-                    !achievement.unlocked && styles.achievementBadgeLocked,
-                  ]}
-                >
-                  <View style={styles.achievementIcon}>
-                    <Text style={styles.achievementEmoji}>{achievement.icon}</Text>
-                  </View>
-                  <Text style={styles.achievementLabel}>{achievement.label}</Text>
-                </View>
-              ))}
+        {/* Achievements Section - 已屏蔽 */}
+        {false && (
+          <Animated.View entering={FadeInDown.delay(200).duration(500)} style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Award size={20} color={Colors.ink} />
+              <Text style={styles.sectionTitle}>{t('profile.achievements')}</Text>
             </View>
-          </View>
-        </Animated.View>
+
+            <View style={styles.achievementsContainer}>
+              <View style={styles.achievementsGrid}>
+                {achievements.map((achievement, index) => (
+                  <View
+                    key={achievement.id}
+                    style={[
+                      styles.achievementBadge,
+                      !achievement.unlocked && styles.achievementBadgeLocked,
+                    ]}
+                  >
+                    <View style={styles.achievementIcon}>
+                      <Text style={styles.achievementEmoji}>{achievement.icon}</Text>
+                    </View>
+                    <Text style={styles.achievementLabel}>{achievement.label}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          </Animated.View>
+        )}
 
         {/* Settings Section */}
         <Animated.View entering={FadeInDown.delay(300).duration(500)} style={styles.section}>
@@ -128,15 +131,18 @@ export default function ProfileScreen() {
 
           <View style={styles.settingsCard}>
             {/* Daily Reminder */}
-            <View style={styles.settingItem}>
+            <Pressable
+              style={styles.settingItem}
+              onPress={() => router.push('/learning/reminder-settings')}
+            >
               <Text style={styles.settingLabel}>{t('profile.dailyReminder')}</Text>
-              <Switch
-                value={dailyReminder}
-                onValueChange={setDailyReminder}
-                trackColor={{ false: Colors.sand, true: Colors.ink }}
-                thumbColor={Colors.white}
-              />
-            </View>
+              <View style={styles.settingRight}>
+                <Text style={styles.settingValue}>
+                  {dailyReminderEnabled ? dailyReminderTime : t('profile.reminder.off')}
+                </Text>
+                <ChevronRight size={20} color={Colors.taupe} />
+              </View>
+            </Pressable>
 
             {/* Daily Learning Limit */}
             <View style={styles.divider} />

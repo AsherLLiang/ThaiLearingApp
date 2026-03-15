@@ -106,20 +106,7 @@ export default function CoursesScreen() {
   };
 
   const getCourseProgress = (course: CourseWithImage) => {
-    if (!userProgress) return undefined;
-    const moduleType = getModuleType(course);
-    if (moduleType === 'letter') {
-      return {
-        completed: userProgress.letterMasteredCount,
-        total: userProgress.letterTotalCount || course.lessons,
-      };
-    }
-    if (moduleType === 'word') {
-      return {
-        completed: userProgress.wordMasteredCount,
-        total: userProgress.wordTotalCount || course.lessons,
-      };
-    }
+    // 🔒 暂屏蔽：字母/单词进度条显示不正确，待后端数据修正后再启用
     return undefined;
   };
 

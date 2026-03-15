@@ -103,7 +103,7 @@
     - 连续打卡 7 天（根据 `learningStore.progress.streakDays` 判断是否解锁）；  
     - 其他成就占位（Master、Vocab100 等）。
 - 设置卡片：
-  - 每日提醒开关（本地 `dailyReminder` 状态，暂未接入通知服务）；  
+  - 每日提醒：点击进入定时提醒设置页，可开关提醒并设置每日提醒时间，使用 Notifee 在指定时间弹出通知；  
   - 每日学习数量设置：
     - 弹出 Alert 供用户选择 10/20/50 个；
     - 本地调用 `useModuleAccessStore.setState` 更新 `userProgress.dailyLimit`（前端模拟）；

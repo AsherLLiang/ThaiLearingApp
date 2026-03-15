@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useFocusEffect } from '@react-navigation/native';
 import { View, Text, StyleSheet, Pressable, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -83,7 +84,14 @@ export default function LearningSession() {
         userProgress?.dailyLimit
     ]);
 
-    
+    // 学习时长追踪：进入页面开始计时，离开时累加到当日
+    const { startStudySession, stopStudySession } = useLearningPreferenceStore();
+    useFocusEffect(
+        React.useCallback(() => {
+            startStudySession();
+            return () => stopStudySession();
+        }, [startStudySession, stopStudySession])
+    );
 
     if (moduleType === 'letter') {
         return <AlphabetSession />;

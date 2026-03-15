@@ -1,5 +1,6 @@
 {
   "expo": {
+    "newArchEnabled": true,
     "name": "ThaiLearningApp",
     "slug": "ThaiLearningApp",
     "scheme": "thailearningapp",

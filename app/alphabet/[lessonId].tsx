@@ -2,6 +2,7 @@
 
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import { View, Text, ActivityIndicator, StyleSheet, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, Lock } from 'lucide-react-native'; // Assuming Lock icon exists or use fallback
@@ -9,6 +10,7 @@ import { ArrowLeft, Lock } from 'lucide-react-native'; // Assuming Lock icon exi
 import { useAlphabetLearningEngine } from '@/src/hooks/useAlphabetLearningEngine';
 import { AlphabetLearningEngineView } from '@/src/components/learning/alphabet/AlphabetLearningEngineView';
 import { useModuleAccessStore } from '@/src/stores/moduleAccessStore';
+import { useLearningPreferenceStore } from '@/src/stores/learningPreferenceStore';
 import { getLessonMetadata, getAllLessons } from '@/src/config/alphabet/lessonMetadata.config';
 import { Colors } from '@/src/constants/colors';
 import { Typography } from '@/src/constants/typography';
@@ -119,6 +121,14 @@ export default function AlphabetLessonFlow() {
 // Inner component that actually invokes the engine hook
 function AuthenticatedLessonFlow({ lessonId }: { lessonId: string }) {
   const router = useRouter();
+  const { startStudySession, stopStudySession } = useLearningPreferenceStore();
+
+  useFocusEffect(
+    React.useCallback(() => {
+      startStudySession();
+      return () => stopStudySession();
+    }, [startStudySession, stopStudySession])
+  );
 
   const {
     phase,
