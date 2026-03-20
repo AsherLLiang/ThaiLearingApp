@@ -1,4 +1,16 @@
 const { createResponse } = require('../utils/response');
+
+/** 与 alphabetLessonConfig / 前端课表一致：测试通过视为全部课结业解锁 */
+const ALL_ALPHABET_LESSON_IDS = [
+    'lesson1',
+    'lesson2',
+    'lesson3',
+    'lesson4',
+    'lesson5',
+    'lesson6',
+    'lesson7',
+];
+
 /**
  * 标记字母测试通过
  * @param {Object} db - 数据库实例
@@ -49,6 +61,37 @@ async function passLetterTest(db, data) {
                     createdAt: now,
                     updatedAt: now
                 }
+            });
+        }
+
+        // 同步 user_alphabet_progress：写满 completedLessons，字母课列表页按链式解锁即可全开
+        const alphabetCol = db.collection('user_alphabet_progress');
+        const alphabetSnap = await alphabetCol.where({ userId }).limit(1).get();
+
+        if (!alphabetSnap.data || alphabetSnap.data.length === 0) {
+            // 与 memory-engine submitRoundEvaluation 首次 add 字段对齐；无轮次记录则 roundHistory 为空
+            await alphabetCol.add({
+                data: {
+                    userId,
+                    letterProgress: 1,
+                    letterCompleted: false,
+                    completedLessons: [...ALL_ALPHABET_LESSON_IDS],
+                    masteredLetterCount: 0,
+                    totalLetterCount: 80,
+                    currentRound: 1,
+                    roundHistory: [],
+                    createdAt: now,
+                    updatedAt: now,
+                },
+            });
+        } else {
+            const docId = alphabetSnap.data[0]._id;
+            await alphabetCol.doc(docId).update({
+                data: {
+                    completedLessons: [...ALL_ALPHABET_LESSON_IDS],
+                    letterProgress: 1,
+                    updatedAt: now,
+                },
             });
         }
 

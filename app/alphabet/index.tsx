@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { ArrowLeft, X, BookOpen, ChevronRight } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 
@@ -180,6 +181,13 @@ export default function AlphabetCoursesScreen() {
   useEffect(() => {
     getUserProgress();
   }, [getUserProgress]);
+
+  // 从测验页 / 其他页返回时刷新，便于 letterCompleted 更新后立刻隐藏「参加测试」按钮
+  useFocusEffect(
+    useCallback(() => {
+      getUserProgress();
+    }, [getUserProgress])
+  );
 
   useEffect(() => {
     let mounted = true;
@@ -365,20 +373,22 @@ export default function AlphabetCoursesScreen() {
             <View style={{ height: 100 }} />
           </ScrollView>
 
-          {/* Fixed Footer for Test Entry */}
-          <View style={styles.footerContainer}>
-            <Pressable
-              style={({ pressed }) => [
-                styles.unlockAllBtn,
-                pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] }
-              ]}
-              onPress={() => router.push('/alphabet/test')}
-            >
-              <Text style={styles.unlockAllText}>
-                {t('alphabetCourse.takeTest')}
-              </Text>
-            </Pressable>
-          </View>
+          {/* 字母测验通过后 user_progress.letterCompleted=true，不再展示「参加测试以解锁全部课程」 */}
+          {!userProgress?.letterCompleted && (
+            <View style={styles.footerContainer}>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.unlockAllBtn,
+                  pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] }
+                ]}
+                onPress={() => router.push('/alphabet/test')}
+              >
+                <Text style={styles.unlockAllText}>
+                  {t('alphabetCourse.takeTest')}
+                </Text>
+              </Pressable>
+            </View>
+          )}
         </View>
       )}
 

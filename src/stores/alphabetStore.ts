@@ -1,7 +1,7 @@
 // src/stores/alphabetStore.ts
 
 /**
- * 字母学习 Store（V9 版本）
+ * 字母学习 Store
  *
  * 职责：
  * - 通过 memory-engine（/memory-engine 云函数）获取今日字母队列
@@ -37,11 +37,11 @@ import {
 // ==================== 后端记忆状态 ====================
 
 export interface MemoryStatus {
-  masteryLevel: number;
-  repetition: number;
-  correctCount: number;
-  wrongCount: number;
-  streakCorrect: number;
+  masteryLevel: number; //legacy
+  repetition: number; //legacy
+  correctCount: number;//legacy
+  wrongCount: number;//legacy
+  streakCorrect: number;//legacy
   nextReviewDate: number;
   isNew: boolean;
 }
@@ -160,7 +160,7 @@ interface AlphabetStoreState {
     totalQuestions: number;
     correctCount: number;
     accuracy: number;
-  }) => Promise<void>;
+  }) => Promise<ApiResponse<unknown>>;
 
   next: () => void;
   appendQueue: (items: AlphabetQueueItem[]) => void;
@@ -649,7 +649,7 @@ export const useAlphabetStore = create<AlphabetStoreState>()(
         accuracy,
       }) => {
         try {
-          await callCloudFunction(
+          const roundRes = await callCloudFunction<{ round?: unknown }>(
             'submitRoundEvaluation',
             {
               userId,
@@ -664,9 +664,14 @@ export const useAlphabetStore = create<AlphabetStoreState>()(
               endpoint: API_ENDPOINTS.MEMORY.SUBMIT_ROUND_EVALUATION.cloudbase,
             },
           );
+          return roundRes;
         } catch (e: any) {
           console.error('❌ submitRoundEvaluation error:', e);
-          // 不影响前端流程，出错时只记录日志
+          return {
+            success: false,
+            error: e?.message ?? 'submitRoundEvaluation error',
+            code: 'CLIENT_ERROR',
+          };
         }
       },
 

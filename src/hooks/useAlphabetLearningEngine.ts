@@ -571,8 +571,8 @@ export function useAlphabetLearningEngine(lessonId: string) {
     if (mode === 'learning') {
       // ===== learning 模式：正常写入进度 =====
 
-      // 1. Submit to Backend
-      await submitRoundToStore({
+      // 1. Submit to Backend（失败时不得推进本地轮次，否则 roundHistory 未写入会导致下次 initializeSession 仍从 round1 起算）
+      const roundEvalRes = await submitRoundToStore({
         userId,
         lessonId,
         roundNumber: currentRound,
@@ -580,6 +580,14 @@ export function useAlphabetLearningEngine(lessonId: string) {
         correctCount,
         accuracy: 1, // Hack: If they cleared error queue, they technically "passed".
       });
+
+      if (!roundEvalRes.success) {
+        Alert.alert(
+          '同步失败',
+          roundEvalRes.error || '无法保存轮次成绩，请检查网络后重试。',
+        );
+        return;
+      }
 
       // 2. Log
       console.log(`✅ Round ${currentRound} Submit Success.`);

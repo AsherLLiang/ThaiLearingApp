@@ -62,8 +62,14 @@ app/
     test.tsx
   learning/
     _layout.tsx
+    article-practice-list.tsx
+    article-practice-shadowing.tsx
+    article-practice.tsx
     dailyLimit.tsx
     index.tsx
+    micro-reading.tsx
+    reminder-settings.tsx
+    session-summary.tsx
   _layout.tsx
   review-modal.tsx
 assets/
@@ -75,11 +81,28 @@ assets/
       ThaiBase_3.png
       ThaiBase_4.png
   adaptive-icon.png
+  app-logo.png
+  app-logo.svg
   favicon.png
   icon.png
   splash-icon.png
 cloudbase/
   functions/
+    ai-engine/
+      handlers/
+        ttsProviders/
+          googleTts.js
+        analyzePronunciation.js
+        explainVocab.js
+        extractClozeHints.js
+        generateMicroReading.js
+        textToSpeech.js
+      utils/
+        constants.js
+        response.js
+      index.js
+      package.json
+      test.js
     alphabet/
       handlers/
         getAllLetters.js
@@ -148,12 +171,15 @@ cloudbase/
   test-all-apis.sh
   test-comprehensive.sh
 scripts/
+  export-logo-png.js
   getAudioJsonFromWeb.js
   getVocabJsonFromWeb.js
   verify_vocab_logic.js
   vocab.test.js
 src/
   components/
+    ai/
+      AiExplanationView.tsx
     common/
       AppLogo.tsx
       BlurRevealer.tsx
@@ -211,6 +237,7 @@ src/
       QualityScore.enum.ts
       QuestionType.enum.ts
     types/
+      ai.types.ts
       alphabet.types.ts
       alphabetGameTypes.ts
       api.types.ts
@@ -227,12 +254,16 @@ src/
   hooks/
     useAlphabetLearningEngine.ts
     useModuleAccess.ts
+    useTodayStudyTime.ts
+    useTtsPlayer.ts
     useVocabularyLearningEngine.ts
   i18n/
     locales/
       en.ts
       zh.ts
     index.ts
+  services/
+    aiService.ts
   stores/
     alphabetStore.ts
     languageStore.ts
@@ -250,10 +281,12 @@ src/
       vocabAudioHelper.ts
     alphabetQuestionTypeAssigner.ts
     apiClient.ts
+    articleStorage.ts
     audioCache.ts
     lettersDistractorEngine.ts
     lettersQuestionGenerator.ts
     ModuleGuard.tsx
+    reminderNotification.ts
     validation.ts
 .gitignore
 .nvmrc
@@ -263,6 +296,7 @@ babel.config.js
 CLAUDE.md
 cloudbaserc.json
 convert-json-to-jsonl-but-keep-json.js
+eas.json
 global.css
 index.ts
 package.json
@@ -272,6 +306,51 @@ tsconfig.json
 ```
 
 # Files
+
+## File: assets/app-logo.svg
+````xml
+<svg width="100" height="300" viewBox="0 0 100 300" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="gradR" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#E60000"/>
+      <stop offset="1" stop-color="#FFEA00"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(50, 50)">
+    <circle cx="0" cy="0" r="45" fill="#E60000"/>
+    <text x="0" y="26" font-size="80" font-weight="bold" font-family="Helvetica Neue, sans-serif" fill="#FFFFFF" text-anchor="middle">T</text>
+  </g>
+  <g transform="translate(50, 150)">
+    <text x="0" y="35" font-size="100" font-weight="bold" font-family="Helvetica Neue, sans-serif" fill="url(#gradR)" text-anchor="middle">R</text>
+  </g>
+  <g transform="translate(50, 250)">
+    <text x="0" y="35" font-size="100" font-weight="bold" font-family="Helvetica Neue, sans-serif" fill="#7B3FF5" text-anchor="middle">Y</text>
+  </g>
+</svg>
+````
+
+## File: scripts/export-logo-png.js
+````javascript
+#!/usr/bin/env node
+/**
+ * 将 assets/app-logo.svg 导出为透明背景 PNG
+ * 运行: node scripts/export-logo-png.js
+ */
+const fs = require('fs');
+const path = require('path');
+const { Resvg } = require('@resvg/resvg-js');
+
+const svgPath = path.join(__dirname, '../assets/app-logo.svg');
+const pngPath = path.join(__dirname, '../assets/app-logo.png');
+
+const svg = fs.readFileSync(svgPath, 'utf-8');
+const resvg = new Resvg(svg);
+const pngData = resvg.render();
+const pngBuffer = pngData.asPng();
+
+fs.writeFileSync(pngPath, pngBuffer);
+console.log('✅ 已导出:', pngPath);
+````
 
 ## File: app/(dev)/audio-cache-test.tsx
 ````typescript
@@ -735,6 +814,3072 @@ export default function LearningLayout() {
     <Stack screenOptions={{ headerShown: false }} />
   );
 }
+````
+
+## File: app/learning/article-practice-list.tsx
+````typescript
+import React, { useState, useCallback } from 'react';
+import {
+    View,
+    Text,
+    StyleSheet,
+    FlatList,
+    Pressable,
+    Alert,
+    ActivityIndicator,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
+import { ChevronLeft, BookOpen, Trash2 } from 'lucide-react-native';
+import { ThaiPatternBackground } from '@/src/components/common/ThaiPatternBackground';
+import { Colors } from '@/src/constants/colors';
+import { Typography } from '@/src/constants/typography';
+import { getArticles, deleteArticle } from '@/src/utils/articleStorage';
+import type { SavedArticle } from '@/src/entities/types/ai.types';
+
+export default function ArticlePracticeListScreen() {
+    const { t } = useTranslation();
+    const router = useRouter();
+    const [articles, setArticles] = useState<SavedArticle[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    const loadArticles = useCallback(async () => {
+        try {
+            setLoading(true);
+            setArticles(await getArticles());
+        } catch {
+            setArticles([]);
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    useFocusEffect(
+        useCallback(() => {
+            loadArticles();
+        }, [loadArticles])
+    );
+
+    const handleDelete = (article: SavedArticle) => {
+        Alert.alert(
+            t('articlePractice.deleteConfirmTitle'),
+            t('articlePractice.deleteConfirmMessage'),
+            [
+                { text: t('common.cancel'), style: 'cancel' },
+                {
+                    text: t('common.delete'),
+                    style: 'destructive',
+                    onPress: async () => {
+                        const updated = articles.filter(a => a.id !== article.id);
+                        setArticles(updated);
+                        await deleteArticle(article.id);
+                    },
+                },
+            ]
+        );
+    };
+
+    const formatDate = (ts: number) => {
+        const d = new Date(ts);
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    };
+
+    const renderItem = ({ item }: { item: SavedArticle }) => (
+        <Pressable
+            style={styles.articleCard}
+            onPress={() =>
+                router.push({
+                    pathname: '/learning/article-practice',
+                    params: { articleId: item.id },
+                })
+            }
+        >
+            <View style={styles.cardContent}>
+                <Text style={styles.cardTitle} numberOfLines={2}>
+                    {item.title}
+                </Text>
+                <Text style={styles.cardPreview} numberOfLines={2}>
+                    {item.thaiText}
+                </Text>
+                <View style={styles.cardMeta}>
+                    <Text style={styles.cardMetaText}>{formatDate(item.createdAt)}</Text>
+                    <Text style={styles.cardMetaDot}>·</Text>
+                    <Text style={styles.cardMetaText}>
+                        {t('articlePractice.wordCount', { count: item.wordCount })}
+                    </Text>
+                </View>
+            </View>
+            <Pressable
+                style={styles.deleteBtn}
+                onPress={() => handleDelete(item)}
+                hitSlop={8}
+            >
+                <Trash2 size={16} color={Colors.taupe} />
+            </Pressable>
+        </Pressable>
+    );
+
+    const renderEmpty = () => (
+        <View style={styles.emptyContainer}>
+            <BookOpen size={48} color={Colors.sand} />
+            <Text style={styles.emptyTitle}>{t('articlePractice.emptyTitle')}</Text>
+            <Text style={styles.emptyMessage}>{t('articlePractice.emptyMessage')}</Text>
+        </View>
+    );
+
+    return (
+        <SafeAreaView edges={['top', 'bottom']} style={styles.container}>
+            <ThaiPatternBackground opacity={0.05} />
+
+            <View style={styles.header}>
+                <Pressable onPress={() => router.back()} style={styles.backButton}>
+                    <ChevronLeft size={22} color={Colors.ink} />
+                </Pressable>
+                <Text style={styles.headerTitle}>{t('articlePractice.listTitle')}</Text>
+                <View style={styles.backButton} />
+            </View>
+
+            {loading ? (
+                <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="large" color={Colors.thaiGold} />
+                </View>
+            ) : (
+                <FlatList
+                    data={articles}
+                    keyExtractor={item => item.id}
+                    renderItem={renderItem}
+                    ListEmptyComponent={renderEmpty}
+                    contentContainerStyle={styles.listContent}
+                    showsVerticalScrollIndicator={false}
+                />
+            )}
+        </SafeAreaView>
+    );
+}
+
+const styles = StyleSheet.create({
+    container: {
+        flex: 1,
+        backgroundColor: Colors.paper,
+    },
+    header: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 8,
+        paddingVertical: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: Colors.sand,
+    },
+    backButton: {
+        width: 44,
+        height: 44,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    headerTitle: {
+        fontFamily: Typography.playfairBold,
+        fontSize: Typography.h3,
+        color: Colors.ink,
+    },
+    loadingContainer: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    listContent: {
+        padding: 16,
+        paddingBottom: 40,
+        flexGrow: 1,
+    },
+    articleCard: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: Colors.white,
+        borderRadius: 16,
+        padding: 16,
+        marginBottom: 12,
+        shadowColor: Colors.ink,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.06,
+        shadowRadius: 6,
+        elevation: 2,
+    },
+    cardContent: {
+        flex: 1,
+        gap: 6,
+    },
+    cardTitle: {
+        fontFamily: Typography.notoSerifBold,
+        fontSize: Typography.body,
+        color: Colors.ink,
+    },
+    cardPreview: {
+        fontFamily: Typography.sarabunRegular,
+        fontSize: Typography.caption,
+        color: Colors.taupe,
+        lineHeight: 20,
+    },
+    cardMeta: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        marginTop: 2,
+    },
+    cardMetaText: {
+        fontFamily: Typography.notoSerifRegular,
+        fontSize: Typography.small,
+        color: Colors.taupe,
+    },
+    cardMetaDot: {
+        fontSize: Typography.small,
+        color: Colors.sand,
+    },
+    deleteBtn: {
+        width: 36,
+        height: 36,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginLeft: 8,
+    },
+    emptyContainer: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 40,
+        gap: 12,
+        paddingTop: 80,
+    },
+    emptyTitle: {
+        fontFamily: Typography.playfairBold,
+        fontSize: Typography.h3,
+        color: Colors.ink,
+        marginTop: 8,
+    },
+    emptyMessage: {
+        fontFamily: Typography.notoSerifRegular,
+        fontSize: Typography.caption,
+        color: Colors.taupe,
+        textAlign: 'center',
+        lineHeight: 22,
+    },
+});
+````
+
+## File: app/learning/article-practice-shadowing.tsx
+````typescript
+import { useState, useEffect, useRef, useMemo } from 'react';
+import {
+    View,
+    Text,
+    StyleSheet,
+    ScrollView,
+    Pressable,
+    ActivityIndicator,
+    Alert,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useTranslation } from 'react-i18next';
+import { ChevronLeft, Layers, Mic, Square, Play, Pause, Volume2, VolumeX, MessageSquareText } from 'lucide-react-native';
+import { Audio } from 'expo-av';
+import * as FileSystem from 'expo-file-system/legacy';
+import { ThaiPatternBackground } from '@/src/components/common/ThaiPatternBackground';
+import { Colors } from '@/src/constants/colors';
+import { Typography } from '@/src/constants/typography';
+import { getArticleById, getClozeHints, setClozeHints } from '@/src/utils/articleStorage';
+import { useTtsPlayer } from '@/src/hooks/useTtsPlayer';
+import { AiService } from '@/src/services/aiService';
+import type { SavedArticle, PronunciationFeedbackResponse } from '@/src/entities/types/ai.types';
+import i18n from '@/src/i18n';
+
+type ClozeLevel = 'full' | 'partial' | 'blind';
+
+export default function ArticlePracticeShadowingScreen() {
+    const { t } = useTranslation();
+    const router = useRouter();
+    const { articleId } = useLocalSearchParams<{ articleId: string }>();
+
+    const [article, setArticle] = useState<SavedArticle | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [clozeLevel, setClozeLevel] = useState<ClozeLevel>('full');
+    /** AI 返回的半挖空提示词，null 表示未获取或失败，使用规则兜底 */
+    const [aiClozeKeywords, setAiClozeKeywords] = useState<string[] | null>(null);
+
+    // Recording state
+    const [recording, setRecording] = useState<Audio.Recording | null>(null);
+    const [isRecording, setIsRecording] = useState(false);
+    const [recordingUri, setRecordingUri] = useState<string | null>(null);
+    const [isPlaying, setIsPlaying] = useState(false);
+    const soundRef = useRef<Audio.Sound | null>(null);
+
+    // AI feedback
+    const [feedbackLoading, setFeedbackLoading] = useState(false);
+    const [feedbackData, setFeedbackData] = useState<PronunciationFeedbackResponse | null>(null);
+    const [feedbackError, setFeedbackError] = useState<string | null>(null);
+
+    const { ttsLoading, isPlaying: ttsPlaying, playTts, stopTts } = useTtsPlayer();
+
+    useEffect(() => {
+        (async () => {
+            try {
+                setArticle(await getArticleById(articleId!));
+            } catch { /* noop */ }
+            setLoading(false);
+        })();
+
+        return () => {
+            soundRef.current?.unloadAsync();
+        };
+    }, [articleId]);
+
+    /** 半挖空模式：优先从缓存/AI 获取提示词，失败则用规则兜底 */
+    useEffect(() => {
+        if (!article || clozeLevel !== 'partial') {
+            setAiClozeKeywords(null);
+            return;
+        }
+        let cancelled = false;
+        (async () => {
+            try {
+                const cached = await getClozeHints(article.id);
+                if (cancelled) return;
+                if (cached && cached.length > 0) {
+                    setAiClozeKeywords(cached);
+                    return;
+                }
+                const res = await AiService.extractClozeHints(article.thaiText);
+                if (cancelled) return;
+                if (res.success && res.data?.keywords?.length) {
+                    setAiClozeKeywords(res.data.keywords);
+                    await setClozeHints(article.id, res.data.keywords);
+                } else {
+                    setAiClozeKeywords(null);
+                }
+            } catch {
+                if (!cancelled) setAiClozeKeywords(null);
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [article?.id, article?.thaiText, clozeLevel]);
+
+    const thaiWords = useMemo(() => {
+        if (!article) return [];
+        return article.thaiText.split(/(\s+)/);
+    }, [article]);
+
+    /** 半挖空时保留的提示词索引：AI 关键词优先，否则每 4 个内容词保留 1 个 */
+    const partialHintIndices = useMemo(() => {
+        const indices = new Set<number>();
+        const keywordsSet = aiClozeKeywords && aiClozeKeywords.length > 0
+            ? new Set(aiClozeKeywords)
+            : null;
+
+        let contentIdx = 0;
+        thaiWords.forEach((w, i) => {
+            const cleaned = w.trim();
+            if (!cleaned || /^\s+$/.test(w)) return;
+            if (keywordsSet) {
+                if (keywordsSet.has(cleaned)) indices.add(i);
+            } else {
+                if (contentIdx % 4 === 0) indices.add(i);
+            }
+            contentIdx++;
+        });
+        return indices;
+    }, [thaiWords, aiClozeKeywords]);
+
+    const shouldMask = (word: string, level: ClozeLevel, wordIdx: number): boolean => {
+        const cleaned = word.trim();
+        if (!cleaned || /^\s+$/.test(word)) return false;
+        if (level === 'full') return false;
+        if (level === 'blind') return true;
+        if (level === 'partial') return !partialHintIndices.has(wordIdx);
+        return false;
+    };
+
+    const renderMaskedWord = (word: string, idx: number) => {
+        if (/^\s+$/.test(word)) {
+            return <Text key={idx}>{word}</Text>;
+        }
+        const masked = shouldMask(word, clozeLevel, idx);
+        if (masked) {
+            const placeholder = '_'.repeat(Math.min(word.length, 8));
+            return (
+                <Text
+                    key={idx}
+                    style={[styles.thaiWord, styles.maskedPlaceholderText]}
+                >
+                    {placeholder}
+                </Text>
+            );
+        }
+        return (
+            <Text key={idx} style={styles.thaiWord}>
+                {word}
+            </Text>
+        );
+    };
+
+    const startRecording = async () => {
+        try {
+            const { status } = await Audio.requestPermissionsAsync();
+            if (status !== 'granted') {
+                Alert.alert(t('common.error'), 'Microphone permission is required');
+                return;
+            }
+
+            await Audio.setAudioModeAsync({
+                allowsRecordingIOS: true,
+                playsInSilentModeIOS: true,
+            });
+
+            const { recording: rec } = await Audio.Recording.createAsync(
+                Audio.RecordingOptionsPresets.HIGH_QUALITY
+            );
+            setRecording(rec);
+            setIsRecording(true);
+            setRecordingUri(null);
+            setFeedbackData(null);
+            setFeedbackError(null);
+        } catch {
+            Alert.alert(t('common.error'), 'Failed to start recording');
+        }
+    };
+
+    const stopRecording = async () => {
+        if (!recording) return;
+        try {
+            setIsRecording(false);
+            await recording.stopAndUnloadAsync();
+            const uri = recording.getURI();
+            setRecordingUri(uri);
+            setRecording(null);
+
+            await Audio.setAudioModeAsync({
+                allowsRecordingIOS: false,
+                playsInSilentModeIOS: true,
+            });
+        } catch {
+            setIsRecording(false);
+            setRecording(null);
+        }
+    };
+
+    const playRecording = async () => {
+        if (!recordingUri) return;
+        try {
+            if (soundRef.current) {
+                await soundRef.current.unloadAsync();
+            }
+            const { sound } = await Audio.Sound.createAsync({ uri: recordingUri });
+            soundRef.current = sound;
+            setIsPlaying(true);
+            sound.setOnPlaybackStatusUpdate(status => {
+                if (status.isLoaded && status.didJustFinish) {
+                    setIsPlaying(false);
+                }
+            });
+            await sound.playAsync();
+        } catch {
+            setIsPlaying(false);
+        }
+    };
+
+    const stopPlayback = async () => {
+        try {
+            await soundRef.current?.stopAsync();
+            setIsPlaying(false);
+        } catch {
+            setIsPlaying(false);
+        }
+    };
+
+    const getAiFeedback = async () => {
+        if (!article || !recordingUri) return;
+        setFeedbackLoading(true);
+        setFeedbackData(null);
+        setFeedbackError(null);
+        try {
+            const base64 = await FileSystem.readAsStringAsync(recordingUri, {
+                encoding: FileSystem.EncodingType.Base64,
+            });
+
+            const response = await AiService.analyzePronunciation(
+                base64,
+                article.thaiText,
+                i18n.language
+            );
+
+            if (!response.success || !response.data) {
+                setFeedbackError(response.error || t('articlePractice.analyzeError'));
+                return;
+            }
+            setFeedbackData(response.data);
+        } catch {
+            setFeedbackError(t('articlePractice.analyzeError'));
+        } finally {
+            setFeedbackLoading(false);
+        }
+    };
+
+    if (loading) {
+        return (
+            <SafeAreaView style={styles.container}>
+                <View style={styles.centerFull}>
+                    <ActivityIndicator size="large" color={Colors.thaiGold} />
+                </View>
+            </SafeAreaView>
+        );
+    }
+
+    if (!article) {
+        return (
+            <SafeAreaView style={styles.container}>
+                <View style={styles.header}>
+                    <Pressable onPress={() => router.back()} style={styles.backButton}>
+                        <ChevronLeft size={22} color={Colors.ink} />
+                    </Pressable>
+                    <Text style={styles.headerTitle}>{t('articlePractice.shadowingTitle')}</Text>
+                    <View style={styles.backButton} />
+                </View>
+                <View style={styles.centerFull}>
+                    <Text style={styles.errorText}>{t('sessionSummary.errorMessage')}</Text>
+                </View>
+            </SafeAreaView>
+        );
+    }
+
+    return (
+        <SafeAreaView edges={['top', 'bottom']} style={styles.container}>
+            <ThaiPatternBackground opacity={0.05} />
+
+            <View style={styles.header}>
+                <Pressable onPress={() => router.back()} style={styles.backButton}>
+                    <ChevronLeft size={22} color={Colors.ink} />
+                </Pressable>
+                <Text style={styles.headerTitle} numberOfLines={1}>
+                    {t('articlePractice.shadowingTitle')}
+                </Text>
+                <View style={styles.backButton} />
+            </View>
+
+            {/* Cloze Mode */}
+            <View style={styles.controlBar}>
+                <Layers size={14} color={Colors.taupe} />
+                {(['full', 'partial', 'blind'] as ClozeLevel[]).map(level => (
+                    <Pressable
+                        key={level}
+                        style={[
+                            styles.clozePill,
+                            clozeLevel === level && styles.clozePillActive,
+                        ]}
+                        onPress={() => setClozeLevel(level)}
+                    >
+                        <Text
+                            style={[
+                                styles.clozePillText,
+                                clozeLevel === level && styles.clozePillTextActive,
+                            ]}
+                        >
+                            {t(`articlePractice.cloze${level.charAt(0).toUpperCase() + level.slice(1)}` as any)}
+                        </Text>
+                    </Pressable>
+                ))}
+            </View>
+
+            <ScrollView
+                style={styles.scrollView}
+                contentContainerStyle={styles.scrollContent}
+                showsVerticalScrollIndicator={false}
+            >
+                {/* Reference Text */}
+                <View style={styles.textCard}>
+                    <View style={styles.cardHeader}>
+                        <Text style={styles.cardLabel}>{article.title}</Text>
+                        <Pressable
+                            style={[styles.ttsBtn, ttsPlaying && styles.ttsBtnActive]}
+                            onPress={() => ttsPlaying ? stopTts() : playTts(article.thaiText)}
+                            disabled={ttsLoading}
+                        >
+                            {ttsLoading ? (
+                                <ActivityIndicator size={14} color={Colors.thaiGold} />
+                            ) : ttsPlaying ? (
+                                <VolumeX size={16} color={Colors.thaiGold} />
+                            ) : (
+                                <Volume2 size={16} color={Colors.taupe} />
+                            )}
+                        </Pressable>
+                    </View>
+                    <View style={styles.wordsContainer}>
+                        {thaiWords.map((word, idx) => renderMaskedWord(word, idx))}
+                    </View>
+                </View>
+
+                {/* Recording Controls */}
+                <View style={styles.recordSection}>
+                    {!isRecording && !recordingUri && (
+                        <Pressable style={styles.recordButton} onPress={startRecording}>
+                            <Mic size={28} color={Colors.white} />
+                            <Text style={styles.recordButtonText}>
+                                {t('articlePractice.startRecording')}
+                            </Text>
+                        </Pressable>
+                    )}
+
+                    {isRecording && (
+                        <Pressable style={styles.stopButton} onPress={stopRecording}>
+                            <Square size={24} color={Colors.white} />
+                            <Text style={styles.recordButtonText}>
+                                {t('articlePractice.stopRecording')}
+                            </Text>
+                        </Pressable>
+                    )}
+
+                    {recordingUri && !isRecording && (
+                        <View style={styles.playbackRow}>
+                            <Pressable
+                                style={styles.playbackBtn}
+                                onPress={isPlaying ? stopPlayback : playRecording}
+                            >
+                                {isPlaying ? (
+                                    <Pause size={20} color={Colors.ink} />
+                                ) : (
+                                    <Play size={20} fill={Colors.ink} color={Colors.ink} />
+                                )}
+                                <Text style={styles.playbackBtnText}>
+                                    {t('articlePractice.playback')}
+                                </Text>
+                            </Pressable>
+
+                            <Pressable style={styles.reRecordBtn} onPress={startRecording}>
+                                <Mic size={18} color={Colors.thaiGold} />
+                            </Pressable>
+                        </View>
+                    )}
+                </View>
+
+                {/* AI Feedback — 已屏蔽 */}
+                {false && recordingUri && (
+                    <Pressable
+                        style={styles.feedbackButton}
+                        onPress={getAiFeedback}
+                        disabled={feedbackLoading}
+                    >
+                        {feedbackLoading ? (
+                            <ActivityIndicator size="small" color={Colors.white} />
+                        ) : (
+                            <MessageSquareText size={18} color={Colors.white} />
+                        )}
+                        <Text style={styles.feedbackButtonText}>
+                            {feedbackLoading
+                                ? t('articlePractice.analyzing')
+                                : t('articlePractice.getAiFeedback')}
+                        </Text>
+                    </Pressable>
+                )}
+
+                {false && feedbackError && (
+                    <View style={styles.feedbackCard}>
+                        <Text style={styles.feedbackErrorText}>{feedbackError}</Text>
+                    </View>
+                )}
+
+                {false && feedbackData && (
+                    <View style={styles.feedbackCard}>
+                        {/* Overall Score */}
+                        <View style={styles.scoreRow}>
+                            <Text style={styles.scoreLabel}>{t('articlePractice.overallScore')}</Text>
+                            <Text style={styles.scoreValue}>{feedbackData.overallScore}/10</Text>
+                        </View>
+
+                        {/* Dimensions */}
+                        {feedbackData.dimensions.map((dim, idx) => (
+                            <View key={idx} style={styles.dimensionRow}>
+                                <View style={styles.dimensionHeader}>
+                                    <Text style={styles.dimensionName}>{dim.name}</Text>
+                                    <Text style={styles.dimensionScore}>{dim.score}/10</Text>
+                                </View>
+                                <View style={styles.scoreBarBg}>
+                                    <View style={[styles.scoreBarFill, { width: `${dim.score * 10}%` }]} />
+                                </View>
+                                <Text style={styles.dimensionComment}>{dim.comment}</Text>
+                            </View>
+                        ))}
+
+                        {/* Transcription */}
+                        {feedbackData.transcription ? (
+                            <View style={styles.transcriptionSection}>
+                                <Text style={styles.sectionLabel}>
+                                    {i18n.language === 'zh' ? 'AI 听到的内容' : 'What AI heard'}
+                                </Text>
+                                <Text style={styles.transcriptionText}>{feedbackData.transcription}</Text>
+                            </View>
+                        ) : null}
+
+                        {/* Suggestions */}
+                        {feedbackData.suggestions.length > 0 && (
+                            <View style={styles.suggestionsSection}>
+                                <Text style={styles.sectionLabel}>{t('articlePractice.pronunciationSuggestions')}</Text>
+                                {feedbackData.suggestions.map((s, idx) => (
+                                    <Text key={idx} style={styles.suggestionItem}>• {s}</Text>
+                                ))}
+                            </View>
+                        )}
+                    </View>
+                )}
+
+                <View style={{ height: 32 }} />
+            </ScrollView>
+        </SafeAreaView>
+    );
+}
+
+const styles = StyleSheet.create({
+    container: {
+        flex: 1,
+        backgroundColor: Colors.paper,
+    },
+    centerFull: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    header: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 8,
+        paddingVertical: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: Colors.sand,
+    },
+    backButton: {
+        width: 44,
+        height: 44,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    headerTitle: {
+        flex: 1,
+        fontFamily: Typography.playfairBold,
+        fontSize: Typography.h3,
+        color: Colors.ink,
+        textAlign: 'center',
+    },
+    controlBar: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 16,
+        paddingVertical: 10,
+        borderBottomWidth: 1,
+        borderBottomColor: Colors.sand,
+        gap: 8,
+    },
+    clozePill: {
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+        borderRadius: 14,
+        backgroundColor: 'rgba(0,0,0,0.04)',
+    },
+    clozePillActive: {
+        backgroundColor: Colors.ink,
+    },
+    clozePillText: {
+        fontFamily: Typography.notoSerifRegular,
+        fontSize: 11,
+        color: Colors.taupe,
+    },
+    clozePillTextActive: {
+        color: Colors.white,
+    },
+    scrollView: {
+        flex: 1,
+    },
+    scrollContent: {
+        padding: 16,
+        gap: 16,
+    },
+    textCard: {
+        backgroundColor: Colors.white,
+        borderRadius: 16,
+        padding: 20,
+        gap: 12,
+        shadowColor: Colors.ink,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.08,
+        shadowRadius: 8,
+        elevation: 3,
+    },
+    cardHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+    },
+    cardLabel: {
+        flex: 1,
+        fontFamily: Typography.notoSerifBold,
+        fontSize: Typography.body,
+        color: Colors.ink,
+    },
+    ttsBtn: {
+        width: 36,
+        height: 36,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: 18,
+        backgroundColor: 'rgba(0,0,0,0.04)',
+    },
+    ttsBtnActive: {
+        backgroundColor: 'rgba(212, 175, 55, 0.12)',
+    },
+    wordsContainer: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+    },
+    thaiWord: {
+        fontFamily: Typography.sarabunRegular,
+        fontSize: 20,
+        color: Colors.ink,
+        lineHeight: 34,
+    },
+    maskedPlaceholderText: {
+        color: Colors.taupe,
+        textDecorationLine: 'underline',
+        textDecorationStyle: 'dashed',
+        textDecorationColor: Colors.ink,
+    },
+    recordSection: {
+        alignItems: 'center',
+        gap: 12,
+    },
+    recordButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 10,
+        backgroundColor: Colors.thaiGold,
+        borderRadius: 28,
+        paddingVertical: 16,
+        paddingHorizontal: 32,
+        shadowColor: Colors.thaiGold,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 4,
+    },
+    stopButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 10,
+        backgroundColor: Colors.error,
+        borderRadius: 28,
+        paddingVertical: 16,
+        paddingHorizontal: 32,
+    },
+    recordButtonText: {
+        fontFamily: Typography.notoSerifBold,
+        fontSize: Typography.body,
+        color: Colors.white,
+    },
+    playbackRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+    },
+    playbackBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        backgroundColor: Colors.white,
+        borderRadius: 20,
+        paddingVertical: 12,
+        paddingHorizontal: 20,
+        borderWidth: 1,
+        borderColor: Colors.sand,
+    },
+    playbackBtnText: {
+        fontFamily: Typography.notoSerifBold,
+        fontSize: Typography.caption,
+        color: Colors.ink,
+    },
+    reRecordBtn: {
+        width: 44,
+        height: 44,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: 22,
+        backgroundColor: 'rgba(212, 175, 55, 0.12)',
+        borderWidth: 1,
+        borderColor: 'rgba(212, 175, 55, 0.25)',
+    },
+    feedbackButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        backgroundColor: Colors.ink,
+        borderRadius: 14,
+        paddingVertical: 14,
+    },
+    feedbackButtonText: {
+        fontFamily: Typography.notoSerifBold,
+        fontSize: Typography.caption,
+        color: Colors.white,
+    },
+    feedbackCard: {
+        backgroundColor: Colors.white,
+        borderRadius: 16,
+        padding: 20,
+        gap: 16,
+        shadowColor: Colors.ink,
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+        elevation: 2,
+    },
+    feedbackErrorText: {
+        fontFamily: Typography.notoSerifRegular,
+        fontSize: Typography.caption,
+        color: Colors.error,
+        textAlign: 'center',
+    },
+    scoreRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    scoreLabel: {
+        fontFamily: Typography.notoSerifBold,
+        fontSize: Typography.body,
+        color: Colors.ink,
+    },
+    scoreValue: {
+        fontFamily: Typography.playfairBold,
+        fontSize: Typography.h2,
+        color: Colors.thaiGold,
+    },
+    dimensionRow: {
+        gap: 4,
+    },
+    dimensionHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    dimensionName: {
+        fontFamily: Typography.notoSerifBold,
+        fontSize: Typography.small,
+        color: Colors.ink,
+    },
+    dimensionScore: {
+        fontFamily: Typography.notoSerifBold,
+        fontSize: Typography.small,
+        color: Colors.taupe,
+    },
+    scoreBarBg: {
+        height: 6,
+        borderRadius: 3,
+        backgroundColor: Colors.sand,
+        overflow: 'hidden',
+    },
+    scoreBarFill: {
+        height: '100%',
+        borderRadius: 3,
+        backgroundColor: Colors.thaiGold,
+    },
+    dimensionComment: {
+        fontFamily: Typography.notoSerifRegular,
+        fontSize: 12,
+        color: Colors.taupe,
+        lineHeight: 18,
+    },
+    transcriptionSection: {
+        gap: 4,
+        paddingTop: 4,
+        borderTopWidth: 1,
+        borderTopColor: Colors.sand,
+    },
+    transcriptionText: {
+        fontFamily: Typography.sarabunRegular,
+        fontSize: Typography.caption,
+        color: Colors.ink,
+        lineHeight: 24,
+    },
+    suggestionsSection: {
+        gap: 6,
+        paddingTop: 4,
+        borderTopWidth: 1,
+        borderTopColor: Colors.sand,
+    },
+    sectionLabel: {
+        fontFamily: Typography.notoSerifBold,
+        fontSize: Typography.small,
+        color: Colors.taupe,
+        letterSpacing: 0.5,
+        textTransform: 'uppercase',
+    },
+    suggestionItem: {
+        fontFamily: Typography.notoSerifRegular,
+        fontSize: Typography.caption,
+        color: Colors.ink,
+        lineHeight: 22,
+    },
+    errorText: {
+        fontFamily: Typography.notoSerifRegular,
+        fontSize: Typography.body,
+        color: Colors.taupe,
+        textAlign: 'center',
+    },
+});
+````
+
+## File: app/learning/article-practice.tsx
+````typescript
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import {
+    View,
+    Text,
+    StyleSheet,
+    ScrollView,
+    Pressable,
+    ActivityIndicator,
+    Modal,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useTranslation } from 'react-i18next';
+import {
+    ChevronLeft,
+    Eye,
+    EyeOff,
+    Mic,
+    Volume2,
+    VolumeX,
+    X,
+} from 'lucide-react-native';
+import { BlurView } from 'expo-blur';
+import { ThaiPatternBackground } from '@/src/components/common/ThaiPatternBackground';
+import { Colors } from '@/src/constants/colors';
+import { Typography } from '@/src/constants/typography';
+import { AiService } from '@/src/services/aiService';
+import { AiExplanationView } from '@/src/components/ai/AiExplanationView';
+import { getArticleById } from '@/src/utils/articleStorage';
+import { useTtsPlayer } from '@/src/hooks/useTtsPlayer';
+import type { SavedArticle, ExplainVocabularyResponse } from '@/src/entities/types/ai.types';
+import { useUserStore } from '@/src/stores/userStore';
+import i18n from '@/src/i18n';
+
+type ClozeLevel = 'full' | 'partial' | 'blind';
+
+export default function ArticlePracticeScreen() {
+    const { t } = useTranslation();
+    const router = useRouter();
+    const { articleId } = useLocalSearchParams<{ articleId: string }>();
+
+    const [article, setArticle] = useState<SavedArticle | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [isBlind, setIsBlind] = useState(true);
+    const [clozeLevel, setClozeLevel] = useState<ClozeLevel>('full');
+
+    // Word lookup state
+    const [selectedWord, setSelectedWord] = useState<string | null>(null);
+    const [wordLoading, setWordLoading] = useState(false);
+    const [wordResult, setWordResult] = useState<ExplainVocabularyResponse | null>(null);
+    const [wordError, setWordError] = useState<string | null>(null);
+    const [showWordModal, setShowWordModal] = useState(false);
+
+    const { currentUser } = useUserStore();
+    const { ttsLoading, isPlaying: ttsPlaying, playTts, stopTts } = useTtsPlayer();
+
+    useEffect(() => {
+        (async () => {
+            try {
+                setArticle(await getArticleById(articleId!));
+            } catch { /* noop */ }
+            setLoading(false);
+        })();
+    }, [articleId]);
+
+    const thaiWords = useMemo(() => {
+        if (!article) return [];
+        return article.thaiText.split(/(\s+)/);
+    }, [article]);
+
+    const handleWordTap = useCallback(async (word: string) => {
+        const cleaned = word.trim().replace(/[.,;:!?'"()[\]{}]/g, '');
+        if (!cleaned) return;
+
+        setSelectedWord(cleaned);
+        setWordLoading(true);
+        setWordError(null);
+        setWordResult(null);
+        setShowWordModal(true);
+
+        const response = await AiService.explainVocabulary(
+            cleaned,
+            currentUser?.userId || 'guest',
+            i18n.language
+        );
+
+        setWordLoading(false);
+        if (!response.success || !response.data) {
+            setWordError(response.error || t('home.aiError'));
+            return;
+        }
+        setWordResult(response.data);
+    }, [currentUser, t]);
+
+    const closeWordModal = () => {
+        setShowWordModal(false);
+        setSelectedWord(null);
+        setWordResult(null);
+        setWordError(null);
+    };
+
+    const shouldMask = (word: string, level: ClozeLevel): boolean => {
+        const cleaned = word.trim();
+        if (!cleaned || /^\s+$/.test(word)) return false;
+        if (level === 'full') return false;
+        if (level === 'blind') return true;
+        // partial: mask longer content words, keep short function words
+        return cleaned.length > 2;
+    };
+
+    const renderMaskedWord = (word: string, idx: number) => {
+        if (/^\s+$/.test(word)) {
+            return <Text key={idx}>{word}</Text>;
+        }
+
+        const masked = shouldMask(word, clozeLevel);
+
+        return (
+            <Pressable key={idx} onPress={() => !isBlind && handleWordTap(word)}>
+                <Text
+                    style={[
+                        styles.thaiWord,
+                        masked && styles.maskedWord,
+                        !isBlind && styles.tappableWord,
+                    ]}
+                >
+                    {masked ? '▁'.repeat(Math.min(word.length, 6)) : word}
+                </Text>
+            </Pressable>
+        );
+    };
+
+    const handleTtsToggle = () => {
+        if (ttsPlaying) {
+            stopTts();
+        } else if (article) {
+            playTts(article.thaiText);
+        }
+    };
+
+    if (loading) {
+        return (
+            <SafeAreaView style={styles.container}>
+                <View style={styles.centerFull}>
+                    <ActivityIndicator size="large" color={Colors.thaiGold} />
+                </View>
+            </SafeAreaView>
+        );
+    }
+
+    if (!article) {
+        return (
+            <SafeAreaView style={styles.container}>
+                <View style={styles.header}>
+                    <Pressable onPress={() => router.back()} style={styles.backButton}>
+                        <ChevronLeft size={22} color={Colors.ink} />
+                    </Pressable>
+                    <Text style={styles.headerTitle}>{t('articlePractice.practiceTitle')}</Text>
+                    <View style={styles.backButton} />
+                </View>
+                <View style={styles.centerFull}>
+                    <Text style={styles.errorText}>{t('sessionSummary.errorMessage')}</Text>
+                </View>
+            </SafeAreaView>
+        );
+    }
+
+    return (
+        <SafeAreaView edges={['top', 'bottom']} style={styles.container}>
+            <ThaiPatternBackground opacity={0.05} />
+
+            {/* Header */}
+            <View style={styles.header}>
+                <Pressable onPress={() => router.back()} style={styles.backButton}>
+                    <ChevronLeft size={22} color={Colors.ink} />
+                </Pressable>
+                <Text style={styles.headerTitle} numberOfLines={1}>
+                    {article.title}
+                </Text>
+                <View style={styles.backButton} />
+            </View>
+
+            {/* Mode Controls */}
+            <View style={styles.controlBar}>
+                <Pressable
+                    style={[styles.controlBtn, !isBlind && styles.controlBtnActive]}
+                    onPress={() => setIsBlind(!isBlind)}
+                >
+                    {isBlind ? (
+                        <EyeOff size={16} color={Colors.taupe} />
+                    ) : (
+                        <Eye size={16} color={Colors.thaiGold} />
+                    )}
+                    <Text style={[styles.controlBtnText, !isBlind && styles.controlBtnTextActive]}>
+                        {isBlind ? t('articlePractice.blindMode') : t('articlePractice.revealMode')}
+                    </Text>
+                </Pressable>
+
+                <Pressable
+                    style={[styles.controlBtn, ttsPlaying && styles.controlBtnActive]}
+                    onPress={handleTtsToggle}
+                    disabled={ttsLoading}
+                >
+                    {ttsLoading ? (
+                        <ActivityIndicator size={14} color={Colors.thaiGold} />
+                    ) : ttsPlaying ? (
+                        <VolumeX size={16} color={Colors.thaiGold} />
+                    ) : (
+                        <Volume2 size={16} color={Colors.taupe} />
+                    )}
+                    <Text style={[styles.controlBtnText, ttsPlaying && styles.controlBtnTextActive]}>
+                        {ttsLoading
+                            ? t('articlePractice.ttsLoading')
+                            : ttsPlaying
+                            ? t('articlePractice.stopPlaying')
+                            : t('articlePractice.playOriginal')}
+                    </Text>
+                </Pressable>
+
+            </View>
+
+            <ScrollView
+                style={styles.scrollView}
+                contentContainerStyle={styles.scrollContent}
+                showsVerticalScrollIndicator={false}
+            >
+                {/* Thai Text */}
+                <View style={[styles.textCard, isBlind && styles.textCardBlind]}>
+                    {isBlind ? (
+                        <>
+                            <Text style={styles.thaiTextBlock}>
+                                {article.thaiText}
+                            </Text>
+                            <BlurView
+                                intensity={10}
+                                tint="light"
+                                style={[StyleSheet.absoluteFill, styles.blurOverlay]}
+                            />
+                        </>
+                    ) : (
+                        <>
+                            <View style={styles.wordsContainer}>
+                                {thaiWords.map((word, idx) => renderMaskedWord(word, idx))}
+                            </View>
+                            {clozeLevel === 'full' && (
+                                <Text style={styles.tapHint}>{t('articlePractice.tapWordHint')}</Text>
+                            )}
+                        </>
+                    )}
+                </View>
+
+                {/* Translation */}
+                {!isBlind && (
+                    <View style={styles.translationCard}>
+                        <Text style={styles.translationLabel}>
+                            {t('microReading.translationLabel')}
+                        </Text>
+                        <Text style={styles.translationText}>{article.translation}</Text>
+                    </View>
+                )}
+
+                {/* Words Used */}
+                {!isBlind && article.wordsUsed.length > 0 && (
+                    <View style={styles.wordsUsedCard}>
+                        <Text style={styles.wordsUsedLabel}>{t('microReading.wordsUsed')}</Text>
+                        <View style={styles.wordsUsedRow}>
+                            {article.wordsUsed.map((word, idx) => (
+                                <Pressable
+                                    key={idx}
+                                    style={styles.wordChip}
+                                    onPress={() => handleWordTap(word)}
+                                >
+                                    <Text style={styles.wordChipText}>{word}</Text>
+                                </Pressable>
+                            ))}
+                        </View>
+                    </View>
+                )}
+
+                {/* Shadowing Entry */}
+                <Pressable
+                    style={styles.shadowingEntry}
+                    onPress={() =>
+                        router.push({
+                            pathname: '/learning/article-practice-shadowing',
+                            params: { articleId: article.id },
+                        })
+                    }
+                >
+                    <Mic size={18} color={Colors.thaiGold} />
+                    <Text style={styles.shadowingEntryText}>
+                        {t('articlePractice.shadowingTitle')}
+                    </Text>
+                </Pressable>
+
+                <View style={{ height: 32 }} />
+            </ScrollView>
+
+            {/* Word Lookup Modal */}
+            <Modal
+                visible={showWordModal}
+                transparent
+                animationType="slide"
+                onRequestClose={closeWordModal}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>
+                                {selectedWord || t('ai.title')}
+                            </Text>
+                            <Pressable onPress={closeWordModal} style={styles.modalClose}>
+                                <X size={22} color={Colors.ink} />
+                            </Pressable>
+                        </View>
+
+                        {wordLoading ? (
+                            <View style={styles.modalCenter}>
+                                <ActivityIndicator size="large" color={Colors.thaiGold} />
+                                <Text style={styles.modalLoadingText}>{t('common.loading')}</Text>
+                            </View>
+                        ) : wordError ? (
+                            <View style={styles.modalCenter}>
+                                <Text style={styles.modalErrorText}>{wordError}</Text>
+                            </View>
+                        ) : wordResult ? (
+                            <View style={styles.modalResultWrapper}>
+                                <AiExplanationView data={wordResult} />
+                            </View>
+                        ) : null}
+                    </View>
+                </View>
+            </Modal>
+        </SafeAreaView>
+    );
+}
+
+const styles = StyleSheet.create({
+    container: {
+        flex: 1,
+        backgroundColor: Colors.paper,
+    },
+    centerFull: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    header: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 8,
+        paddingVertical: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: Colors.sand,
+    },
+    backButton: {
+        width: 44,
+        height: 44,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    headerTitle: {
+        flex: 1,
+        fontFamily: Typography.playfairBold,
+        fontSize: Typography.h3,
+        color: Colors.ink,
+        textAlign: 'center',
+    },
+    controlBar: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 16,
+        paddingVertical: 10,
+        borderBottomWidth: 1,
+        borderBottomColor: Colors.sand,
+        flexWrap: 'wrap',
+        gap: 8,
+    },
+    controlBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 20,
+        backgroundColor: 'rgba(0,0,0,0.04)',
+    },
+    controlBtnActive: {
+        backgroundColor: 'rgba(212, 175, 55, 0.12)',
+    },
+    controlBtnText: {
+        fontFamily: Typography.notoSerifRegular,
+        fontSize: Typography.small,
+        color: Colors.taupe,
+    },
+    controlBtnTextActive: {
+        color: Colors.accent,
+    },
+    scrollView: {
+        flex: 1,
+    },
+    scrollContent: {
+        padding: 16,
+        gap: 16,
+    },
+    textCard: {
+        backgroundColor: Colors.white,
+        borderRadius: 16,
+        padding: 20,
+        shadowColor: Colors.ink,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.08,
+        shadowRadius: 8,
+        elevation: 3,
+    },
+    thaiTextBlock: {
+        fontFamily: Typography.sarabunRegular,
+        fontSize: 22,
+        color: Colors.ink,
+        lineHeight: 38,
+    },
+    textCardBlind: {
+        overflow: 'hidden',
+    },
+    blurOverlay: {
+        borderRadius: 16,
+    },
+    wordsContainer: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+    },
+    thaiWord: {
+        fontFamily: Typography.sarabunRegular,
+        fontSize: 22,
+        color: Colors.ink,
+        lineHeight: 38,
+    },
+    maskedWord: {
+        color: Colors.sand,
+        backgroundColor: Colors.sand,
+        borderRadius: 4,
+        overflow: 'hidden',
+    },
+    tappableWord: {
+        textDecorationLine: 'underline',
+        textDecorationColor: 'rgba(212, 175, 55, 0.3)',
+        textDecorationStyle: 'dotted',
+    },
+    tapHint: {
+        fontFamily: Typography.notoSerifRegular,
+        fontSize: Typography.small,
+        color: Colors.taupe,
+        marginTop: 12,
+        textAlign: 'center',
+    },
+    translationCard: {
+        backgroundColor: Colors.white,
+        borderRadius: 16,
+        padding: 20,
+        gap: 10,
+        shadowColor: Colors.ink,
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+        elevation: 2,
+    },
+    translationLabel: {
+        fontFamily: Typography.notoSerifBold,
+        fontSize: Typography.small,
+        color: Colors.taupe,
+        letterSpacing: 0.5,
+        textTransform: 'uppercase',
+    },
+    translationText: {
+        fontFamily: Typography.notoSerifRegular,
+        fontSize: Typography.body,
+        color: Colors.ink,
+        lineHeight: 28,
+    },
+    wordsUsedCard: {
+        backgroundColor: Colors.white,
+        borderRadius: 16,
+        padding: 16,
+        gap: 10,
+        shadowColor: Colors.ink,
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+        elevation: 2,
+    },
+    wordsUsedLabel: {
+        fontFamily: Typography.notoSerifBold,
+        fontSize: Typography.small,
+        color: Colors.taupe,
+        letterSpacing: 0.5,
+        textTransform: 'uppercase',
+    },
+    wordsUsedRow: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8,
+    },
+    wordChip: {
+        backgroundColor: Colors.thaiGold + '20',
+        borderRadius: 20,
+        paddingHorizontal: 12,
+        paddingVertical: 5,
+    },
+    wordChipText: {
+        fontFamily: Typography.sarabunRegular,
+        fontSize: Typography.caption,
+        color: Colors.accent,
+    },
+    shadowingEntry: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        backgroundColor: Colors.ink,
+        borderRadius: 14,
+        paddingVertical: 16,
+    },
+    shadowingEntryText: {
+        fontFamily: Typography.notoSerifBold,
+        fontSize: Typography.body,
+        color: Colors.white,
+    },
+    errorText: {
+        fontFamily: Typography.notoSerifRegular,
+        fontSize: Typography.body,
+        color: Colors.taupe,
+        textAlign: 'center',
+    },
+    // Word modal
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.4)',
+        justifyContent: 'flex-end',
+    },
+    modalContent: {
+        backgroundColor: Colors.paper,
+        borderTopLeftRadius: 24,
+        borderTopRightRadius: 24,
+        height: '70%',
+        width: '100%',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 12,
+        elevation: 10,
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingHorizontal: 24,
+        paddingVertical: 18,
+        borderBottomWidth: 1,
+        borderBottomColor: Colors.sand,
+    },
+    modalTitle: {
+        fontFamily: Typography.sarabunBold,
+        fontSize: Typography.h2,
+        color: Colors.ink,
+    },
+    modalClose: {
+        padding: 4,
+    },
+    modalCenter: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        gap: 12,
+    },
+    modalLoadingText: {
+        fontFamily: Typography.notoSerifRegular,
+        fontSize: Typography.caption,
+        color: Colors.taupe,
+    },
+    modalErrorText: {
+        fontFamily: Typography.notoSerifRegular,
+        fontSize: Typography.body,
+        color: Colors.error,
+        textAlign: 'center',
+        paddingHorizontal: 24,
+    },
+    modalResultWrapper: {
+        flex: 1,
+        paddingTop: 12,
+    },
+});
+````
+
+## File: app/learning/reminder-settings.tsx
+````typescript
+import React, { useMemo, useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Pressable,
+  Switch,
+  Platform,
+  Alert,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { useTranslation } from 'react-i18next';
+import { Colors } from '@/src/constants/colors';
+import { Typography } from '@/src/constants/typography';
+import { ThaiPatternBackground } from '@/src/components/common/ThaiPatternBackground';
+import { useLearningPreferenceStore } from '@/src/stores/learningPreferenceStore';
+import {
+  scheduleDailyReminder,
+  cancelDailyReminder,
+  requestReminderPermission,
+  isReminderSupported,
+} from '@/src/utils/reminderNotification';
+
+/** 将 HH:mm 解析为 Date（今日） */
+function parseTimeToDate(timeStr: string): Date {
+  const [hour, minute] = timeStr.split(':').map(Number);
+  const d = new Date();
+  d.setHours(hour, minute, 0, 0);
+  return d;
+}
+
+/** 将 Date 格式化为 HH:mm */
+function formatTime(d: Date): string {
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+export default function ReminderSettingsScreen() {
+  const { t } = useTranslation();
+  const router = useRouter();
+  const {
+    dailyReminderEnabled,
+    dailyReminderTime,
+    setDailyReminder,
+  } = useLearningPreferenceStore();
+
+  const [enabled, setEnabled] = useState(dailyReminderEnabled);
+  const [time, setTime] = useState(() => parseTimeToDate(dailyReminderTime));
+  const [showPicker, setShowPicker] = useState(false);
+
+  const timeStr = useMemo(() => formatTime(time), [time]);
+
+  // 进入页面时，若已启用则确保提醒已调度（应对应用重启等场景）
+  useEffect(() => {
+    if (!dailyReminderEnabled) return;
+    scheduleDailyReminder(
+      dailyReminderTime,
+      t('profile.reminder.notificationTitle'),
+      t('profile.reminder.notificationBody')
+    ).catch(console.warn);
+  }, [dailyReminderEnabled, dailyReminderTime, t]);
+
+  const handleToggle = async (value: boolean) => {
+    if (value) {
+      if (!isReminderSupported()) {
+        Alert.alert(
+          t('profile.reminder.title'),
+          t('profile.reminder.unsupportedEnv')
+        );
+        return;
+      }
+      const hasPermission = await requestReminderPermission();
+      if (!hasPermission) {
+        Alert.alert(
+          t('profile.reminder.permissionTitle'),
+          t('profile.reminder.permissionMessage')
+        );
+        return;
+      }
+      setEnabled(true);
+      setDailyReminder(true, formatTime(time));
+      try {
+        await scheduleDailyReminder(
+          formatTime(time),
+          t('profile.reminder.notificationTitle'),
+          t('profile.reminder.notificationBody')
+        );
+      } catch (e) {
+        console.warn('Schedule reminder failed:', e);
+        setEnabled(false);
+        setDailyReminder(false);
+      }
+    } else {
+      setEnabled(false);
+      setDailyReminder(false);
+      await cancelDailyReminder();
+    }
+  };
+
+  const handleTimeChange = (_: unknown, selectedDate?: Date) => {
+    if (Platform.OS === 'android') setShowPicker(false);
+    if (selectedDate != null) {
+      setTime(selectedDate);
+      const newTimeStr = formatTime(selectedDate);
+      setDailyReminder(enabled, newTimeStr);
+      if (enabled) {
+        scheduleDailyReminder(
+          newTimeStr,
+          t('profile.reminder.notificationTitle'),
+          t('profile.reminder.notificationBody')
+        ).catch(console.warn);
+      }
+    }
+  };
+
+  const handleConfirm = async () => {
+    setDailyReminder(enabled, timeStr);
+    if (enabled) {
+      try {
+        await scheduleDailyReminder(
+          timeStr,
+          t('profile.reminder.notificationTitle'),
+          t('profile.reminder.notificationBody')
+        );
+      } catch (e) {
+        console.warn('Schedule reminder failed:', e);
+      }
+    } else {
+      await cancelDailyReminder();
+    }
+    router.back();
+  };
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <ThaiPatternBackground opacity={0.1} />
+      <View style={styles.header}>
+        <Text style={styles.title}>{t('profile.reminder.title')}</Text>
+        <Text style={styles.subtitle}>{t('profile.reminder.subtitle')}</Text>
+      </View>
+
+      <View style={styles.card}>
+        {/* 开关 */}
+        <View style={styles.row}>
+          <Text style={styles.label}>{t('profile.dailyReminder')}</Text>
+          <Switch
+            value={enabled}
+            onValueChange={handleToggle}
+            trackColor={{ false: Colors.sand, true: Colors.ink }}
+            thumbColor={Colors.white}
+          />
+        </View>
+
+        {/* 时间选择 */}
+        {enabled && (
+          <View style={styles.timeSection}>
+            <Text style={styles.label}>{t('profile.reminder.timeLabel')}</Text>
+            <Pressable
+              style={styles.timeButton}
+              onPress={() => setShowPicker(true)}
+            >
+              <Text style={styles.timeText}>{timeStr}</Text>
+            </Pressable>
+            {showPicker && (
+              <View style={styles.pickerContainer}>
+                <DateTimePicker
+                  value={time}
+                  mode="time"
+                  is24Hour
+                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                  onChange={handleTimeChange}
+                />
+                {Platform.OS === 'ios' && (
+                  <Pressable
+                    style={styles.doneButton}
+                    onPress={() => setShowPicker(false)}
+                  >
+                    <Text style={styles.doneButtonText}>{t('common.confirm')}</Text>
+                  </Pressable>
+                )}
+              </View>
+            )}
+          </View>
+        )}
+
+        <Pressable style={styles.confirmButton} onPress={handleConfirm}>
+          <Text style={styles.confirmButtonText}>{t('common.save')}</Text>
+        </Pressable>
+      </View>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: Colors.paper,
+    paddingHorizontal: 24,
+    paddingTop: 24,
+  },
+  header: {
+    marginBottom: 24,
+    gap: 8,
+  },
+  title: {
+    fontFamily: Typography.playfairBold,
+    fontSize: 26,
+    color: Colors.ink,
+  },
+  subtitle: {
+    fontFamily: Typography.notoSerifRegular,
+    fontSize: 14,
+    color: Colors.taupe,
+    lineHeight: 20,
+  },
+  card: {
+    backgroundColor: Colors.white,
+    borderRadius: 20,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: Colors.sand,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+  },
+  label: {
+    fontFamily: Typography.notoSerifRegular,
+    fontSize: 16,
+    color: Colors.ink,
+  },
+  timeSection: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: Colors.sand,
+  },
+  timeButton: {
+    marginTop: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    backgroundColor: Colors.paper,
+    borderRadius: 12,
+    alignSelf: 'flex-start',
+  },
+  timeText: {
+    fontFamily: Typography.playfairBold,
+    fontSize: 24,
+    color: Colors.ink,
+  },
+  confirmButton: {
+    marginTop: 24,
+    backgroundColor: Colors.ink,
+    paddingVertical: 14,
+    borderRadius: 14,
+    alignItems: 'center',
+  },
+  confirmButtonText: {
+    color: Colors.white,
+    fontFamily: Typography.notoSerifBold,
+    fontSize: 16,
+  },
+  pickerContainer: {
+    marginTop: 8,
+  },
+  doneButton: {
+    marginTop: 12,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  doneButtonText: {
+    fontFamily: Typography.notoSerifBold,
+    fontSize: 16,
+    color: Colors.ink,
+  },
+});
+````
+
+## File: app/learning/session-summary.tsx
+````typescript
+import React, { useEffect, useState, useCallback } from 'react';
+import {
+    View,
+    Text,
+    StyleSheet,
+    ScrollView,
+    Pressable,
+    ActivityIndicator,
+    Alert,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
+import { CheckSquare, Square, ChevronRight, AlertCircle } from 'lucide-react-native';
+import { ThaiPatternBackground } from '@/src/components/common/ThaiPatternBackground';
+import { Colors } from '@/src/constants/colors';
+import { Typography } from '@/src/constants/typography';
+import { useVocabularyStore } from '@/src/stores/vocabularyStore';
+import { AiService } from '@/src/services/aiService';
+import type { SessionWord } from '@/src/entities/types/vocabulary.types';
+import type { MicroReadingWord } from '@/src/entities/types/ai.types';
+
+// 每个可勾选词条的本地状态
+interface SelectableWord {
+    sessionWord: SessionWord;
+    checked: boolean;
+}
+
+export default function SessionSummaryScreen() {
+    const { t, i18n } = useTranslation();
+    const router = useRouter();
+
+    // ── 从 Store 快照数据（仅在 mount 时读取一次，防止 resetSession 后丢失）──
+    const [wrongWords, setWrongWords] = useState<SelectableWord[]>([]);
+    const [newWords, setNewWords] = useState<SelectableWord[]>([]);
+    const [skippedWords, setSkippedWords] = useState<SelectableWord[]>([]);
+    const [isGenerating, setIsGenerating] = useState(false);
+
+    useEffect(() => {
+        const { recentWrongWords, sessionPool, skippedIds } = useVocabularyStore.getState();
+
+        // 错词：默认全选（finishSession 内已去重）
+        setWrongWords(
+            recentWrongWords.map(w => ({ sessionWord: w, checked: true }))
+        );
+
+        // 新学词：isNew === true，按 entity._id 去重（sessionPool 中同一词可能有多条 source）
+        const seenNew = new Set<string>();
+        const newWordItems = sessionPool.filter(w => {
+            if (!w.isNew) return false;
+            if (seenNew.has(w.entity._id)) return false;
+            seenNew.add(w.entity._id);
+            return true;
+        });
+        setNewWords(newWordItems.map(w => ({ sessionWord: w, checked: false })));
+
+        // 跳过词：skippedIds 存储 entity._id（即 SessionWord.id），按 id 去重后关联 sessionPool
+        const seenSkip = new Set<string>();
+        const skippedItems = sessionPool.filter(w => {
+            if (!skippedIds.includes(w.id)) return false;
+            if (seenSkip.has(w.id)) return false;
+            seenSkip.add(w.id);
+            return true;
+        });
+        setSkippedWords(skippedItems.map(w => ({ sessionWord: w, checked: false })));
+    }, []);
+
+    // ── 勾选/取消勾选 ──────────────────────────────────────────────────────────
+    const toggleWrong = useCallback((index: number) => {
+        setWrongWords(prev =>
+            prev.map((item, i) => i === index ? { ...item, checked: !item.checked } : item)
+        );
+    }, []);
+
+    const toggleNew = useCallback((index: number) => {
+        setNewWords(prev =>
+            prev.map((item, i) => i === index ? { ...item, checked: !item.checked } : item)
+        );
+    }, []);
+
+    const toggleSkipped = useCallback((index: number) => {
+        setSkippedWords(prev =>
+            prev.map((item, i) => i === index ? { ...item, checked: !item.checked } : item)
+        );
+    }, []);
+
+    // 取消跳过：从跳过列表中移除该词条（本地 state 操作，不写回 Store）
+    const cancelSkip = useCallback((index: number) => {
+        setSkippedWords(prev => prev.filter((_, i) => i !== index));
+    }, []);
+
+    // ── 计算已选词汇 ───────────────────────────────────────────────────────────
+    const selectedWords: MicroReadingWord[] = [
+        ...wrongWords.filter(item => item.checked),
+        ...newWords.filter(item => item.checked),
+        ...skippedWords.filter(item => item.checked),
+    ].map(item => ({
+        thaiWord: item.sessionWord.entity.thaiWord,
+        meaning: item.sessionWord.entity.meaning,
+    }));
+
+    const selectedCount = selectedWords.length;
+
+    // ── 生成微阅读 ─────────────────────────────────────────────────────────────
+    const handleGenerate = async () => {
+        if (selectedCount === 0) return;
+
+        setIsGenerating(true);
+        try {
+            const response = await AiService.generateMicroReading(
+                selectedWords,
+                i18n.language
+            );
+
+            if (response.success && response.data) {
+                router.push({
+                    pathname: '/learning/micro-reading',
+                    params: { result: JSON.stringify(response.data) },
+                });
+            } else {
+                Alert.alert(
+                    t('sessionSummary.errorTitle'),
+                    response.error || t('sessionSummary.errorMessage'),
+                    [{ text: t('sessionSummary.retry'), onPress: () => setIsGenerating(false) }]
+                );
+                return;
+            }
+        } catch {
+            Alert.alert(
+                t('sessionSummary.errorTitle'),
+                t('sessionSummary.errorMessage'),
+                [{ text: t('sessionSummary.retry'), onPress: () => setIsGenerating(false) }]
+            );
+            return;
+        }
+        setIsGenerating(false);
+    };
+
+    // ── 判断是否有任何词可展示 ─────────────────────────────────────────────────
+    const hasAnyWords =
+        wrongWords.length > 0 || newWords.length > 0 || skippedWords.length > 0;
+
+    return (
+        <SafeAreaView edges={['top', 'bottom']} style={styles.container}>
+            <ThaiPatternBackground opacity={0.05} />
+
+            {/* 标题栏 */}
+            <View style={styles.header}>
+                <Text style={styles.headerTitle}>{t('sessionSummary.title')}</Text>
+            </View>
+
+            <ScrollView
+                style={styles.scrollView}
+                contentContainerStyle={styles.scrollContent}
+                showsVerticalScrollIndicator={false}
+            >
+                {!hasAnyWords && (
+                    <View style={styles.emptyContainer}>
+                        <AlertCircle size={40} color={Colors.taupe} />
+                        <Text style={styles.emptyText}>{t('sessionSummary.noWords')}</Text>
+                    </View>
+                )}
+
+                {/* 错词区（置顶，默认全选） */}
+                {wrongWords.length > 0 && (
+                    <SectionBlock
+                        label={t('sessionSummary.wrongWords')}
+                        accentColor={Colors.error}
+                        badgeText="×"
+                    >
+                        {wrongWords.map((item, index) => (
+                            <WordRow
+                                key={item.sessionWord.entity._id + '-wrong'}
+                                thaiWord={item.sessionWord.entity.thaiWord}
+                                meaning={item.sessionWord.entity.meaning}
+                                badge={`×${item.sessionWord.mistakeCount}`}
+                                badgeColor={Colors.error}
+                                checked={item.checked}
+                                onToggle={() => toggleWrong(index)}
+                            />
+                        ))}
+                    </SectionBlock>
+                )}
+
+                {/* 新学词区 */}
+                {newWords.length > 0 && (
+                    <SectionBlock
+                        label={t('sessionSummary.newWords')}
+                        accentColor={Colors.success}
+                    >
+                        {newWords.map((item, index) => (
+                            <WordRow
+                                key={item.sessionWord.entity._id + '-new'}
+                                thaiWord={item.sessionWord.entity.thaiWord}
+                                meaning={item.sessionWord.entity.meaning}
+                                badge="新"
+                                badgeColor={Colors.success}
+                                checked={item.checked}
+                                onToggle={() => toggleNew(index)}
+                            />
+                        ))}
+                    </SectionBlock>
+                )}
+
+                {/* 跳过词区 */}
+                {skippedWords.length > 0 && (
+                    <SectionBlock
+                        label={t('sessionSummary.skippedWords')}
+                        accentColor={Colors.taupe}
+                    >
+                        {skippedWords.map((item, index) => (
+                            <WordRow
+                                key={item.sessionWord.entity._id + '-skip'}
+                                thaiWord={item.sessionWord.entity.thaiWord}
+                                meaning={item.sessionWord.entity.meaning}
+                                badge="跳"
+                                badgeColor={Colors.taupe}
+                                checked={item.checked}
+                                onToggle={() => toggleSkipped(index)}
+                                actionLabel={t('sessionSummary.cancelSkip')}
+                                onAction={() => cancelSkip(index)}
+                            />
+                        ))}
+                    </SectionBlock>
+                )}
+
+                {/* 底部占位，防止按钮遮挡最后一行 */}
+                <View style={{ height: 100 }} />
+            </ScrollView>
+
+            {/* 底部按钮区（固定）*/}
+            <View style={styles.footer}>
+                <Pressable
+                    style={[
+                        styles.generateButton,
+                        (selectedCount === 0 || isGenerating) && styles.generateButtonDisabled,
+                    ]}
+                    onPress={handleGenerate}
+                    disabled={selectedCount === 0 || isGenerating}
+                >
+                    {isGenerating ? (
+                        <ActivityIndicator color={Colors.white} />
+                    ) : (
+                        <>
+                            <Text style={styles.generateButtonText}>
+                                {t('sessionSummary.generateBtn', { count: selectedCount })}
+                            </Text>
+                            <ChevronRight size={18} color={Colors.white} />
+                        </>
+                    )}
+                </Pressable>
+                <Pressable
+                    style={styles.homeButton}
+                    onPress={() => router.dismissAll()}
+                    disabled={isGenerating}
+                >
+                    <Text style={styles.homeButtonText}>{t('microReading.backToHome')}</Text>
+                </Pressable>
+            </View>
+        </SafeAreaView>
+    );
+}
+
+// ── 子组件：分区容器 ──────────────────────────────────────────────────────────
+interface SectionBlockProps {
+    label: string;
+    accentColor: string;
+    badgeText?: string;
+    children: React.ReactNode;
+}
+
+function SectionBlock({ label, accentColor, children }: SectionBlockProps) {
+    return (
+        <View style={styles.section}>
+            <View style={[styles.sectionLabelBar, { borderLeftColor: accentColor }]}>
+                <Text style={[styles.sectionLabel, { color: accentColor }]}>{label}</Text>
+            </View>
+            <View style={styles.sectionBody}>{children}</View>
+        </View>
+    );
+}
+
+// ── 子组件：单词行 ─────────────────────────────────────────────────────────────
+interface WordRowProps {
+    thaiWord: string;
+    meaning: string;
+    badge: string;
+    badgeColor: string;
+    checked: boolean;
+    onToggle: () => void;
+    actionLabel?: string;
+    onAction?: () => void;
+}
+
+function WordRow({
+    thaiWord,
+    meaning,
+    badge,
+    badgeColor,
+    checked,
+    onToggle,
+    actionLabel,
+    onAction,
+}: WordRowProps) {
+    return (
+        <View style={styles.wordRow}>
+            {/* 勾选框 */}
+            <Pressable onPress={onToggle} style={styles.checkboxArea} hitSlop={8}>
+                {checked ? (
+                    <CheckSquare size={22} color={Colors.ink} />
+                ) : (
+                    <Square size={22} color={Colors.taupe} />
+                )}
+            </Pressable>
+
+            {/* 词语内容 */}
+            <Pressable onPress={onToggle} style={styles.wordContent}>
+                <Text style={styles.thaiWord}>{thaiWord}</Text>
+                <Text style={styles.meaning}>{meaning}</Text>
+            </Pressable>
+
+            {/* 错误次数徽章 / 分类标签 */}
+            <View style={[styles.badge, { backgroundColor: badgeColor + '20' }]}>
+                <Text style={[styles.badgeText, { color: badgeColor }]}>{badge}</Text>
+            </View>
+
+            {/* 取消跳过操作（仅跳过词区有） */}
+            {actionLabel && onAction && (
+                <Pressable onPress={onAction} style={styles.actionButton}>
+                    <Text style={styles.actionButtonText}>{actionLabel}</Text>
+                </Pressable>
+            )}
+        </View>
+    );
+}
+
+const styles = StyleSheet.create({
+    container: {
+        flex: 1,
+        backgroundColor: Colors.paper,
+    },
+    header: {
+        paddingHorizontal: 20,
+        paddingVertical: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: Colors.sand,
+    },
+    headerTitle: {
+        fontFamily: Typography.playfairBold,
+        fontSize: Typography.h2,
+        color: Colors.ink,
+        textAlign: 'center',
+    },
+    scrollView: {
+        flex: 1,
+    },
+    scrollContent: {
+        paddingHorizontal: 16,
+        paddingTop: 16,
+    },
+    emptyContainer: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 60,
+        gap: 12,
+    },
+    emptyText: {
+        fontFamily: Typography.notoSerifRegular,
+        fontSize: Typography.body,
+        color: Colors.taupe,
+    },
+    section: {
+        marginBottom: 20,
+        backgroundColor: Colors.white,
+        borderRadius: 12,
+        overflow: 'hidden',
+        shadowColor: Colors.ink,
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.06,
+        shadowRadius: 4,
+        elevation: 2,
+    },
+    sectionLabelBar: {
+        paddingHorizontal: 16,
+        paddingVertical: 10,
+        borderLeftWidth: 4,
+        backgroundColor: 'rgba(0,0,0,0.02)',
+    },
+    sectionLabel: {
+        fontFamily: Typography.notoSerifBold,
+        fontSize: Typography.caption,
+        letterSpacing: 0.5,
+    },
+    sectionBody: {
+        paddingHorizontal: 4,
+        paddingBottom: 4,
+    },
+    wordRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 12,
+        paddingVertical: 12,
+        borderTopWidth: 1,
+        borderTopColor: Colors.sand,
+        gap: 10,
+    },
+    checkboxArea: {
+        width: 28,
+        alignItems: 'center',
+    },
+    wordContent: {
+        flex: 1,
+        gap: 2,
+    },
+    thaiWord: {
+        fontFamily: Typography.sarabunBold,
+        fontSize: 18,
+        color: Colors.ink,
+    },
+    meaning: {
+        fontFamily: Typography.notoSerifRegular,
+        fontSize: Typography.caption,
+        color: Colors.taupe,
+    },
+    badge: {
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        borderRadius: 10,
+        minWidth: 32,
+        alignItems: 'center',
+    },
+    badgeText: {
+        fontFamily: Typography.notoSerifBold,
+        fontSize: Typography.small,
+    },
+    actionButton: {
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+        backgroundColor: Colors.sand,
+        borderRadius: 8,
+    },
+    actionButtonText: {
+        fontFamily: Typography.notoSerifRegular,
+        fontSize: Typography.small,
+        color: Colors.taupe,
+    },
+    footer: {
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        borderTopWidth: 1,
+        borderTopColor: Colors.sand,
+        backgroundColor: Colors.paper,
+    },
+    generateButton: {
+        backgroundColor: Colors.ink,
+        borderRadius: 14,
+        paddingVertical: 16,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+    },
+    generateButtonDisabled: {
+        backgroundColor: Colors.taupe,
+        opacity: 0.5,
+    },
+    generateButtonText: {
+        fontFamily: Typography.notoSerifBold,
+        fontSize: Typography.body,
+        color: Colors.white,
+    },
+    homeButton: {
+        marginTop: 10,
+        paddingVertical: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    homeButtonText: {
+        fontFamily: Typography.notoSerifRegular,
+        fontSize: Typography.caption,
+        color: Colors.taupe,
+    },
+});
+````
+
+## File: cloudbase/functions/ai-engine/handlers/ttsProviders/googleTts.js
+````javascript
+/**
+ * Google Cloud TTS Provider（API Key + REST 方式）
+ *
+ * 使用 v1beta1 REST API + SSML <mark> 标签获取逐字时间戳。
+ * 无需 SDK，通过 Node.js 内置 https 模块直接调用。
+ *
+ * 环境变量：
+ *   GOOGLE_TTS_API_KEY — Google Cloud API Key（在 CloudBase 控制台配置）
+ */
+
+const https = require('https');
+
+const DEFAULT_VOICE = 'th-TH-Neural2-C';
+const TTS_ENDPOINT = 'texttospeech.googleapis.com';
+const TTS_PATH = '/v1beta1/text:synthesize';
+
+function escapeXml(str) {
+    return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&apos;');
+}
+
+/**
+ * 在每个字符前插入 <mark name="index"/>，
+ * 用于让 Google TTS 返回逐字时间戳。
+ */
+function buildSsmlWithMarks(text) {
+    const chars = [...text];
+    let ssml = '<speak>';
+    for (let i = 0; i < chars.length; i++) {
+        ssml += `<mark name="${i}"/>${escapeXml(chars[i])}`;
+    }
+    ssml += '</speak>';
+    return { ssml, chars };
+}
+
+function postJson(hostname, path, body) {
+    return new Promise((resolve, reject) => {
+        const data = JSON.stringify(body);
+        const req = https.request({
+            hostname,
+            path,
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Content-Length': Buffer.byteLength(data),
+            },
+        }, (res) => {
+            let chunks = '';
+            res.on('data', (d) => { chunks += d; });
+            res.on('end', () => {
+                try {
+                    const parsed = JSON.parse(chunks);
+                    if (res.statusCode >= 400) {
+                        const msg = parsed.error?.message || `HTTP ${res.statusCode}`;
+                        reject(new Error(msg));
+                    } else {
+                        resolve(parsed);
+                    }
+                } catch {
+                    reject(new Error(`JSON 解析失败: ${chunks.substring(0, 200)}`));
+                }
+            });
+        });
+        req.on('error', reject);
+        req.write(data);
+        req.end();
+    });
+}
+
+/**
+ * Provider 接口：
+ * @param {string} text       — 待合成纯文本
+ * @param {object} [options]
+ * @param {string} [options.voiceName] — Google 语音名称（如 th-TH-Neural2-C）
+ * @returns {Promise<{ audio: string, subtitles: Array }>}
+ */
+async function synthesize(text, options = {}) {
+    const { voiceName = DEFAULT_VOICE } = options;
+
+    const apiKey = process.env.GOOGLE_TTS_API_KEY;
+    if (!apiKey) {
+        throw new Error('缺少 GOOGLE_TTS_API_KEY 环境变量');
+    }
+
+    const { ssml, chars } = buildSsmlWithMarks(text);
+
+    const response = await postJson(TTS_ENDPOINT, `${TTS_PATH}?key=${apiKey}`, {
+        input: { ssml },
+        voice: {
+            languageCode: 'th-TH',
+            name: voiceName,
+        },
+        audioConfig: { audioEncoding: 'MP3' },
+        enableTimePointing: ['SSML_MARK'],
+    });
+
+    const audio = response.audioContent;
+    const timepoints = response.timepoints || [];
+
+    const subtitles = timepoints.map((tp, i) => {
+        const charIdx = parseInt(tp.markName, 10);
+        return {
+            Text: chars[charIdx] || '',
+            BeginTime: Math.round(tp.timeSeconds * 1000),
+            EndTime: i < timepoints.length - 1
+                ? Math.round(timepoints[i + 1].timeSeconds * 1000)
+                : Math.round(tp.timeSeconds * 1000) + 200,
+            BeginIndex: charIdx,
+            EndIndex: charIdx + 1,
+            Phoneme: null,
+        };
+    });
+
+    return { audio, subtitles };
+}
+
+module.exports = { synthesize };
+````
+
+## File: cloudbase/functions/ai-engine/handlers/analyzePronunciation.js
+````javascript
+/**
+ * 发音分析 handler
+ *
+ * Action: analyzePronunciation
+ *
+ * 使用 Qwen2-Audio (DashScope) 分析用户录音，对比参考原文给出发音反馈。
+ * 通过 OpenAI 兼容接口调用，复用已安装的 openai SDK。
+ *
+ * 环境变量：
+ *   DASHSCOPE_API_KEY — 阿里云百炼平台 API Key
+ */
+
+const { OpenAI } = require('openai');
+const { createResponse } = require('../utils/response');
+
+const DASHSCOPE_BASE_URL = 'https://dashscope.aliyuncs.com/compatible-mode/v1';
+const MODEL = 'qwen2-audio-instruct';
+
+function buildDashScopeClient() {
+    const apiKey = process.env.DASHSCOPE_API_KEY;
+    if (!apiKey) {
+        throw new Error('缺少 DASHSCOPE_API_KEY 环境变量');
+    }
+    return new OpenAI({ apiKey, baseURL: DASHSCOPE_BASE_URL });
+}
+
+function buildPrompt(referenceText, language) {
+    const lang = language === 'en' ? 'English' : '中文';
+
+    return `You are a professional Thai language pronunciation coach.
+
+The student is practicing reading the following Thai text aloud:
+
+"""
+${referenceText}
+"""
+
+Listen to the student's recording and evaluate their pronunciation.
+Respond in ${lang}.
+
+Return ONLY valid JSON in this exact format (no markdown, no explanation outside JSON):
+{
+  "overallScore": <number 1-10>,
+  "dimensions": [
+    { "name": "<dimension name>", "score": <number 1-10>, "comment": "<brief feedback>" }
+  ],
+  "suggestions": ["<suggestion 1>", "<suggestion 2>", ...],
+  "transcription": "<what you heard the student say>"
+}
+
+Evaluate these 4 dimensions:
+1. Tone accuracy (声调准确性)
+2. Consonant & vowel clarity (辅音元音清晰度)
+3. Speaking pace & rhythm (语速节奏)
+4. Fluency & linking (流利度与连读)
+
+Keep each comment under 30 words. Provide 2-4 actionable suggestions.`;
+}
+
+async function analyzePronunciation(client, data) {
+    const { audioBase64, referenceText, language = 'zh' } = data;
+
+    if (!audioBase64 || !audioBase64.trim()) {
+        return createResponse(false, null, '缺少录音数据', 'ERR_NO_AUDIO');
+    }
+    if (!referenceText || !referenceText.trim()) {
+        return createResponse(false, null, '缺少参考原文', 'ERR_NO_TEXT');
+    }
+
+    const audioDataUri = audioBase64.startsWith('data:')
+        ? audioBase64
+        : `data:audio/m4a;base64,${audioBase64}`;
+
+    try {
+        const dashScope = buildDashScopeClient();
+        const prompt = buildPrompt(referenceText.trim(), language);
+
+        const completion = await dashScope.chat.completions.create({
+            model: MODEL,
+            messages: [
+                {
+                    role: 'user',
+                    content: [
+                        { type: 'input_audio', input_audio: { data: audioDataUri } },
+                        { type: 'text', text: prompt },
+                    ],
+                },
+            ],
+        });
+
+        const raw = completion.choices?.[0]?.message?.content || '';
+
+        let parsed;
+        try {
+            const jsonMatch = raw.match(/\{[\s\S]*\}/);
+            if (!jsonMatch) throw new Error('AI 未返回 JSON');
+            parsed = JSON.parse(jsonMatch[0]);
+        } catch {
+            console.warn('[analyzePronunciation] JSON 解析失败，返回原始文本:', raw.substring(0, 300));
+            parsed = {
+                overallScore: 0,
+                dimensions: [],
+                suggestions: [raw.substring(0, 500)],
+                transcription: '',
+            };
+        }
+
+        return createResponse(true, parsed, '发音分析完成');
+    } catch (err) {
+        console.error('[analyzePronunciation] 分析失败:', err.message || err);
+        return createResponse(false, null,
+            `发音分析失败: ${err.message || '未知错误'}`, 'ERR_ANALYZE_FAILED');
+    }
+}
+
+module.exports = analyzePronunciation;
+````
+
+## File: cloudbase/functions/ai-engine/handlers/extractClozeHints.js
+````javascript
+/**
+ * 半挖空提示词提取
+ *
+ * Action: extractClozeHints
+ *
+ * 从泰语文章中提取 20-30% 的提示性关键词（主题词、关键名词/动词），
+ * 用于半挖空模式：这些词保留可见，其余遮盖。
+ */
+
+const { createResponse } = require('../utils/response');
+
+const PROMPT = `你是一位泰语教学专家。请分析下面的泰语文章，选出 50% 的「提示性关键词」。
+
+选词原则：
+- 优先保留：主题词、关键名词、重要动词、能帮助回忆整句的锚点词
+- 避免保留：虚词、助词、连词（如 กับ ที่ มี คือ นี้ เป็น 等，除非在句中有关键语义）
+
+请将原文按空格拆分为词，从这些词中选出应保留的提示词,至少保留原文 50% 的词作为提示词。
+返回格式：仅返回一个 JSON 数组，元素为要保留的泰语词（字符串），与原文中出现的完全一致。
+
+示例：若原文有 "เช้าวันเสาร์กับน้า" 拆成 ["เช้า","วันเสาร์","กับ","น้า"]，可返回 ["เช้า","วันเสาร์","น้า"]
+
+原文：
+"""
+{{THAI_TEXT}}
+"""
+
+直接返回 JSON 数组，不要其他说明。`;
+
+async function extractClozeHints(client, data) {
+    const { thaiText } = data;
+
+    if (!thaiText || !thaiText.trim()) {
+        return createResponse(false, null, '缺少泰语原文', 'ERR_NO_TEXT');
+    }
+
+    const text = thaiText.trim();
+    if (text.length > 8000) {
+        return createResponse(false, null, '文章过长', 'ERR_TEXT_TOO_LONG');
+    }
+
+    try {
+        const prompt = PROMPT.replace('{{THAI_TEXT}}', text);
+
+        const completion = await client.chat.completions.create({
+            model: 'deepseek-chat',
+            messages: [
+                { role: 'system', content: '你只返回有效的 JSON 数组，不包含任何其他文字。' },
+                { role: 'user', content: prompt },
+            ],
+            temperature: 0.3,
+        });
+
+        const raw = completion.choices?.[0]?.message?.content || '';
+
+        let keywords = [];
+        try {
+            const jsonMatch = raw.match(/\[[\s\S]*\]/);
+            if (!jsonMatch) throw new Error('AI 未返回数组');
+            keywords = JSON.parse(jsonMatch[0]);
+            if (!Array.isArray(keywords)) keywords = [];
+            keywords = keywords.filter((k) => typeof k === 'string' && k.trim()).map((k) => k.trim());
+        } catch {
+            console.warn('[extractClozeHints] JSON 解析失败，返回空数组:', raw.substring(0, 200));
+        }
+
+        return createResponse(true, { keywords }, '提示词提取完成');
+    } catch (err) {
+        console.error('[extractClozeHints] 提取失败:', err.message || err);
+        return createResponse(false, null, `提取失败: ${err.message || '未知错误'}`, 'ERR_EXTRACT_FAILED');
+    }
+}
+
+module.exports = extractClozeHints;
+````
+
+## File: cloudbase/functions/ai-engine/handlers/textToSpeech.js
+````javascript
+/**
+ * TTS 语音合成 handler（provider 无关）
+ *
+ * Action: textToSpeech
+ *
+ * 职责：参数校验 → 委托给当前 provider → 统一响应格式。
+ * 切换 TTS 服务商只需修改下方 provider 引用。
+ *
+ * Provider 接口约定：
+ *   synthesize(text, options?) → { audio: string, subtitles: TtsSubtitle[] }
+ */
+
+const { createResponse } = require('../utils/response');
+
+// ─── 切换 TTS 服务商只改这一行 ───
+const provider = require('./ttsProviders/googleTts');
+// ─────────────────────────────────
+
+async function textToSpeech(data) {
+    const { text, voiceName } = data;
+
+    if (!text || text.trim().length === 0) {
+        return createResponse(false, null, '缺少合成文本', 'ERR_NO_TEXT');
+    }
+
+    try {
+        const result = await provider.synthesize(text.trim(), { voiceName });
+        return createResponse(true, result, '语音合成成功');
+    } catch (err) {
+        console.error('[textToSpeech] 合成失败:', err.message || err);
+        return createResponse(false, null,
+            `语音合成失败: ${err.message || '未知错误'}`, 'ERR_TTS_FAILED');
+    }
+}
+
+module.exports = textToSpeech;
+````
+
+## File: cloudbase/functions/ai-engine/utils/constants.js
+````javascript
+/**
+ * 常量定义模块
+ * 
+ * 与前端 src/config/constants.ts 保持一致的设计风格
+ * 集中管理所有云函数常量
+ */
+
+'use strict';
+
+// ==================== 数据库集合名称 ====================
+// 与前端 COLLECTIONS 保持一致
+const COLLECTIONS = {
+  USERS: 'users',
+  VOCABULARY: 'vocabulary',
+  USER_VOCABULARY_PROGRESS: 'user_vocabulary_progress',
+  LETTERS: 'letters',
+  USER_ALPHABET_PROGRESS: 'user_alphabet_progress',
+  LETTER_TEST_BANK: 'letter_test_bank',
+  COURSES: 'courses',
+  LESSONS: 'lessons',
+  PROGRESS: 'progress',
+};
+
+// ==================== 掌握程度 ====================
+// 使用中文值，便于前端直接显示
+const MasteryLevel = Object.freeze({
+  UNFAMILIAR: '陌生',
+  FUZZY: '模糊',
+  REMEMBERED: '记得',
+});
+
+// ==================== 学习等级 ====================
+// 与前端 LEVELS 保持一致
+const LEVELS = Object.freeze({
+  BEGINNER_A: 'BEGINNER_A',
+  BEGINNER_B: 'BEGINNER_B',
+  INTERMEDIATE: 'INTERMEDIATE',
+  ADVANCED: 'ADVANCED',
+});
+
+// ==================== SM-2 算法参数 ====================
+// 优化版参数，基于艾宾浩斯遗忘曲线
+const SM2_PARAMS = Object.freeze({
+  INITIAL_EASINESS_FACTOR: 2.5,   // 初始简易度
+  MIN_EASINESS_FACTOR: 1.3,       // 最小简易度
+  MAX_INTERVAL_DAYS: 180,         // 最大间隔（天）
+  FUZZY_MULTIPLIER: 0.8,          // "模糊"时间隔缩短比例
+});
+
+// ==================== 早期复习间隔序列 ====================
+// 基于艾宾浩斯遗忘曲线优化: 1→2→4→7→14 天
+const EARLY_INTERVALS = Object.freeze([1, 2, 4, 7, 14]);
+
+// ==================== 每日学习配置 ====================
+const DAILY_LEARNING_CONFIG = Object.freeze({
+  MAX_NEW_WORDS: 10,              // 每日新词上限
+  MAX_REVIEW_WORDS: 20,           // 每日复习上限
+  TOTAL_WORDS_LIMIT: 30,          // 每日总词数上限
+});
+
+// ==================== 错误码 ====================
+// 统一错误码定义
+const ErrorCodes = Object.freeze({
+  SUCCESS: 'SUCCESS',
+  USER_NOT_FOUND: 'USER_NOT_FOUND',
+  VOCABULARY_NOT_FOUND: 'VOCABULARY_NOT_FOUND',
+  INVALID_PARAMS: 'INVALID_PARAMS',
+  INVALID_MASTERY: 'INVALID_MASTERY',
+  UNKNOWN_ACTION: 'UNKNOWN_ACTION',
+  SERVER_ERROR: 'SERVER_ERROR',
+});
+
+// ==================== 错误消息 ====================
+// 与前端 ERROR_MESSAGES 风格一致
+const ERROR_MESSAGES = Object.freeze({
+  USER_NOT_FOUND: '用户不存在，请检查用户ID或重新登录',
+  VOCABULARY_NOT_FOUND: '词汇不存在，请检查词汇ID',
+  INVALID_PARAMS: '参数格式错误，请检查输入',
+  INVALID_MASTERY: '无效的掌握程度，允许值: 陌生/模糊/记得',
+  UNKNOWN_ACTION: '未知操作类型',
+  SERVER_ERROR: '服务器内部错误，请稍后重试',
+});
+
+// ==================== 支持的 Actions ====================
+const SUPPORTED_ACTIONS = Object.freeze([
+  'getTodayWords',
+  'updateMastery',
+  'toggleSkipWord',
+  'getVocabularyDetail',
+  'getReviewStatistics',
+  'getVocabularyList',
+  'getSkippedWords',
+  'getLetterTest',
+  'submitLetterTest',
+  'passLetterTest',
+  'getTodayMemories',
+  'submitMemoryResult',
+  'checkModuleAccess',
+  'getUserProgress'
+]);
+
+module.exports = {
+  // 集合
+  COLLECTIONS,
+
+  // 枚举
+  MasteryLevel,
+  LEVELS,
+  ErrorCodes,
+
+  // 算法参数
+  SM2_PARAMS,
+  EARLY_INTERVALS,
+
+  // 配置
+  DAILY_LEARNING_CONFIG,
+
+  // 消息
+  ERROR_MESSAGES,
+  SUPPORTED_ACTIONS,
+};
+````
+
+## File: cloudbase/functions/ai-engine/utils/response.js
+````javascript
+/**
+ * 响应格式化模块
+ * 
+ * 统一 API 响应格式
+ * 与前端 ApiResponse<T> 类型定义保持一致
+ */
+
+'use strict';
+
+const { ErrorCodes, ERROR_MESSAGES } = require('./constants');
+
+/**
+ * 创建标准化 API 响应
+ * 
+ * 对应前端类型:
+ * interface ApiResponse<T> {
+ *   success: boolean;
+ *   data?: T;
+ *   message?: string;
+ *   errorCode?: string;
+ *   timestamp: string;
+ * }
+ * 
+ * @param {boolean} success - 是否成功
+ * @param {Object} data - 返回数据
+ * @param {string} message - 提示消息
+ * @param {string} errorCode - 错误码
+ * @returns {Object} 标准化响应对象
+ */
+function createResponse(success, data = null, message = '', errorCode = null) {
+  return {
+    success,
+    data,
+    message,
+    errorCode,
+    timestamp: new Date().toISOString(),
+  };
+}
+
+/**
+ * 创建成功响应
+ * 
+ * @param {Object} data - 返回数据
+ * @param {string} message - 成功消息
+ * @returns {Object} 成功响应对象
+ */
+function successResponse(data, message = '操作成功') {
+  return createResponse(true, data, message, null);
+}
+
+/**
+ * 创建错误响应
+ * 
+ * @param {string} errorCode - 错误码 (来自 ErrorCodes)
+ * @param {string} customMessage - 自定义消息 (可选)
+ * @returns {Object} 错误响应对象
+ */
+function errorResponse(errorCode, customMessage = null) {
+  const message = customMessage || ERROR_MESSAGES[errorCode] || '未知错误';
+  return createResponse(false, null, message, errorCode);
+}
+
+/**
+ * 创建参数错误响应
+ * 
+ * @param {string} detail - 错误详情
+ * @returns {Object} 错误响应对象
+ */
+function invalidParamsResponse(detail) {
+  return errorResponse(ErrorCodes.INVALID_PARAMS, detail);
+}
+
+/**
+ * 创建用户不存在响应
+ * 
+ * @returns {Object} 错误响应对象
+ */
+function userNotFoundResponse() {
+  return errorResponse(ErrorCodes.USER_NOT_FOUND);
+}
+
+/**
+ * 创建词汇不存在响应
+ * 
+ * @returns {Object} 错误响应对象
+ */
+function vocabularyNotFoundResponse() {
+  return errorResponse(ErrorCodes.VOCABULARY_NOT_FOUND);
+}
+
+/**
+ * 创建服务器错误响应
+ * 
+ * @param {Error} error - 错误对象
+ * @returns {Object} 错误响应对象
+ */
+function serverErrorResponse(error) {
+  // 生产环境不暴露错误详情
+  const message = process.env.NODE_ENV === 'development' 
+    ? `服务器错误: ${error.message}`
+    : ERROR_MESSAGES.SERVER_ERROR;
+  
+  return errorResponse(ErrorCodes.SERVER_ERROR, message);
+}
+
+/**
+ * 创建 AI 错误响应
+ * 
+ * @param {Error} error - 错误对象
+ * @returns {Object} 错误响应对象
+ */
+function aiErrorResponse(error) {
+  const message = `AI 错误: ${error.message}`;
+  return errorResponse(ErrorCodes.AI_ERROR || 'AI_ERROR', message);
+}
+
+module.exports = {
+  createResponse,
+  successResponse,
+  errorResponse,
+  invalidParamsResponse,
+  userNotFoundResponse,
+  vocabularyNotFoundResponse,
+  serverErrorResponse,
+  aiErrorResponse,
+};
+````
+
+## File: cloudbase/functions/ai-engine/test.js
+````javascript
+// /Users/liangjianyu/LearnOnThailand/ThaiLearningApp/cloudbase/functions/ai-engine/test.js
+
+/**
+ * 这是一个仅供本地开发使用的“脱水测试脚本”。
+ * 目的：在不部署云端的情况下，直接验证大模型返回的数据结构是否符合我们的 JSON 规范。
+ */
+
+// 1. 挂载真实环境变量（⚠️ 注意：不要把写了真实 Key 的此文件提交到 Git）
+// 你需要把下面这行的 sk-xxxx 替换为你真实的 DeepSeek API Key
+process.env.DEEPSEEK_API_KEY = "REDACTED_PURGED_FROM_GIT_HISTORY"; 
+
+// 2. 将云函数的主入口引进来
+const { main } = require('./index.js');
+
+// 3. 捏造一个假的前端请求体 (event)
+const mockEvent = {
+    action: 'explainVocab',
+    data: {
+        userId: 'test-user-123',
+        vocabularyId: 'mock-vocab-1',
+        thaiWord: 'สวัสดี'  // 我们测一个最经典的泰语词汇：“你好”
+    }
+};
+
+// 4. 执行调用并打印结果
+async function runTest() {
+    console.log("🚀 开始本地模拟调用 AI Engine (Action: explainVocab)...");
+    
+    // 假装这个空对象是腾讯云的上下文（因为我们的代码里没用到它，传空对象即可）
+    const mockContext = {}; 
+
+    try {
+        console.time("⏱️ AI 调用耗时"); // 顺便测一下 DeepSeek 返回这段内容要多久
+        
+        // 直接执行云函数的逻辑
+        const result = await main(mockEvent, mockContext);
+        
+        console.timeEnd("⏱️ AI 调用耗时");
+        console.log("\n✅ 调用完成，前端最终会拿到的对象结构：\n");
+        
+        // 用 null, 2 让 JSON 打印得带有缩进和换行，方便人类阅读
+        console.log(JSON.stringify(result, null, 2)); 
+        
+    } catch (err) {
+        console.timeEnd("⏱️ AI 调用耗时");
+        console.error("\n❌ 调用在这个环节崩溃了：", err);
+    }
+}
+
+// 跑起来
+runTest();
 ````
 
 ## File: cloudbase/functions/alphabet/handlers/getAllLetters.js
@@ -4799,6 +7944,128 @@ export function useModuleAccess(
 }
 ````
 
+## File: src/hooks/useTodayStudyTime.ts
+````typescript
+import { useState, useEffect } from 'react';
+import { useLearningPreferenceStore } from '@/src/stores/learningPreferenceStore';
+
+/**
+ * 当日学习时长（秒）→ 展示用文案
+ * - < 60 分钟：显示 "X min"
+ * - >= 60 分钟：显示 "X.X hrs"
+ */
+export function formatStudyTimeDisplay(seconds: number): { value: string; unit: string } {
+  const mins = Math.floor(seconds / 60);
+  if (mins < 60) {
+    return { value: String(mins), unit: 'min' };
+  }
+  const hrs = mins / 60;
+  return { value: hrs.toFixed(1), unit: 'hrs' };
+}
+
+/**
+ * 返回当日学习时长，支持实时刷新（当用户在学习页时每秒更新）
+ */
+export function useTodayStudyTime() {
+  const getTodayStudyTimeSeconds = useLearningPreferenceStore((s) => s.getTodayStudyTimeSeconds);
+  const activeSessionStart = useLearningPreferenceStore((s) => s.activeSessionStart);
+  useLearningPreferenceStore((s) => s.dailyStudyTimeByDate); // 订阅：离开学习页时触发重渲染
+
+  const [, forceUpdate] = useState(0);
+
+  useEffect(() => {
+    if (activeSessionStart == null) return;
+    const id = setInterval(() => forceUpdate((x) => x + 1), 1000);
+    return () => clearInterval(id);
+  }, [activeSessionStart]);
+
+  const seconds = getTodayStudyTimeSeconds();
+  return { seconds, ...formatStudyTimeDisplay(seconds) };
+}
+````
+
+## File: src/hooks/useTtsPlayer.ts
+````typescript
+/**
+ * TTS 播放 hook — 设备本地 expo-speech 版本
+ *
+ * 光标跟随（云端 TTS + 逐字时间戳）已封存，参见 git 历史。
+ * 待未来有可用的国内 TTS 服务后可恢复。
+ */
+
+import { useState, useCallback, useEffect, useRef } from 'react';
+import * as Speech from 'expo-speech';
+
+interface UseTtsPlayerReturn {
+    ttsLoading: boolean;
+    isPlaying: boolean;
+    playTts: (text: string) => Promise<void>;
+    stopTts: () => Promise<void>;
+}
+
+export function useTtsPlayer(): UseTtsPlayerReturn {
+    const [ttsLoading, setTtsLoading] = useState(false);
+    const [isPlaying, setIsPlaying] = useState(false);
+    const mountedRef = useRef(true);
+
+    useEffect(() => {
+        mountedRef.current = true;
+        return () => {
+            mountedRef.current = false;
+            Speech.stop();
+        };
+    }, []);
+
+    const stopTts = useCallback(async () => {
+        Speech.stop();
+        if (mountedRef.current) {
+            setIsPlaying(false);
+        }
+    }, []);
+
+    const playTts = useCallback(async (text: string) => {
+        if (ttsLoading || isPlaying) {
+            await stopTts();
+        }
+
+        setTtsLoading(true);
+
+        try {
+            const isSpeaking = await Speech.isSpeakingAsync();
+            if (isSpeaking) Speech.stop();
+        } catch { /* noop */ }
+
+        Speech.speak(text, {
+            language: 'th',
+            onStart: () => {
+                if (mountedRef.current) {
+                    setTtsLoading(false);
+                    setIsPlaying(true);
+                }
+            },
+            onDone: () => {
+                if (mountedRef.current) {
+                    setIsPlaying(false);
+                }
+            },
+            onError: () => {
+                if (mountedRef.current) {
+                    setTtsLoading(false);
+                    setIsPlaying(false);
+                }
+            },
+        });
+    }, [ttsLoading, isPlaying, stopTts]);
+
+    return {
+        ttsLoading,
+        isPlaying,
+        playTts,
+        stopTts,
+    };
+}
+````
+
 ## File: src/hooks/useVocabularyLearningEngine.ts
 ````typescript
 // src/hooks/useVocabularyLearningEngine.ts
@@ -4941,6 +8208,79 @@ export const useStorageStore = create<StorageStoreState>((set, get) => ({
 }));
 ````
 
+## File: src/utils/articleStorage.ts
+````typescript
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import type { SavedArticle } from '@/src/entities/types/ai.types';
+
+const STORAGE_KEY = 'articlePracticeList';
+const CLOZE_HINTS_PREFIX = 'articlePractice_clozeHints:';
+
+async function readAll(): Promise<SavedArticle[]> {
+    const raw = await AsyncStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+    return JSON.parse(raw) as SavedArticle[];
+}
+
+async function writeAll(articles: SavedArticle[]): Promise<void> {
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(articles));
+}
+
+/** 按时间倒序获取全部文章 */
+export async function getArticles(): Promise<SavedArticle[]> {
+    const list = await readAll();
+    list.sort((a, b) => b.createdAt - a.createdAt);
+    return list;
+}
+
+/** 按 id 获取单篇文章，未找到返回 null */
+export async function getArticleById(id: string): Promise<SavedArticle | null> {
+    const list = await readAll();
+    return list.find(a => a.id === id) ?? null;
+}
+
+/**
+ * 保存文章到练习库（自动去重：标题 + 正文完全相同视为重复）。
+ * 返回 'saved' | 'duplicate'。
+ */
+export async function saveArticle(article: SavedArticle): Promise<'saved' | 'duplicate'> {
+    const list = await readAll();
+    const isDuplicate = list.some(
+        a => a.thaiText === article.thaiText && a.title === article.title,
+    );
+    if (isDuplicate) return 'duplicate';
+
+    list.unshift(article);
+    await writeAll(list);
+    return 'saved';
+}
+
+/** 按 id 删除文章 */
+export async function deleteArticle(id: string): Promise<void> {
+    const list = await readAll();
+    const filtered = list.filter(a => a.id !== id);
+    await writeAll(filtered);
+    await AsyncStorage.removeItem(CLOZE_HINTS_PREFIX + id);
+}
+
+/** 获取文章的半挖空提示词缓存，未命中返回 null */
+export async function getClozeHints(articleId: string): Promise<string[] | null> {
+    const raw = await AsyncStorage.getItem(CLOZE_HINTS_PREFIX + articleId);
+    if (!raw) return null;
+    try {
+        const arr = JSON.parse(raw) as string[];
+        return Array.isArray(arr) ? arr : null;
+    } catch {
+        return null;
+    }
+}
+
+/** 缓存文章的半挖空提示词 */
+export async function setClozeHints(articleId: string, keywords: string[]): Promise<void> {
+    await AsyncStorage.setItem(CLOZE_HINTS_PREFIX + articleId, JSON.stringify(keywords));
+}
+````
+
 ## File: src/utils/lettersDistractorEngine.ts
 ````typescript
 // src/utils/alphabet/distractorEngine.ts
@@ -4983,6 +8323,124 @@ export function generateLetterDistractors(opts: DistractorOptions): Letter[] {
   const unique = Array.from(uniqueMap.values());
 
   return unique.slice(0, count);
+}
+````
+
+## File: src/utils/reminderNotification.ts
+````typescript
+/**
+ * 每日提醒通知服务（基于 Notifee）
+ * 用于在指定时间弹出学习提醒
+ * 注：Notifee 需 development build，Expo Go 下会静默降级
+ */
+import { Platform } from 'react-native';
+
+/** 每日提醒通知固定 ID，用于更新/取消 */
+export const DAILY_REMINDER_NOTIFICATION_ID = 'daily-learning-reminder';
+
+/** 获取 Notifee 实例，Expo Go 下返回 null */
+function getNotifee(): typeof import('@notifee/react-native').default | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    return require('@notifee/react-native').default;
+  } catch {
+    return null;
+  }
+}
+
+/** 当前环境是否支持 Notifee（需 development build，Expo Go 下为 false） */
+export function isReminderSupported(): boolean {
+  return getNotifee() != null;
+}
+
+/**
+ * 请求通知权限（iOS 必需）
+ */
+export async function requestReminderPermission(): Promise<boolean> {
+  const notifee = getNotifee();
+  if (!notifee) return false;
+  if (Platform.OS !== 'ios') return true;
+  try {
+    const settings = await notifee.requestPermission();
+    return settings.authorizationStatus >= 2; // 2 = authorized
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 创建/更新每日定时提醒
+ * @param time 提醒时间 HH:mm
+ * @param title 通知标题
+ * @param body 通知正文
+ */
+export async function scheduleDailyReminder(
+  time: string,
+  title: string,
+  body: string
+): Promise<void> {
+  const notifee = getNotifee();
+  if (!notifee) return;
+
+  try {
+    const { TimestampTrigger, TriggerType, RepeatFrequency, AndroidImportance } =
+      require('@notifee/react-native');
+
+    await notifee.createChannel({
+      id: 'daily-reminder',
+      name: '学习提醒',
+      importance: AndroidImportance.HIGH,
+    });
+
+    const hasPermission = await requestReminderPermission();
+    if (!hasPermission) {
+      throw new Error('未获得通知权限');
+    }
+
+    const [hour, minute] = time.split(':').map(Number);
+    const date = new Date();
+    date.setHours(hour, minute, 0, 0);
+    let triggerTimestamp = date.getTime();
+    if (triggerTimestamp <= Date.now()) {
+      date.setDate(date.getDate() + 1);
+      triggerTimestamp = date.getTime();
+    }
+
+    const trigger: typeof TimestampTrigger = {
+      type: TriggerType.TIMESTAMP,
+      timestamp: triggerTimestamp,
+      repeatFrequency: RepeatFrequency.DAILY,
+    };
+
+    await notifee.createTriggerNotification(
+      {
+        id: DAILY_REMINDER_NOTIFICATION_ID,
+        title,
+        body,
+        android: {
+          channelId: 'daily-reminder',
+          pressAction: { id: 'default' },
+        },
+      },
+      trigger
+    );
+  } catch (e) {
+    if (String(e).includes('native module not found')) return;
+    throw e;
+  }
+}
+
+/**
+ * 取消每日提醒
+ */
+export async function cancelDailyReminder(): Promise<void> {
+  const notifee = getNotifee();
+  if (!notifee) return;
+  try {
+    await notifee.cancelNotification(DAILY_REMINDER_NOTIFICATION_ID);
+  } catch {
+    // 静默忽略（如 Expo Go 下无原生模块）
+  }
 }
 ````
 
@@ -5319,6 +8777,31 @@ fs.writeFileSync(inputFile, output, 'utf-8');
 
 console.log('✅ 已转换为 JSON Lines 格式（后缀仍为 .json）');
 console.log('✅ 现在可以直接上传到 CloudBase 导入');
+````
+
+## File: eas.json
+````json
+{
+  "cli": {
+    "version": ">= 16.24.1",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal"
+    },
+    "preview": {
+      "distribution": "internal"
+    },
+    "production": {
+      "autoIncrement": true
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}
 ````
 
 ## File: global.css
@@ -5863,6 +9346,275 @@ export default function DevLayout() {
             />
         </Stack>
     );
+}
+````
+
+## File: cloudbase/functions/ai-engine/handlers/explainVocab.js
+````javascript
+/**
+ * 解释词汇
+ * 
+ * Action: explainVocab
+ */
+
+const { createResponse } = require('../utils/response');
+
+async function explainVocab(client, data) {
+    const { userId, vocabularyId, thaiWord, language = 'zh' } = data;
+
+    // 将前端语言代码映射为 AI 可识别的语言名称
+    const languageMap = { zh: '中文', en: 'English' };
+    const targetLanguage = languageMap[language] || '中文';
+
+    // 一句话搞定语言切换：AI 会用 targetLanguage 回应所有内容
+    const systemPrompt = `You are a senior linguistics professor specializing in Thai and ${targetLanguage}. Always respond in ${targetLanguage}.`;
+
+    const userPrompt = `
+    Analyze the Thai word: "${thaiWord}"
+
+    === STEP 1: SYLLABLE TONE ANALYSIS (do this first, silently) ===
+    For EACH syllable, strictly apply the tone_determination_matrix below (derived from full_rule.json):
+
+    A) Consonant class:
+       Mid:  ก จ ฎ ฏ ด ต บ ป อ
+       High: ข ฃ ฉ ฐ ถ ผ ฝ ศ ษ ส ห
+       Low:  all others (ค ง ช ซ ท ธ น พ ฟ ม ย ร ล ว ฮ etc.)
+       SPECIAL RULE: ห before Low Unpaired consonant (ง ญ ณ น ม ย ร ล ฬ ว) → treat as HIGH class
+
+    B) Vowel length: SHORT (-ะ -ิ -ึ -ุ เ-ะ etc. and contracted forms -ั -็) vs LONG (-า -ี -ื etc.)
+
+    C) Syllable type:
+       Open = long vowel alone, or sonorant final (ง น ม ย ว). Sonorant finals follow OPEN rules.
+       Closed(short) = short vowel with no final consonant → use SHORT column of Open matrix
+       Closed(stop) = ends in stop final (ก ด บ or any letter mapped to k/t/p stop)
+
+    D) Tone matrix — NO tone mark present:
+       | Class | Open, LONG vowel | Open, SHORT vowel | Stop-final, LONG | Stop-final, SHORT |
+       |-------|------------------|-------------------|------------------|-------------------|
+       | Mid   | T1               | T2                | T2               | T2                |
+       | High  | T5               | T2                | T2               | T2                |
+       | Low   | T1               | T4                | T3               | T4                |
+
+    E) Tone matrix — WITH tone mark (mark overrides the default above):
+       | Class | ่ (mai ek) | ้ (mai tho) | ๊ (mai tri) | ๋ (mai jattawa) |
+       |-------|-----------|------------|------------|----------------|
+       | Mid   | T2        | T3         | T4         | T5             |
+       | High  | T2        | T3         | INVALID    | INVALID        |
+       | Low   | T2*       | T3         | INVALID    | INVALID        |
+       (*Low + ่ valid with LONG vowels only; INVALID with short)
+
+    === STEP 2: WRITE EXPLICIT PHONETIC SPELLING ===
+    Now write each syllable using ONLY base consonants + exact tone needed, using this rule:
+    - Drop ALL leading tone helpers (ห นำ, อนำ). Use the raw base consonant only.
+    - Apply tone mark of the ACTUAL SPOKEN TONE directly onto the base consonant:
+      · Tone 1 (mid/flat): NO mark
+      · Tone 2 (falling): ไม้เอก ่
+      · Tone 3 (high-falling): ไม้โท ้
+      · Tone 4 (high/level): ไม้ตรี ๊
+      · Tone 5 (rising): ไม้จัตวา ๋
+    - Verified examples (apply the matrix above to check):
+      · กา:    Mid + LONG อา + no final → Open LONG → T1 → no mark → กา [gaa1]
+      · ขา:    High + LONG อา + no final → Open LONG → T5 → ๋ on ข → ข๋า [khaa5]
+      · กะปิ:  ก(Mid+SHORT อะ+no final→Open SHORT→T2) + ปิ(Mid+SHORT อิ+no final→T2) → ก่ะ-ปิ่ [ga2-bi2]
+      · หวัง:  ห+ว(LOW Unpaired)→ว treated as HIGH, SHORT อั (contracted อะ), sonorant ง → Open SHORT → T2 → วั่ง [wang2]
+
+    === STEP 3: OUTPUT JSON ===
+    IMPORTANT: All text values MUST be in ${targetLanguage}, except Thai word and phonetic fields.
+
+    Return ONLY valid JSON (no Markdown, no code fences):
+    {
+      "vocabularyId": "${vocabularyId || ''}",
+      "thaiWord": "${thaiWord}",
+      "pronunciation": "<explicit phonetic spelling> [romanization with tone numbers]",
+      "meaning": "<meaning in ${targetLanguage}>",
+      "breakdown": "<pronunciation tone reasoning or memory aid, max 25 words, in ${targetLanguage}>",
+      "extraExamples": [
+        {
+          "scene": "<brief scene in ${targetLanguage}>",
+          "thai": "<1 Thai example sentence>",
+          "chinese": "<${targetLanguage} translation>"
+        }
+      ]
+    }
+    `;
+
+    // 发起网络请求并设置硬中断防御机制
+    // 注意：JS 软超时必须 < cloudbaserc.json 里配置的函数硬超时（当前 60s）
+    try {
+        const TIMEOUT_MS = 50000; // 软超时 50 秒，留 10 秒余量给云函数基础设施
+        const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => {
+                reject(new Error(`AI_TIMEOUT: Request timed out after ${TIMEOUT_MS / 1000}s`));
+            }, TIMEOUT_MS);
+        });
+
+        const aiRequestPromise = client.chat.completions.create({
+            model: "deepseek-chat", 
+            messages: [
+                { role: "system", content: systemPrompt },
+                { role: "user", content: userPrompt }
+            ],
+            max_tokens: 600,  // 增大 token 上限，确保 JSON 不被截断
+            temperature: 0.3  // 降低随机性，提升事实准确度
+        });
+
+        // Race: AI 返回 vs 超时，谁先触发就用谁的结果
+        const completion = await Promise.race([aiRequestPromise, timeoutPromise]);
+        
+        const rawResult = completion.choices[0].message.content;
+
+        // 尝试从响应中提取 JSON（防止 AI 意外包了 Markdown 代码块）
+        const jsonMatch = rawResult.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) {
+            throw new Error(`AI response did not contain valid JSON: ${rawResult}`);
+        }
+
+        let parsedData;
+        try {
+            parsedData = JSON.parse(jsonMatch[0]);
+        } catch (err) {
+            throw new Error(`JSON parse failed: ${jsonMatch[0]}`);
+        }
+
+        return createResponse(true, parsedData, '解析成功');
+        
+    } catch (error) {
+        console.error("[explainVocab] 请求失败或超时:", error.message);
+        throw error;
+    }
+}
+
+module.exports = explainVocab;
+````
+
+## File: cloudbase/functions/ai-engine/handlers/generateMicroReading.js
+````javascript
+/**
+ * 生成微阅读短文
+ *
+ * Action: generateMicroReading
+ *
+ * 接收用户本轮勾选的词汇列表，
+ * 让 AI 把这些词自然编织进一段泰文短文，附上中文辅助翻译。
+ */
+
+const { createResponse } = require('../utils/response');
+
+async function generateMicroReading(client, data) {
+    // ── 1. 解包入参 ──────────────────────────────────────────────────
+    // words: [{ thaiWord: "กะปิ", meaning: "虾酱" }, ...]
+    // language: 'zh' | 'en'
+    const { words = [], language = 'zh' } = data;
+
+    // 防御：没有词就不调 AI，直接报错
+    if (!words || words.length === 0) {
+        return createResponse(false, null, '没有选中的词汇', 'ERR_NO_WORDS');
+    }
+
+    // ── 2. 语言映射（与 explainVocab 保持一致） ───────────────────────
+    const languageMap = { zh: '中文', en: 'English' };
+    const targetLanguage = languageMap[language] || '中文';
+
+    // ── 3. 把词汇列表格式化成 Prompt 可读的字符串 ──────────────────────
+    // 例：["กะปิ（虾酱）", "สวัสดี（你好）"]
+    const wordList = words
+        .map(w => `${w.thaiWord}（${w.meaning}）`)
+        .join('、');
+
+    // ── 4. System Prompt：告诉 AI 它的角色 ────────────────────────────
+    const systemPrompt = 
+    `
+        You are a creative Thai language teacher who writes vivid, engaging,
+        natural short stories for language learners. 
+        Always respond in JSON format only (no markdown, no code fences).
+    `;
+
+    // ── 5. User Prompt：精确描述任务和输出格式 ────────────────────────
+    const userPrompt = 
+    `
+        Create a short Thai reading passage that naturally incorporates ALL of these vocabulary words:
+        ${wordList}
+
+        Requirements:
+        1. Length: 80-150 Thai words (a full paragraph, NOT just 1-2 sentences, use onlyA1 level Thai vocabulary)
+        2. Story type: a vivid everyday scene (market, restaurant, travel, etc.)
+        3. ALL vocabulary words listed above MUST appear in the passage naturally
+        4. After the Thai passage, provide a ${targetLanguage} translation paragraph by paragraph
+
+        Return ONLY valid JSON in this exact format:
+        {
+        "title": "<the Thai title of the story here>",
+        "thaiText": "<the full Thai passage here>",
+        "translation": "<the full ${targetLanguage} translation here>",
+        "wordsUsed": ["<thaiWord1>", "<thaiWord2>"]
+        }
+    `;
+
+    // ── 6. 调用 AI，与 explainVocab 完全相同的防超时机制 ──────────────
+    try {
+        const TIMEOUT_MS = 200000; // 软超时 200 秒
+
+        // Promise.race：AI 响应 和 倒计时 赛跑，谁先到用谁的结果
+        const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => {
+                reject(new Error(`AI_TIMEOUT: Request timed out after ${TIMEOUT_MS / 1000}s`));
+            }, TIMEOUT_MS);
+        });
+
+        const aiRequestPromise = client.chat.completions.create({
+            model: 'deepseek-chat',
+            messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: userPrompt },
+            ],
+            max_tokens: 1200,   // 短文比词汇解析长，需要更多 token
+            temperature: 1.3,   // 高随机性：同样的词每次生成不一样的故事
+        });
+
+        const completion = await Promise.race([aiRequestPromise, timeoutPromise]);
+
+        const rawResult = completion.choices[0].message.content;
+
+        // 防御：从响应中提取 JSON，防止 AI 偷偷加 Markdown 代码块
+        const jsonMatch = rawResult.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) {
+            throw new Error(`AI response did not contain valid JSON: ${rawResult}`);
+        }
+
+        let parsedData;
+        try {
+            parsedData = JSON.parse(jsonMatch[0]);
+        } catch (err) {
+            throw new Error(`JSON parse failed: ${jsonMatch[0]}`);
+        }
+
+        return createResponse(true, parsedData, '微阅读生成成功');
+
+    } catch (error) {
+        console.error('[generateMicroReading] 请求失败或超时:', error.message);
+        throw error;
+    }
+}
+
+module.exports = generateMicroReading;
+````
+
+## File: cloudbase/functions/ai-engine/package.json
+````json
+{
+    "name": "ai-engine",
+    "version": "1.0.0",
+    "description": "AI Module for Thai Learning App",
+    "main": "index.js",
+    "scripts": {
+        "test": "echo \"Error: no test specified\" && exit 1"
+    },
+    "dependencies": {
+        "@cloudbase/node-sdk": "^2.11.0",
+        "openai": "^4.28.4"
+    },
+    "author": "",
+    "license": "ISC"
 }
 ````
 
@@ -6917,6 +10669,189 @@ echo "tcb fn deploy alphabet --runtime Nodejs18.20"
 echo "tcb fn deploy learn-vocab --runtime Nodejs18.20"
 ````
 
+## File: src/components/ai/AiExplanationView.tsx
+````typescript
+// src/components/ai/AiExplanationView.tsx
+import React, { useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
+import { useTranslation } from 'react-i18next';
+import * as Speech from 'expo-speech';
+import { Volume2 } from 'lucide-react-native';
+import { Colors } from '@/src/constants/colors';
+import { Typography } from '@/src/constants/typography';
+import type { ExplainVocabularyResponse } from '@/src/entities/types/ai.types';
+
+interface AiExplanationViewProps {
+  data: ExplainVocabularyResponse;
+}
+
+export const AiExplanationView: React.FC<AiExplanationViewProps> = ({ data }) => {
+  const { t } = useTranslation();
+
+  const speakWord = useCallback((text: string) => {
+    Speech.stop();
+    Speech.speak(text, { language: 'th-TH', rate: 0.85 });
+  }, []);
+
+  return (
+    <ScrollView 
+      style={styles.container} 
+      contentContainerStyle={styles.contentContainer}
+      showsVerticalScrollIndicator={false}
+    >
+      {/* 头部区域：单词和释义 */}
+      <View style={styles.header}>
+        <Pressable onPress={() => speakWord(data.thaiWord)} style={styles.wordRow}>
+          <Text style={styles.thaiWord}>{data.thaiWord}</Text>
+          <View style={styles.speakerIcon}>
+            <Volume2 size={20} color={Colors.thaiGold} />
+          </View>
+        </Pressable>
+        {data.pronunciation ? (
+          <View style={styles.pronunciationBadge}>
+            <Text style={styles.pronunciationText}>{data.pronunciation}</Text>
+          </View>
+        ) : null}
+      </View>
+      
+      <Text style={styles.meaningText}>{data.meaning}</Text>
+
+      {/* 记忆卡片区域 */}
+      {data.breakdown ? (
+         <View style={styles.card}>
+            <Text style={styles.cardTitle}>{t('ai.analysis')}</Text>
+            <Text style={styles.cardContent}>{data.breakdown}</Text>
+         </View>
+      ) : null}
+
+      {/* 场景例句区域 */}
+      {data.extraExamples && data.extraExamples.length > 0 ? (
+         <View style={styles.card}>
+            <Text style={styles.cardTitle}>{t('ai.examples')}</Text>
+            {data.extraExamples.map((ex, index) => (
+              <View key={index} style={styles.exampleItem}>
+                 <Text style={styles.exampleScene}>【{ex.scene}】</Text>
+                 <Pressable onPress={() => speakWord(ex.thai)} style={styles.exampleThaiRow}>
+                   <Text style={styles.exampleThai}>{ex.thai}</Text>
+                   <Volume2 size={14} color={Colors.taupe} />
+                 </Pressable>
+                 <Text style={styles.exampleChinese}>{ex.chinese}</Text>
+              </View>
+            ))}
+         </View>
+      ) : null}
+
+      <View style={{ height: 40 }} />
+    </ScrollView>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: Colors.paper,
+  },
+  contentContainer: {
+    padding: 24,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginBottom: 8,
+  },
+  wordRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  thaiWord: {
+    fontFamily: Typography.sarabunBold,
+    fontSize: 50,
+    color: Colors.ink,
+  },
+  speakerIcon: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 16,
+    backgroundColor: 'rgba(212, 175, 55, 0.1)',
+  },
+  pronunciationBadge: {
+    backgroundColor: 'rgba(212, 175, 55, 0.1)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(212, 175, 55, 0.2)',
+  },
+  pronunciationText: {
+    fontFamily: Typography.notoSerifRegular,
+    fontSize: 32,
+    color: Colors.thaiGold,
+  },
+  meaningText: {
+    fontFamily: Typography.notoSerifBold,
+    fontSize: 18,
+    color: Colors.taupe,
+    marginBottom: 32,
+  },
+  card: {
+    backgroundColor: Colors.white,
+    padding: 20,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Colors.sand,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  cardTitle: {
+    fontFamily: Typography.notoSerifBold,
+    fontSize: 14,
+    color: Colors.thaiGold,
+    marginBottom: 12,
+    textTransform: 'uppercase',
+  },
+  cardContent: {
+    fontFamily: Typography.notoSerifRegular,
+    fontSize: 15,
+    lineHeight: 24,
+    color: Colors.ink,
+  },
+  exampleItem: {
+    marginBottom: 16,
+  },
+  exampleScene: {
+    fontFamily: Typography.notoSerifRegular,
+    fontSize: 12,
+    color: Colors.taupe,
+    marginBottom: 4,
+  },
+  exampleThaiRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 4,
+  },
+  exampleThai: {
+    fontFamily: Typography.sarabunRegular,
+    fontSize: 18,
+    color: Colors.ink,
+  },
+  exampleChinese: {
+    fontFamily: Typography.notoSerifRegular,
+    fontSize: 14,
+    color: Colors.taupe,
+  }
+});
+````
+
 ## File: src/components/common/Button.tsx
 ````typescript
 // src/components/common/Button.tsx
@@ -7584,478 +11519,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     color: Colors.ink,
-  },
-  nextButton: {
-    backgroundColor: Colors.thaiGold,
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-  },
-  nextButtonText: {
-    fontFamily: Typography.notoSerifBold,
-    fontSize: 16,
-    color: Colors.white,
-  },
-});
-````
-
-## File: src/components/learning/alphabet/MiniReviewQuestion.tsx
-````typescript
-// src/components/learning/alphabet/MiniReviewQuestion.tsx
-
-import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { useTranslation } from 'react-i18next';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  ActivityIndicator,
-  ScrollView,
-} from 'react-native';
-import { Audio } from 'expo-av';
-import { Volume2 } from 'lucide-react-native';
-
-import type { MiniReviewQuestion as MiniReviewQuestionType } from '@/src/entities/types/phonicsRule.types';
-import type { QuestionType } from '@/src/entities/enums/QuestionType.enum';
-import {
-  QUESTION_TYPE_LABELS,
-  QUESTION_TYPE_ICONS,
-} from '@/src/entities/enums/QuestionType.enum';
-import { Colors } from '@/src/constants/colors';
-import { Typography } from '@/src/constants/typography';
-
-// ==================== Props 接口 ====================
-
-interface MiniReviewQuestionProps {
-  /** 题目数据 */
-  question: MiniReviewQuestionType;
-
-  /** 答题回调(isCorrect, questionType) */
-  onAnswer: (isCorrect: boolean, type: QuestionType) => void;
-
-  /** 下一题回调 */
-  onNext: () => void;
-
-  /** 返回回调(可选) */
-  onBack?: () => void;
-}
-
-// ==================== 主组件 ====================
-
-export function MiniReviewQuestion({
-  question,
-  onAnswer,
-  onNext,
-  onBack,
-}: MiniReviewQuestionProps) {
-  const { t } = useTranslation();
-  const [answered, setAnswered] = useState(false);
-  const [selectedOption, setSelectedOption] = useState<string | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const soundRef = useRef<Audio.Sound | null>(null);
-
-  // ===== 清理音频资源 =====
-  useEffect(() => {
-    return () => {
-      if (soundRef.current) {
-        soundRef.current.unloadAsync().catch(() => { });
-        soundRef.current = null;
-      }
-    };
-  }, [question.id]); // 题目切换时清理
-
-  // ===== 播放音频 =====
-  const handlePlayAudio = useCallback(async () => {
-    if (!question.audioUrl) return;
-
-    try {
-      setIsPlaying(true);
-
-      if (soundRef.current) {
-        await soundRef.current.replayAsync();
-        setIsPlaying(false);
-        return;
-      }
-
-      const { sound } = await Audio.Sound.createAsync(
-        { uri: question.audioUrl },
-        { shouldPlay: true }
-      );
-
-      soundRef.current = sound;
-
-      sound.setOnPlaybackStatusUpdate((status) => {
-        if (status.isLoaded && status.didJustFinish) {
-          setIsPlaying(false);
-        }
-      });
-    } catch (error) {
-      console.warn('[MiniReviewQuestion] 播放音频失败:', error);
-      setIsPlaying(false);
-    }
-  }, [question.audioUrl]);
-
-  // ===== 选择答案 =====
-  const handleSelectOption = useCallback(
-    (optionValue: string) => {
-      if (answered) return;
-
-      setSelectedOption(optionValue);
-      setAnswered(true);
-
-      const isCorrect = optionValue === question.correct;
-      onAnswer(isCorrect, question.type);
-    },
-    [answered, question.correct, question.type, onAnswer]
-  );
-
-  // ===== 渲染声学提示 =====
-  const renderAcousticHint = () => {
-    if (!question.acousticHint) return null;
-
-    const { aspirated, voiceless, class: consonantClass } = question.acousticHint;
-
-    return (
-      <View style={styles.hintContainer}>
-        <Text style={styles.hintTitle}>{t('components.miniReview.hint', '💡 提示:')}</Text>
-        {aspirated !== undefined && (
-          <Text style={styles.hintText}>
-            • {aspirated ? t('components.miniReview.aspirated', '送气音 (aspirated)') : t('components.miniReview.unaspirated', '不送气音 (unaspirated)')}
-          </Text>
-        )}
-        {voiceless !== undefined && (
-          <Text style={styles.hintText}>
-            • {voiceless ? t('components.miniReview.voiceless', '清音 (voiceless)') : t('components.miniReview.voiced', '浊音 (voiced)')}
-          </Text>
-        )}
-        {consonantClass && (
-          <Text style={styles.hintText}>
-            • {t('components.miniReview.consonantClass', '辅音类')}: {
-              consonantClass === 'high' ? t('components.miniReview.highClass', '高辅音') :
-                consonantClass === 'mid' ? t('components.miniReview.midClass', '中辅音') :
-                  t('components.miniReview.lowClass', '低辅音')
-            }
-          </Text>
-        )}
-      </View>
-    );
-  };
-
-  // ===== 渲染音高可视化 =====
-  const renderPitchVisualization = () => {
-    if (!question.pitchVisualization?.enable) return null;
-    if (!answered && !question.pitchVisualization.showAfterAnswer) return null;
-
-    const { curve } = question.pitchVisualization;
-
-    return (
-      <View style={styles.pitchContainer}>
-        <Text style={styles.pitchTitle}>{t('components.miniReview.pitchCurve', '🎵 音高曲线')}</Text>
-        <View style={styles.pitchChart}>
-          {curve.map((height, index) => (
-            <View
-              key={index}
-              style={[
-                styles.pitchBar,
-                { height: `${(height / 5) * 100}%` },
-              ]}
-            />
-          ))}
-        </View>
-      </View>
-    );
-  };
-
-  // ===== 判断题型是否需要音频 =====
-  const needsAudio = [
-    'sound-to-letter',
-    'aspirated-contrast',
-    'vowel-length-contrast',
-    'tone-perception',
-  ].includes(question.type);
-
-  return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.contentContainer}
-    >
-      {/* 题型标题 */}
-      <View style={styles.header}>
-        <Text style={styles.typeIcon}>
-          {QUESTION_TYPE_ICONS[question.type] || '📝'}
-        </Text>
-        <Text style={styles.typeLabel}>
-          {QUESTION_TYPE_LABELS[question.type]}
-        </Text>
-      </View>
-
-      {/* 题干 */}
-      <Text style={styles.question}>{question.question}</Text>
-
-      {/* 副标题 */}
-      {question.subtitle && (
-        <Text style={styles.subtitle}>{question.subtitle}</Text>
-      )}
-
-      {/* 音频播放按钮 */}
-      {needsAudio && question.audioUrl && (
-        <TouchableOpacity
-          style={styles.audioButton}
-          onPress={handlePlayAudio}
-          disabled={isPlaying}
-          accessibilityRole="button"
-          accessibilityLabel="播放发音"
-        >
-          {isPlaying ? (
-            <ActivityIndicator size="small" color={Colors.white} />
-          ) : (
-            <>
-              <Volume2 size={20} color={Colors.white} />
-              <Text style={styles.audioButtonText}>{t('components.miniReview.playSound', '播放发音')}</Text>
-            </>
-          )}
-        </TouchableOpacity>
-      )}
-
-      {/* 声学提示(答题前显示) */}
-      {!answered && renderAcousticHint()}
-
-      {/* 选项 */}
-      <View style={styles.optionsContainer}>
-        {question.options.map((option, index) => {
-          const isSelected = selectedOption === option.value;
-          const isCorrect = answered && option.value === question.correct;
-          const isWrong = answered && isSelected && option.value !== question.correct;
-
-          return (
-            <TouchableOpacity
-              key={index}
-              style={[
-                styles.optionButton,
-                isSelected && styles.optionSelected,
-                isCorrect && styles.optionCorrect,
-                isWrong && styles.optionWrong,
-              ]}
-              onPress={() => handleSelectOption(option.value)}
-              disabled={answered}
-              accessibilityRole="radio"
-              accessibilityLabel={option.label}
-              accessibilityState={{ selected: isSelected }}
-            >
-              <View style={styles.optionContent}>
-                <Text
-                  style={[
-                    styles.optionLabel,
-                    isSelected && styles.optionLabelSelected,
-                  ]}
-                >
-                  {option.label}
-                </Text>
-                {option.example && (
-                  <Text style={styles.optionExample}>{option.example}</Text>
-                )}
-              </View>
-              {answered && (
-                <Text style={styles.feedbackIcon}>
-                  {isCorrect ? '✓' : isWrong ? '✗' : ''}
-                </Text>
-              )}
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-
-      {/* 解释(答题后显示) */}
-      {answered && question.explanation && (
-        <View style={styles.explanationContainer}>
-          <Text style={styles.explanationText}>
-            💡 {question.explanation}
-          </Text>
-        </View>
-      )}
-
-      {/* 音高可视化(答题后显示) */}
-      {answered && renderPitchVisualization()}
-
-      {/* 下一题按钮 */}
-      {answered && (
-        <TouchableOpacity
-          style={styles.nextButton}
-          onPress={onNext}
-          accessibilityRole="button"
-          accessibilityLabel={t('alphabet.nextQuestion', '下一题 →')}
-        >
-          <Text style={styles.nextButtonText}>{t('alphabet.nextQuestion', '下一题 →')}</Text>
-        </TouchableOpacity>
-      )}
-    </ScrollView>
-  );
-}
-
-// ==================== 样式 ====================
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.paper,
-  },
-  contentContainer: {
-    padding: 24,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
-  },
-  typeIcon: {
-    fontSize: 24,
-    marginRight: 8,
-  },
-  typeLabel: {
-    fontFamily: Typography.notoSerifBold,
-    fontSize: 18,
-    color: Colors.ink,
-  },
-  question: {
-    fontFamily: Typography.notoSerifBold,
-    fontSize: 20,
-    color: Colors.ink,
-    textAlign: 'center',
-    marginBottom: 12,
-  },
-  subtitle: {
-    fontFamily: Typography.notoSerifRegular,
-    fontSize: 14,
-    color: Colors.taupe,
-    textAlign: 'center',
-    marginBottom: 20,
-  },
-  audioButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: Colors.thaiGold,
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 24,
-    minHeight: 50,
-  },
-  audioButtonText: {
-    fontFamily: Typography.notoSerifBold,
-    fontSize: 16,
-    color: Colors.white,
-    marginLeft: 8,
-  },
-  hintContainer: {
-    backgroundColor: '#FFF9E6',
-    borderLeftWidth: 4,
-    borderLeftColor: Colors.thaiGold,
-    borderRadius: 8,
-    padding: 16,
-    marginBottom: 20,
-  },
-  hintTitle: {
-    fontFamily: Typography.notoSerifBold,
-    fontSize: 14,
-    color: Colors.ink,
-    marginBottom: 8,
-  },
-  hintText: {
-    fontFamily: Typography.notoSerifRegular,
-    fontSize: 13,
-    color: Colors.taupe,
-    marginBottom: 4,
-  },
-  optionsContainer: {
-    gap: 12,
-    marginBottom: 20,
-  },
-  optionButton: {
-    backgroundColor: Colors.white,
-    borderWidth: 2,
-    borderColor: Colors.sand,
-    borderRadius: 12,
-    padding: 16,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    minHeight: 60,
-  },
-  optionSelected: {
-    borderColor: Colors.thaiGold,
-    backgroundColor: '#FFF9E6',
-  },
-  optionCorrect: {
-    borderColor: '#2A9D8F',
-    backgroundColor: '#E8F5F3',
-  },
-  optionWrong: {
-    borderColor: '#E63946',
-    backgroundColor: '#FFE8EA',
-  },
-  optionContent: {
-    flex: 1,
-  },
-  optionLabel: {
-    fontFamily: Typography.notoSerifBold,
-    fontSize: 18,
-    color: Colors.ink,
-  },
-  optionLabelSelected: {
-    color: Colors.thaiGold,
-  },
-  optionExample: {
-    fontFamily: Typography.notoSerifRegular,
-    fontSize: 12,
-    color: Colors.taupe,
-    marginTop: 4,
-  },
-  feedbackIcon: {
-    fontSize: 24,
-    marginLeft: 12,
-  },
-  explanationContainer: {
-    backgroundColor: '#F0F8FF',
-    borderLeftWidth: 4,
-    borderLeftColor: '#457B9D',
-    borderRadius: 8,
-    padding: 16,
-    marginBottom: 20,
-  },
-  explanationText: {
-    fontFamily: Typography.notoSerifRegular,
-    fontSize: 14,
-    lineHeight: 20,
-    color: Colors.ink,
-  },
-  pitchContainer: {
-    backgroundColor: '#F5F5F5',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 20,
-  },
-  pitchTitle: {
-    fontFamily: Typography.notoSerifBold,
-    fontSize: 14,
-    color: Colors.ink,
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-  pitchChart: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-around',
-    height: 100,
-    backgroundColor: Colors.white,
-    borderRadius: 8,
-    padding: 12,
-  },
-  pitchBar: {
-    width: 40,
-    backgroundColor: Colors.thaiGold,
-    borderRadius: 4,
   },
   nextButton: {
     backgroundColor: Colors.thaiGold,
@@ -8898,244 +12361,6 @@ export const SEQUENCE_LESSONS = {
   lesson3: LETTER_SEQUENCE.slice(27, 27 + 9),
   lesson4: LETTER_SEQUENCE.slice(36, 36 + 9),
   lesson5: LETTER_SEQUENCE.slice(45),
-};
-````
-
-## File: src/entities/enums/QuestionType.enum.ts
-````typescript
-// src/entities/enums/QuestionType.enum.ts
-
-/**
- * 字母复习题型枚举
- * 
- * 基于泰语语音学优化的12种题型系统
- * 包含送气音对比、元音长短对比、声调听辨等核心训练
- * 
- * @version 3.0.0
- * @see lettersQuestionGenerator.ts
- */
-export enum QuestionType {
-    // ===== 基础题型(Lesson 1-2) =====
-    /** 听音选字母 */
-    SOUND_TO_LETTER = 'sound-to-letter',
-    /** 看字母选发音 */
-    LETTER_TO_SOUND = 'letter-to-sound',
-
-    // ===== 拼读题型(Lesson 2-3) =====
-    /** 拼读组合: 辅音+元音 */
-    SYLLABLE = 'syllable',
-    /** 音素分离: 发音→辅音 */
-    REVERSE_SYLLABLE = 'reverse-syllable',
-    /** 缺字填空 */
-    MISSING_LETTER = 'missing-letter',
-
-    // ===== 🔴 核心对比题型(Lesson 2-4) =====
-    /** 送气音对比(最小对立组训练) - ก/ข/ค */
-    ASPIRATED_CONTRAST = 'aspirated-contrast',
-    /** 元音长短对比 - า/ะ */
-    VOWEL_LENGTH_CONTRAST = 'vowel-length-contrast',
-
-    // ===== 进阶题型(Lesson 3-5) =====
-    /** 尾辅音规则 */
-    FINAL_CONSONANT = 'final-consonant',
-    /** 声调听辨(含音高可视化) */
-    TONE_PERCEPTION = 'tone-perception',
-
-    // ===== 高级题型(Lesson 4-6) =====
-    /** 辅音分类(高/中/低) */
-    CLASS_CHOICE = 'class-choice',
-    /** 字母名称识别 */
-    LETTER_NAME = 'letter-name',
-    /** 首音判断 */
-    INITIAL_SOUND = 'initial-sound',
-}
-
-/**
- * 题型显示名称映射
- */
-export const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
-    [QuestionType.SOUND_TO_LETTER]: '听音选字母',
-    [QuestionType.LETTER_TO_SOUND]: '看字母选发音',
-    [QuestionType.SYLLABLE]: '拼读组合',
-    [QuestionType.REVERSE_SYLLABLE]: '音素分离',
-    [QuestionType.MISSING_LETTER]: '缺字填空',
-    [QuestionType.ASPIRATED_CONTRAST]: '送气音对比',
-    [QuestionType.VOWEL_LENGTH_CONTRAST]: '元音长短对比',
-    [QuestionType.FINAL_CONSONANT]: '尾音规则',
-    [QuestionType.TONE_PERCEPTION]: '声调听辨',
-    [QuestionType.CLASS_CHOICE]: '辅音分类',
-    [QuestionType.LETTER_NAME]: '字母名称',
-    [QuestionType.INITIAL_SOUND]: '首音判断',
-};
-
-/**
- * 题型难度等级(1-5)
- */
-export const QUESTION_TYPE_DIFFICULTY: Record<QuestionType, 1 | 2 | 3 | 4 | 5> = {
-    [QuestionType.SOUND_TO_LETTER]: 1,
-    [QuestionType.LETTER_TO_SOUND]: 1,
-    [QuestionType.SYLLABLE]: 2,
-    [QuestionType.REVERSE_SYLLABLE]: 3,
-    [QuestionType.MISSING_LETTER]: 2,
-    [QuestionType.ASPIRATED_CONTRAST]: 3,
-    [QuestionType.VOWEL_LENGTH_CONTRAST]: 2,
-    [QuestionType.FINAL_CONSONANT]: 4,
-    [QuestionType.TONE_PERCEPTION]: 4,
-    [QuestionType.CLASS_CHOICE]: 3,
-    [QuestionType.LETTER_NAME]: 2,
-    [QuestionType.INITIAL_SOUND]: 2,
-};
-
-/**
- * 音频需求类型定义
- */
-export type AudioRequirementType =
-    | 'letter'        // 单字母发音
-    | 'syllable'      // 音节发音
-    | 'minimal-pair'  // 最小对立组(需动态生成)
-    | 'tone-set';     // 5个声调变体(需TTS生成)
-
-/**
- * 题型所需的音频类型
- */
-export const QUESTION_TYPE_AUDIO_REQUIREMENTS: Record<
-    QuestionType,
-    AudioRequirementType
-> = {
-    [QuestionType.SOUND_TO_LETTER]: 'letter',
-    [QuestionType.LETTER_TO_SOUND]: 'letter',
-    [QuestionType.SYLLABLE]: 'syllable',
-    [QuestionType.REVERSE_SYLLABLE]: 'syllable',
-    [QuestionType.MISSING_LETTER]: 'syllable',
-    [QuestionType.ASPIRATED_CONTRAST]: 'minimal-pair',
-    [QuestionType.VOWEL_LENGTH_CONTRAST]: 'minimal-pair',
-    [QuestionType.FINAL_CONSONANT]: 'syllable',
-    [QuestionType.TONE_PERCEPTION]: 'tone-set',
-    [QuestionType.CLASS_CHOICE]: 'letter',
-    [QuestionType.LETTER_NAME]: 'letter',
-    [QuestionType.INITIAL_SOUND]: 'letter',
-};
-
-/**
- * 根据课程阶段获取推荐题型权重
- * 
- * @param lessonId - 课程ID (lesson1-lesson6)
- * @returns 题型权重映射 (权重总和为1)
- */
-export function getQuestionTypeWeights(
-    lessonId: string
-): Partial<Record<QuestionType, number>> {
-    switch (lessonId) {
-        case 'lesson1':
-            // 基础听辨+拼读
-            return {
-                [QuestionType.SOUND_TO_LETTER]: 0.4,
-                [QuestionType.LETTER_TO_SOUND]: 0.4,
-                [QuestionType.SYLLABLE]: 0.2,
-            };
-
-        case 'lesson2':
-            // 引入元音长短对比
-            return {
-                [QuestionType.SOUND_TO_LETTER]: 0.25,
-                [QuestionType.SYLLABLE]: 0.3,
-                [QuestionType.VOWEL_LENGTH_CONTRAST]: 0.25,
-                [QuestionType.REVERSE_SYLLABLE]: 0.2,
-            };
-
-        case 'lesson3':
-            // 🔴 重点:送气音对比训练
-            return {
-                [QuestionType.ASPIRATED_CONTRAST]: 0.35,
-                [QuestionType.SYLLABLE]: 0.25,
-                [QuestionType.MISSING_LETTER]: 0.2,
-                [QuestionType.VOWEL_LENGTH_CONTRAST]: 0.2,
-            };
-
-        case 'lesson4':
-            // 🔴 重点:声调系统训练
-            return {
-                [QuestionType.TONE_PERCEPTION]: 0.4,
-                [QuestionType.CLASS_CHOICE]: 0.25,
-                [QuestionType.ASPIRATED_CONTRAST]: 0.2,
-                [QuestionType.FINAL_CONSONANT]: 0.15,
-            };
-
-        case 'lesson5':
-            // 综合复习,声调为主
-            return {
-                [QuestionType.TONE_PERCEPTION]: 0.3,
-                [QuestionType.CLASS_CHOICE]: 0.2,
-                [QuestionType.REVERSE_SYLLABLE]: 0.25,
-                [QuestionType.LETTER_NAME]: 0.15,
-                [QuestionType.ASPIRATED_CONTRAST]: 0.1,
-            };
-
-        case 'lesson6':
-            // 全题型综合测试
-            return {
-                [QuestionType.SOUND_TO_LETTER]: 0.1,
-                [QuestionType.ASPIRATED_CONTRAST]: 0.15,
-                [QuestionType.VOWEL_LENGTH_CONTRAST]: 0.15,
-                [QuestionType.SYLLABLE]: 0.15,
-                [QuestionType.TONE_PERCEPTION]: 0.25,
-                [QuestionType.CLASS_CHOICE]: 0.1,
-                [QuestionType.LETTER_NAME]: 0.1,
-            };
-
-        default:
-            // 默认均匀分布(基础题)
-            return {
-                [QuestionType.SOUND_TO_LETTER]: 0.33,
-                [QuestionType.LETTER_TO_SOUND]: 0.33,
-                [QuestionType.SYLLABLE]: 0.34,
-            };
-    }
-}
-
-/**
- * 根据权重随机选择题型
- * 
- * @param weights - 题型权重映射
- * @returns 选中的题型
- */
-export function selectQuestionTypeByWeight(
-    weights: Partial<Record<QuestionType, number>>
-): QuestionType {
-    const types = Object.keys(weights) as QuestionType[];
-    const weightValues = types.map(t => weights[t] || 0);
-
-    // 计算累积权重
-    const cumulativeWeights: number[] = [];
-    let sum = 0;
-    for (const weight of weightValues) {
-        sum += weight;
-        cumulativeWeights.push(sum);
-    }
-
-    // 随机选择
-    const random = Math.random() * sum;
-    const index = cumulativeWeights.findIndex(w => random <= w);
-
-    return types[index] || types[0];
-}
-
-/**
- * 获取题型图标(用于UI显示)
- */
-export const QUESTION_TYPE_ICONS: Record<QuestionType, string> = {
-    [QuestionType.SOUND_TO_LETTER]: '🔊',
-    [QuestionType.LETTER_TO_SOUND]: '👁️',
-    [QuestionType.SYLLABLE]: '🔤',
-    [QuestionType.REVERSE_SYLLABLE]: '🔄',
-    [QuestionType.MISSING_LETTER]: '❓',
-    [QuestionType.ASPIRATED_CONTRAST]: '💨',
-    [QuestionType.VOWEL_LENGTH_CONTRAST]: '⏱️',
-    [QuestionType.FINAL_CONSONANT]: '🔚',
-    [QuestionType.TONE_PERCEPTION]: '🎵',
-    [QuestionType.CLASS_CHOICE]: '📊',
-    [QuestionType.LETTER_NAME]: '📝',
-    [QuestionType.INITIAL_SOUND]: '👂',
 };
 ````
 
@@ -10069,6 +13294,429 @@ const styles = StyleSheet.create({
         color: Colors.ink,
     },
 });
+````
+
+## File: app/learning/micro-reading.tsx
+````typescript
+import React, { useMemo, useState } from 'react';
+import {
+    View,
+    Text,
+    StyleSheet,
+    ScrollView,
+    Pressable,
+    ActivityIndicator,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useTranslation } from 'react-i18next';
+import { ChevronLeft, BookmarkPlus, Check } from 'lucide-react-native';
+import { ThaiPatternBackground } from '@/src/components/common/ThaiPatternBackground';
+import { Colors } from '@/src/constants/colors';
+import { Typography } from '@/src/constants/typography';
+import { saveArticle } from '@/src/utils/articleStorage';
+import type { MicroReadingResponse, SavedArticle } from '@/src/entities/types/ai.types';
+
+
+export default function MicroReadingScreen() {
+    const { t } = useTranslation();
+    const router = useRouter();
+    const params = useLocalSearchParams<{ result: string }>();
+
+    const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+
+    // 从 Expo Router params 解析 AI 返回结果
+    const reading = useMemo<MicroReadingResponse | null>(() => {
+        try {
+            return params.result ? JSON.parse(params.result) : null;
+        } catch {
+            return null;
+        }
+    }, [params.result]);
+
+    const handleSaveArticle = async () => {
+        if (!reading || saveState === 'saving' || saveState === 'saved') return;
+
+        setSaveState('saving');
+        try {
+            const thaiWords = reading.thaiText.trim().split(/\s+/);
+            const newArticle: SavedArticle = {
+                id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+                title: reading.title,
+                thaiText: reading.thaiText,
+                translation: reading.translation,
+                wordsUsed: reading.wordsUsed || [],
+                createdAt: Date.now(),
+                wordCount: thaiWords.length,
+            };
+
+            await saveArticle(newArticle);
+            setSaveState('saved');
+        } catch {
+            setSaveState('error');
+        }
+    };
+
+    return (
+        <SafeAreaView edges={['top', 'bottom']} style={styles.container}>
+            <ThaiPatternBackground opacity={0.05} />
+
+            {/* 顶部导航栏 */}
+            <View style={styles.header}>
+                <Pressable onPress={() => router.back()} style={styles.backButton}>
+                    <ChevronLeft size={22} color={Colors.ink} />
+                </Pressable>
+                <Text style={styles.headerTitle}>{t('microReading.title')}</Text>
+                {/* 占位，使标题居中 */}
+                <View style={styles.backButton} />
+            </View>
+
+            <ScrollView
+                style={styles.scrollView}
+                contentContainerStyle={styles.scrollContent}
+                showsVerticalScrollIndicator={false}
+            >
+                {reading ? (
+                    <>
+                        {/* 泰文短文主体 */}
+                        <View style={styles.thaiCard}>
+                            <Text style={styles.thaiTitle}>{reading.title}</Text> 
+                            <View style={styles.thaiTitleLine} />
+                            <Text style={styles.thaiText}>{reading.thaiText}</Text>
+                        </View>
+
+                        {/* 保存到练习库 */}
+                        <Pressable
+                            style={[
+                                styles.saveArticleButton,
+                                saveState === 'saved' && styles.saveArticleButtonDone,
+                            ]}
+                            onPress={handleSaveArticle}
+                            disabled={saveState === 'saving' || saveState === 'saved'}
+                        >
+                            {saveState === 'saving' ? (
+                                <ActivityIndicator size="small" color={Colors.thaiGold} />
+                            ) : saveState === 'saved' ? (
+                                <Check size={18} color={Colors.success} />
+                            ) : (
+                                <BookmarkPlus size={18} color={Colors.thaiGold} />
+                            )}
+                            <Text
+                                style={[
+                                    styles.saveArticleText,
+                                    saveState === 'saved' && { color: Colors.success },
+                                    saveState === 'error' && { color: Colors.error },
+                                ]}
+                            >
+                                {saveState === 'saving'
+                                    ? t('microReading.saving')
+                                    : saveState === 'saved'
+                                    ? t('microReading.saveSuccess')
+                                    : saveState === 'error'
+                                    ? t('microReading.saveError')
+                                    : t('microReading.saveArticle')}
+                            </Text>
+                        </Pressable>
+
+                        {/* 中文辅助翻译 */}
+                        <View style={styles.translationCard}>
+                            <Text style={styles.translationLabel}>
+                                {t('microReading.translationLabel')}
+                            </Text>
+                            <Text style={styles.translationText}>{reading.translation}</Text>
+                        </View>
+
+                        {/* 涉及词汇标签（可选，仅当云端返回时展示） */}
+                        {reading.wordsUsed && reading.wordsUsed.length > 0 && (
+                            <View style={styles.wordsUsedCard}>
+                                <Text style={styles.wordsUsedLabel}>
+                                    {t('microReading.wordsUsed')}
+                                </Text>
+                                <View style={styles.wordsUsedRow}>
+                                    {reading.wordsUsed.map((word, idx) => (
+                                        <View key={idx} style={styles.wordChip}>
+                                            <Text style={styles.wordChipText}>{word}</Text>
+                                        </View>
+                                    ))}
+                                </View>
+                            </View>
+                        )}
+                    </>
+                ) : (
+                    <View style={styles.errorContainer}>
+                        <Text style={styles.errorText}>{t('sessionSummary.errorMessage')}</Text>
+                    </View>
+                )}
+
+                <View style={{ height: 24 }} />
+            </ScrollView>
+
+            {/* 返回首页按钮 */}
+            <View style={styles.footer}>
+                <Pressable
+                    style={styles.homeButton}
+                    onPress={() => router.dismissAll()}
+                >
+                    <Text style={styles.homeButtonText}>{t('microReading.backToHome')}</Text>
+                </Pressable>
+            </View>
+        </SafeAreaView>
+    );
+}
+
+const styles = StyleSheet.create({
+    container: {
+        flex: 1,
+        backgroundColor: Colors.paper,
+    },
+    header: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 8,
+        paddingVertical: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: Colors.sand,
+    },
+    backButton: {
+        width: 44,
+        height: 44,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    headerTitle: {
+        fontFamily: Typography.playfairBold,
+        fontSize: Typography.h3,
+        color: Colors.ink,
+    },
+    scrollView: {
+        flex: 1,
+    },
+    scrollContent: {
+        paddingHorizontal: 16,
+        paddingTop: 20,
+        gap: 16,
+    },
+    thaiCard: {
+        backgroundColor: Colors.white,
+        borderRadius: 16,
+        padding: 20,
+        shadowColor: Colors.ink,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.08,
+        shadowRadius: 8,
+        elevation: 3,
+    },
+    thaiTitle: {
+        fontFamily: Typography.notoSerifBold,
+        fontSize: Typography.h1,
+        color: Colors.ink,
+        marginBottom: 10,
+    },
+    thaiTitleLine: {
+        height: 2,
+        backgroundColor: Colors.ink,
+        marginBottom: 10,
+    },
+    thaiText: {
+        fontFamily: Typography.sarabunRegular,
+        fontSize: 22,
+        color: Colors.ink,
+        lineHeight: 38,
+    },
+    saveArticleButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        backgroundColor: 'rgba(212, 175, 55, 0.1)',
+        borderRadius: 14,
+        paddingHorizontal: 16,
+        paddingVertical: 14,
+        borderWidth: 1,
+        borderColor: 'rgba(212, 175, 55, 0.25)',
+    },
+    saveArticleButtonDone: {
+        backgroundColor: 'rgba(42, 157, 143, 0.08)',
+        borderColor: 'rgba(42, 157, 143, 0.2)',
+    },
+    saveArticleText: {
+        fontFamily: Typography.notoSerifBold,
+        fontSize: Typography.caption,
+        color: Colors.accent,
+    },
+    translationCard: {
+        backgroundColor: Colors.white,
+        borderRadius: 16,
+        padding: 20,
+        gap: 10,
+        shadowColor: Colors.ink,
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+        elevation: 2,
+    },
+    translationLabel: {
+        fontFamily: Typography.notoSerifBold,
+        fontSize: Typography.small,
+        color: Colors.taupe,
+        letterSpacing: 0.5,
+        textTransform: 'uppercase',
+    },
+    translationText: {
+        fontFamily: Typography.notoSerifRegular,
+        fontSize: Typography.body,
+        color: Colors.ink,
+        lineHeight: 28,
+    },
+    wordsUsedCard: {
+        backgroundColor: Colors.white,
+        borderRadius: 16,
+        padding: 16,
+        gap: 10,
+        shadowColor: Colors.ink,
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+        elevation: 2,
+    },
+    wordsUsedLabel: {
+        fontFamily: Typography.notoSerifBold,
+        fontSize: Typography.small,
+        color: Colors.taupe,
+        letterSpacing: 0.5,
+        textTransform: 'uppercase',
+    },
+    wordsUsedRow: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8,
+    },
+    wordChip: {
+        backgroundColor: Colors.thaiGold + '20',
+        borderRadius: 20,
+        paddingHorizontal: 12,
+        paddingVertical: 5,
+    },
+    wordChipText: {
+        fontFamily: Typography.sarabunRegular,
+        fontSize: Typography.caption,
+        color: Colors.accent,
+    },
+    errorContainer: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 60,
+    },
+    errorText: {
+        fontFamily: Typography.notoSerifRegular,
+        fontSize: Typography.body,
+        color: Colors.taupe,
+        textAlign: 'center',
+    },
+    footer: {
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        borderTopWidth: 1,
+        borderTopColor: Colors.sand,
+        backgroundColor: Colors.paper,
+    },
+    homeButton: {
+        backgroundColor: Colors.ink,
+        borderRadius: 14,
+        paddingVertical: 16,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    homeButtonText: {
+        fontFamily: Typography.notoSerifBold,
+        fontSize: Typography.body,
+        color: Colors.white,
+    },
+});
+````
+
+## File: cloudbase/functions/ai-engine/index.js
+````javascript
+// cloudbase/functions/ai-engine/index.js
+
+/**
+ * 云函数的主入口
+ * @param {object} event - 包含了客户端（前端）发来的所有数据
+ * @param {object} context - 包含了运行环境的信息（如当前用户的鉴权信息等）
+ */
+
+const { OpenAI } = require('openai');
+const { createResponse, aiErrorResponse } = require('./utils/response');
+const client = new OpenAI({
+  apiKey: process.env.DEEPSEEK_API_KEY,
+  baseURL: 'https://api.deepseek.com/v1', // 这里的魔法在于，不管是什么模型，只要兼容，改个 URL 即可
+});
+const explainVocab = require('./handlers/explainVocab');
+const generateMicroReading = require('./handlers/generateMicroReading');
+const analyzePronunciation = require('./handlers/analyzePronunciation');
+const extractClozeHints = require('./handlers/extractClozeHints');
+// SHELVED: cursor-tracking TTS — 因 GFW 封存
+// const textToSpeech = require('./handlers/textToSpeech');
+    
+
+exports.main = async (event, context) => {
+    // ===== 解析 HTTP 请求 (API网关触发时数据在 body 里) =====
+    let requestData = event;
+    if (event.body) {
+        if (typeof event.body === 'string') {
+            try {
+                requestData = JSON.parse(event.body);
+            } catch (e) {
+                console.error('[ai-engine] JSON 解析失败:', e.message);
+                return createResponse(false, null, 'Invalid JSON body', 'INVALID_JSON');
+            }
+        } else if (typeof event.body === 'object') {
+            requestData = event.body;
+        }
+    }
+
+    const { action, data } = requestData;
+
+    // 🛡️ 初级防御大门：检查约定的暗号 (AppSecret)
+    // 只有正确带上我们前端约定钥匙的请求才能进入，防止别人拿我们的 URL 刷额度
+    const EXPECTED_SECRET = 'ThaiApp_2026_Secure';
+    if (!data || data.appSecret !== EXPECTED_SECRET) {
+        console.warn(`[ai-engine] 🚨 拦截了非法访问尝试! Action: ${action}`);
+        return createResponse(false, null, 'Unauthorized access: Invalid App Secret', 'ERR_UNAUTHORIZED');
+    }
+
+    // 防御通过，为了安全起见，在打印日志前把密码从包裹里拿掉
+    const safeData = { ...data };
+    delete safeData.appSecret;
+    
+    console.log(`[ai-engine] received action: ${action}`, safeData);
+
+    if(!action) {
+        return createResponse(false, null, 'Missing action parameter', 'ERR_MISSING_ACTION');
+    };
+
+    try{
+        switch(action){
+            case 'explainVocab':
+                return await explainVocab(client, data);
+            case 'generateMicroReading':
+                return await generateMicroReading(client, data);
+            case 'analyzePronunciation':
+                return await analyzePronunciation(client, data);
+            case 'extractClozeHints':
+                return await extractClozeHints(client, data);
+            // SHELVED: cursor-tracking TTS
+            // case 'textToSpeech':
+            //     return await textToSpeech(data);
+            default:
+                return createResponse(false, null, 'Unknown action', 'ERR_UNKNOWN_ACTION');
+        }
+    }catch(err){
+        console.error('[ai-engine] error:', err);
+        return aiErrorResponse(err);
+    }
+}
 ````
 
 ## File: cloudbase/functions/alphabet/handlers/getLetterTest.js
@@ -11688,6 +15336,478 @@ const styles = StyleSheet.create({
 });
 ````
 
+## File: src/components/learning/alphabet/MiniReviewQuestion.tsx
+````typescript
+// src/components/learning/alphabet/MiniReviewQuestion.tsx
+
+import React, { useState, useCallback, useRef, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  ActivityIndicator,
+  ScrollView,
+} from 'react-native';
+import { Audio } from 'expo-av';
+import { Volume2 } from 'lucide-react-native';
+
+import type { MiniReviewQuestion as MiniReviewQuestionType } from '@/src/entities/types/phonicsRule.types';
+import type { QuestionType } from '@/src/entities/enums/QuestionType.enum';
+import {
+  QUESTION_TYPE_LABELS,
+  QUESTION_TYPE_ICONS,
+} from '@/src/entities/enums/QuestionType.enum';
+import { Colors } from '@/src/constants/colors';
+import { Typography } from '@/src/constants/typography';
+
+// ==================== Props 接口 ====================
+
+interface MiniReviewQuestionProps {
+  /** 题目数据 */
+  question: MiniReviewQuestionType;
+
+  /** 答题回调(isCorrect, questionType) */
+  onAnswer: (isCorrect: boolean, type: QuestionType) => void;
+
+  /** 下一题回调 */
+  onNext: () => void;
+
+  /** 返回回调(可选) */
+  onBack?: () => void;
+}
+
+// ==================== 主组件 ====================
+
+export function MiniReviewQuestion({
+  question,
+  onAnswer,
+  onNext,
+  onBack,
+}: MiniReviewQuestionProps) {
+  const { t } = useTranslation();
+  const [answered, setAnswered] = useState(false);
+  const [selectedOption, setSelectedOption] = useState<string | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const soundRef = useRef<Audio.Sound | null>(null);
+
+  // ===== 清理音频资源 =====
+  useEffect(() => {
+    return () => {
+      if (soundRef.current) {
+        soundRef.current.unloadAsync().catch(() => { });
+        soundRef.current = null;
+      }
+    };
+  }, [question.id]); // 题目切换时清理
+
+  // ===== 播放音频 =====
+  const handlePlayAudio = useCallback(async () => {
+    if (!question.audioUrl) return;
+
+    try {
+      setIsPlaying(true);
+
+      if (soundRef.current) {
+        await soundRef.current.replayAsync();
+        setIsPlaying(false);
+        return;
+      }
+
+      const { sound } = await Audio.Sound.createAsync(
+        { uri: question.audioUrl },
+        { shouldPlay: true }
+      );
+
+      soundRef.current = sound;
+
+      sound.setOnPlaybackStatusUpdate((status) => {
+        if (status.isLoaded && status.didJustFinish) {
+          setIsPlaying(false);
+        }
+      });
+    } catch (error) {
+      console.warn('[MiniReviewQuestion] 播放音频失败:', error);
+      setIsPlaying(false);
+    }
+  }, [question.audioUrl]);
+
+  // ===== 选择答案 =====
+  const handleSelectOption = useCallback(
+    (optionValue: string) => {
+      if (answered) return;
+
+      setSelectedOption(optionValue);
+      setAnswered(true);
+
+      const isCorrect = optionValue === question.correct;
+      onAnswer(isCorrect, question.type);
+    },
+    [answered, question.correct, question.type, onAnswer]
+  );
+
+  // ===== 渲染声学提示 =====
+  const renderAcousticHint = () => {
+    if (!question.acousticHint) return null;
+
+    const { aspirated, voiceless, class: consonantClass } = question.acousticHint;
+
+    return (
+      <View style={styles.hintContainer}>
+        <Text style={styles.hintTitle}>{t('components.miniReview.hint', '💡 提示:')}</Text>
+        {aspirated !== undefined && (
+          <Text style={styles.hintText}>
+            • {aspirated ? t('components.miniReview.aspirated', '送气音 (aspirated)') : t('components.miniReview.unaspirated', '不送气音 (unaspirated)')}
+          </Text>
+        )}
+        {voiceless !== undefined && (
+          <Text style={styles.hintText}>
+            • {voiceless ? t('components.miniReview.voiceless', '清音 (voiceless)') : t('components.miniReview.voiced', '浊音 (voiced)')}
+          </Text>
+        )}
+        {consonantClass && (
+          <Text style={styles.hintText}>
+            • {t('components.miniReview.consonantClass', '辅音类')}: {
+              consonantClass === 'high' ? t('components.miniReview.highClass', '高辅音') :
+                consonantClass === 'mid' ? t('components.miniReview.midClass', '中辅音') :
+                  t('components.miniReview.lowClass', '低辅音')
+            }
+          </Text>
+        )}
+      </View>
+    );
+  };
+
+  // ===== 渲染音高可视化 =====
+  const renderPitchVisualization = () => {
+    if (!question.pitchVisualization?.enable) return null;
+    if (!answered && !question.pitchVisualization.showAfterAnswer) return null;
+
+    const { curve } = question.pitchVisualization;
+
+    return (
+      <View style={styles.pitchContainer}>
+        <Text style={styles.pitchTitle}>{t('components.miniReview.pitchCurve', '🎵 音高曲线')}</Text>
+        <View style={styles.pitchChart}>
+          {curve.map((height, index) => (
+            <View
+              key={index}
+              style={[
+                styles.pitchBar,
+                { height: `${(height / 5) * 100}%` },
+              ]}
+            />
+          ))}
+        </View>
+      </View>
+    );
+  };
+
+  // ===== 判断题型是否需要音频 =====
+  const needsAudio = [
+    'sound-to-letter',
+    'aspirated-contrast',
+    'vowel-length-contrast',
+    'tone-perception',
+  ].includes(question.type);
+
+  return (
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.contentContainer}
+    >
+      {/* 题型标题 */}
+      <View style={styles.header}>
+        <Text style={styles.typeIcon}>
+          {QUESTION_TYPE_ICONS[question.type] || '📝'}
+        </Text>
+        <Text style={styles.typeLabel}>
+          {t(QUESTION_TYPE_LABELS[question.type])}
+        </Text>
+      </View>
+
+      {/* 题干 */}
+      <Text style={styles.question}>{t(question.question)}</Text>
+
+      {/* 副标题 */}
+      {question.subtitle && (
+        <Text style={styles.subtitle}>{t(question.subtitle)}</Text>
+      )}
+
+      {/* 音频播放按钮 */}
+      {needsAudio && question.audioUrl && (
+        <TouchableOpacity
+          style={styles.audioButton}
+          onPress={handlePlayAudio}
+          disabled={isPlaying}
+          accessibilityRole="button"
+          accessibilityLabel="播放发音"
+        >
+          {isPlaying ? (
+            <ActivityIndicator size="small" color={Colors.white} />
+          ) : (
+            <>
+              <Volume2 size={20} color={Colors.white} />
+              <Text style={styles.audioButtonText}>{t('components.miniReview.playSound', '播放发音')}</Text>
+            </>
+          )}
+        </TouchableOpacity>
+      )}
+
+      {/* 声学提示(答题前显示) */}
+      {!answered && renderAcousticHint()}
+
+      {/* 选项 */}
+      <View style={styles.optionsContainer}>
+        {question.options.map((option, index) => {
+          const isSelected = selectedOption === option.value;
+          const isCorrect = answered && option.value === question.correct;
+          const isWrong = answered && isSelected && option.value !== question.correct;
+
+          return (
+            <TouchableOpacity
+              key={index}
+              style={[
+                styles.optionButton,
+                isSelected && styles.optionSelected,
+                isCorrect && styles.optionCorrect,
+                isWrong && styles.optionWrong,
+              ]}
+              onPress={() => handleSelectOption(option.value)}
+              disabled={answered}
+              accessibilityRole="radio"
+              accessibilityLabel={option.label}
+              accessibilityState={{ selected: isSelected }}
+            >
+              <View style={styles.optionContent}>
+                <Text
+                  style={[
+                    styles.optionLabel,
+                    isSelected && styles.optionLabelSelected,
+                  ]}
+                >
+                  {t(option.label)}
+                </Text>
+                {option.example && (
+                  <Text style={styles.optionExample}>{t(option.example)}</Text>
+                )}
+              </View>
+              {answered && (
+                <Text style={styles.feedbackIcon}>
+                  {isCorrect ? '✓' : isWrong ? '✗' : ''}
+                </Text>
+              )}
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      {/* 解释(答题后显示) */}
+      {answered && question.explanation && (
+        <View style={styles.explanationContainer}>
+          <Text style={styles.explanationText}>
+            💡 {t(question.explanation)}
+          </Text>
+        </View>
+      )}
+
+      {/* 音高可视化(答题后显示) */}
+      {answered && renderPitchVisualization()}
+
+      {/* 下一题按钮 */}
+      {answered && (
+        <TouchableOpacity
+          style={styles.nextButton}
+          onPress={onNext}
+          accessibilityRole="button"
+          accessibilityLabel={t('alphabet.nextQuestion', '下一题 →')}
+        >
+          <Text style={styles.nextButtonText}>{t('alphabet.nextQuestion', '下一题 →')}</Text>
+        </TouchableOpacity>
+      )}
+    </ScrollView>
+  );
+}
+
+// ==================== 样式 ====================
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: Colors.paper,
+  },
+  contentContainer: {
+    padding: 24,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  typeIcon: {
+    fontSize: 24,
+    marginRight: 8,
+  },
+  typeLabel: {
+    fontFamily: Typography.notoSerifBold,
+    fontSize: 18,
+    color: Colors.ink,
+  },
+  question: {
+    fontFamily: Typography.notoSerifBold,
+    fontSize: 20,
+    color: Colors.ink,
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  subtitle: {
+    fontFamily: Typography.notoSerifRegular,
+    fontSize: 14,
+    color: Colors.taupe,
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  audioButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.thaiGold,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 24,
+    minHeight: 50,
+  },
+  audioButtonText: {
+    fontFamily: Typography.notoSerifBold,
+    fontSize: 16,
+    color: Colors.white,
+    marginLeft: 8,
+  },
+  hintContainer: {
+    backgroundColor: '#FFF9E6',
+    borderLeftWidth: 4,
+    borderLeftColor: Colors.thaiGold,
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 20,
+  },
+  hintTitle: {
+    fontFamily: Typography.notoSerifBold,
+    fontSize: 14,
+    color: Colors.ink,
+    marginBottom: 8,
+  },
+  hintText: {
+    fontFamily: Typography.notoSerifRegular,
+    fontSize: 13,
+    color: Colors.taupe,
+    marginBottom: 4,
+  },
+  optionsContainer: {
+    gap: 12,
+    marginBottom: 20,
+  },
+  optionButton: {
+    backgroundColor: Colors.white,
+    borderWidth: 2,
+    borderColor: Colors.sand,
+    borderRadius: 12,
+    padding: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    minHeight: 60,
+  },
+  optionSelected: {
+    borderColor: Colors.thaiGold,
+    backgroundColor: '#FFF9E6',
+  },
+  optionCorrect: {
+    borderColor: '#2A9D8F',
+    backgroundColor: '#E8F5F3',
+  },
+  optionWrong: {
+    borderColor: '#E63946',
+    backgroundColor: '#FFE8EA',
+  },
+  optionContent: {
+    flex: 1,
+  },
+  optionLabel: {
+    fontFamily: Typography.notoSerifBold,
+    fontSize: 18,
+    color: Colors.ink,
+  },
+  optionLabelSelected: {
+    color: Colors.thaiGold,
+  },
+  optionExample: {
+    fontFamily: Typography.notoSerifRegular,
+    fontSize: 12,
+    color: Colors.taupe,
+    marginTop: 4,
+  },
+  feedbackIcon: {
+    fontSize: 24,
+    marginLeft: 12,
+  },
+  explanationContainer: {
+    backgroundColor: '#F0F8FF',
+    borderLeftWidth: 4,
+    borderLeftColor: '#457B9D',
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 20,
+  },
+  explanationText: {
+    fontFamily: Typography.notoSerifRegular,
+    fontSize: 14,
+    lineHeight: 20,
+    color: Colors.ink,
+  },
+  pitchContainer: {
+    backgroundColor: '#F5F5F5',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+  },
+  pitchTitle: {
+    fontFamily: Typography.notoSerifBold,
+    fontSize: 14,
+    color: Colors.ink,
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  pitchChart: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-around',
+    height: 100,
+    backgroundColor: Colors.white,
+    borderRadius: 8,
+    padding: 12,
+  },
+  pitchBar: {
+    width: 40,
+    backgroundColor: Colors.thaiGold,
+    borderRadius: 4,
+  },
+  nextButton: {
+    backgroundColor: Colors.thaiGold,
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+  },
+  nextButtonText: {
+    fontFamily: Typography.notoSerifBold,
+    fontSize: 16,
+    color: Colors.white,
+  },
+});
+````
+
 ## File: src/components/learning/alphabet/PhonicsRuleCard.tsx
 ````typescript
 // src/components/learning/alphabet/PhonicsRuleCard.tsx
@@ -12103,104 +16223,6 @@ const styles = StyleSheet.create({
 });
 ````
 
-## File: src/config/constants.ts
-````typescript
-// src/config/constants.ts
-
-/**
- * 应用常量配置
- *
- * 目标：
- * 1. 统一管理全局常量（集合名 / 超时 / 文本等），避免在代码中散落硬编码字符串；
- * 2. COLLECTIONS 中只放“真实存在或规划中的集合名”，并通过注释区分「已使用」与「预留/废弃」。
- */
-
-// ==================== 数据库集合名称 ====================
-export const COLLECTIONS = {
-  // ===== 核心用户与进度集合（CloudBase 已实际使用） =====
-  USERS: 'users',
-  USER_PROGRESS: 'user_progress',
-  USER_ALPHABET_PROGRESS: 'user_alphabet_progress',
-  USER_VOCABULARY_PROGRESS: 'user_vocabulary_progress',
-
-  // ===== 学习实体集合（CloudBase 已实际使用） =====
-  LETTERS: 'letters',
-  VOCABULARY: 'vocabulary',
-  VOCABULARIES: 'vocabularies', // 特定 handler（getSkippedWords）使用的词汇集合
-  SENTENCES: 'sentences',
-  MEMORY_STATUS: 'memory_status',
-
-  // ===== 字母课程与拼读规则（已迁移的课程配置） =====
-  ALPHABET_LESSONS: 'alphabet_lessons',
-  PHONICS_RULES: 'phonics_rules',
-
-  // ===== 字母测试相关 =====
-  LETTER_TEST_BANK: 'letter_test_bank',
-
-  // ===== 预留 / 规划中的集合（当前代码中未实际使用） =====
-  COURSES: 'courses',
-  LESSONS: 'lessons',
-  EXERCISES: 'exercises',
-  ARTICLES: 'articles',
-  PRONUNCIATION_RECORDS: 'pronunciationRecords',
-  PROGRESS: 'progress',
-  REVIEW_SCHEDULES: 'reviewSchedules',
-  LEARNING_RECORDS: 'learningRecords',
-
-  // ===== 已废弃命名（仅兼容旧版本，不推荐再使用） =====
-  // 旧版字母集合，现已统一使用 LETTERS: 'letters'
-  ALPHABETS: 'alphabets',
-} as const;
-
-// ==================== API 超时配置 ====================
-export const API_TIMEOUT = {
-  DEFAULT: 10000,   // 10 秒 - 一般请求
-  UPLOAD: 30000,    // 30 秒 - 文件上传
-  LONG: 60000,      // 60 秒 - 长时间操作（如发音评估）
-};
-
-// ==================== 错误消息 ====================
-export const ERROR_MESSAGES = {
-  NETWORK_ERROR: '网络连接失败，请检查您的网络。',
-  TIMEOUT_ERROR: '请求超时，请稍后重试。',
-  AUTH_ERROR: '身份验证失败，请重新登录。',
-  TOKEN_EXPIRED: '登录已过期，请重新登录。',
-  SERVER_ERROR: '服务器错误，请稍后重试。',
-  INVALID_INPUT: '输入信息不完整或格式错误。',
-  UNKNOWN_ERROR: '未知错误，请联系客服。',
-};
-
-// ==================== 用户角色 ====================
-export const USER_ROLES = {
-  LEARNER: 'LEARNER',
-  ADMIN: 'ADMIN',
-} as const;
-
-// ==================== 学习等级 ====================
-export const LEVELS = {
-  BEGINNER_A: 'BEGINNER_A',
-  BEGINNER_B: 'BEGINNER_B',
-  INTERMEDIATE: 'INTERMEDIATE',
-  ADVANCED: 'ADVANCED',
-} as const;
-
-// ==================== 掌握程度 ====================
-export const MASTER_LEVELS = {
-  NOT_LEARNED: 'NOT_LEARNED',
-  LEARNING: 'LEARNING',
-  REVIEWING: 'REVIEWING',
-  MASTERED: 'MASTERED',
-} as const;
-
-// ==================== 内容类型 ====================
-export const CONTENT_TYPES = {
-  ALPHABET: 'alphabet',
-  VOCABULARY: 'vocabulary',
-  SENTENCE: 'sentence',
-  ARTICLE: 'article',
-} as const;
-````
-
 ## File: src/constants/colors.ts
 ````typescript
 // src/constants/colors.ts
@@ -12268,54 +16290,411 @@ export const ATTEMPTS_INCREMENT_MAP: Record<QualityButton, number> = {
 };
 ````
 
-## File: src/stores/learningPreferenceStore.ts
+## File: src/entities/enums/QuestionType.enum.ts
 ````typescript
-import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { ModuleType } from './moduleAccessStore';
+// src/entities/enums/QuestionType.enum.ts
 
-type DailyLimitMap = Partial<Record<ModuleType, number>>;
+/**
+ * 字母复习题型枚举
+ * 
+ * 基于泰语语音学优化的12种题型系统
+ * 包含送气音对比、元音长短对比、声调听辨等核心训练
+ * 
+ * @version 3.0.0
+ * @see lettersQuestionGenerator.ts
+ */
+export enum QuestionType {
+    // ===== 基础题型(Lesson 1-2) =====
+    /** 听音选字母 */
+    SOUND_TO_LETTER = 'sound-to-letter',
+    /** 看字母选发音 */
+    LETTER_TO_SOUND = 'letter-to-sound',
 
-// 系统默认每日学习上限，与后端 getTodayMemories 默认值保持一致
-export const DEFAULT_DAILY_LIMIT = 20;
+    // ===== 拼读题型(Lesson 2-3) =====
+    /** 拼读组合: 辅音+元音 */
+    SYLLABLE = 'syllable',
+    /** 音素分离: 发音→辅音 */
+    REVERSE_SYLLABLE = 'reverse-syllable',
+    /** 缺字填空 */
+    MISSING_LETTER = 'missing-letter',
 
-interface LearningPreferenceStore {
-    streakDays: number;
-    updateStreak: (days: number) => void;
-    dailyLimits: DailyLimitMap;
-    setDailyLimit: (module: ModuleType, limit: number) => void;
-    hasDailyLimit: (module: ModuleType) => boolean;
-    clearForLogout: () => void; // 登出时清除所有用户专属偏好
+    // ===== 🔴 核心对比题型(Lesson 2-4) =====
+    /** 送气音对比(最小对立组训练) - ก/ข/ค */
+    ASPIRATED_CONTRAST = 'aspirated-contrast',
+    /** 元音长短对比 - า/ะ */
+    VOWEL_LENGTH_CONTRAST = 'vowel-length-contrast',
+
+    // ===== 进阶题型(Lesson 3-5) =====
+    /** 尾辅音规则 */
+    FINAL_CONSONANT = 'final-consonant',
+    /** 声调听辨(含音高可视化) */
+    TONE_PERCEPTION = 'tone-perception',
+
+    // ===== 高级题型(Lesson 4-6) =====
+    /** 辅音分类(高/中/低) */
+    CLASS_CHOICE = 'class-choice',
+    /** 字母名称识别 */
+    LETTER_NAME = 'letter-name',
+    /** 首音判断 */
+    INITIAL_SOUND = 'initial-sound',
 }
 
-export const useLearningPreferenceStore = create<LearningPreferenceStore>()(
-    persist(
-        (set, get) => ({
-            streakDays: 0,
-            updateStreak: (days) => set({ streakDays: days }),
-            dailyLimits: {},
-            setDailyLimit: (module, limit) =>
-                set((state) => ({
-                    dailyLimits: {
-                        ...state.dailyLimits,
-                        [module]: limit,
-                    },
-                })),
-            hasDailyLimit: (module) => get().dailyLimits[module] !== undefined,
-            // 登出时调用：重置所有用户专属偏好，防止跨用户继承
-            clearForLogout: () =>
-                set({
-                    streakDays: 0,
-                    dailyLimits: {},
-                }),
-        }),
+/**
+ * 题型显示名称映射
+ */
+export const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
+    [QuestionType.SOUND_TO_LETTER]: 'questionType.soundToLetter',
+    [QuestionType.LETTER_TO_SOUND]: 'questionType.letterToSound',
+    [QuestionType.SYLLABLE]: 'questionType.syllable',
+    [QuestionType.REVERSE_SYLLABLE]: 'questionType.reverseSyllable',
+    [QuestionType.MISSING_LETTER]: 'questionType.missingLetter',
+    [QuestionType.ASPIRATED_CONTRAST]: 'questionType.aspiratedContrast',
+    [QuestionType.VOWEL_LENGTH_CONTRAST]: 'questionType.vowelLengthContrast',
+    [QuestionType.FINAL_CONSONANT]: 'questionType.finalConsonant',
+    [QuestionType.TONE_PERCEPTION]: 'questionType.tonePerception',
+    [QuestionType.CLASS_CHOICE]: 'questionType.classChoice',
+    [QuestionType.LETTER_NAME]: 'questionType.letterName',
+    [QuestionType.INITIAL_SOUND]: 'questionType.initialSound',
+};
+
+/**
+ * 题型难度等级(1-5)
+ */
+export const QUESTION_TYPE_DIFFICULTY: Record<QuestionType, 1 | 2 | 3 | 4 | 5> = {
+    [QuestionType.SOUND_TO_LETTER]: 1,
+    [QuestionType.LETTER_TO_SOUND]: 1,
+    [QuestionType.SYLLABLE]: 2,
+    [QuestionType.REVERSE_SYLLABLE]: 3,
+    [QuestionType.MISSING_LETTER]: 2,
+    [QuestionType.ASPIRATED_CONTRAST]: 3,
+    [QuestionType.VOWEL_LENGTH_CONTRAST]: 2,
+    [QuestionType.FINAL_CONSONANT]: 4,
+    [QuestionType.TONE_PERCEPTION]: 4,
+    [QuestionType.CLASS_CHOICE]: 3,
+    [QuestionType.LETTER_NAME]: 2,
+    [QuestionType.INITIAL_SOUND]: 2,
+};
+
+/**
+ * 音频需求类型定义
+ */
+export type AudioRequirementType =
+    | 'letter'        // 单字母发音
+    | 'syllable'      // 音节发音
+    | 'minimal-pair'  // 最小对立组(需动态生成)
+    | 'tone-set';     // 5个声调变体(需TTS生成)
+
+/**
+ * 题型所需的音频类型
+ */
+export const QUESTION_TYPE_AUDIO_REQUIREMENTS: Record<
+    QuestionType,
+    AudioRequirementType
+> = {
+    [QuestionType.SOUND_TO_LETTER]: 'letter',
+    [QuestionType.LETTER_TO_SOUND]: 'letter',
+    [QuestionType.SYLLABLE]: 'syllable',
+    [QuestionType.REVERSE_SYLLABLE]: 'syllable',
+    [QuestionType.MISSING_LETTER]: 'syllable',
+    [QuestionType.ASPIRATED_CONTRAST]: 'minimal-pair',
+    [QuestionType.VOWEL_LENGTH_CONTRAST]: 'minimal-pair',
+    [QuestionType.FINAL_CONSONANT]: 'syllable',
+    [QuestionType.TONE_PERCEPTION]: 'tone-set',
+    [QuestionType.CLASS_CHOICE]: 'letter',
+    [QuestionType.LETTER_NAME]: 'letter',
+    [QuestionType.INITIAL_SOUND]: 'letter',
+};
+
+/**
+ * 根据课程阶段获取推荐题型权重
+ * 
+ * @param lessonId - 课程ID (lesson1-lesson6)
+ * @returns 题型权重映射 (权重总和为1)
+ */
+export function getQuestionTypeWeights(
+    lessonId: string
+): Partial<Record<QuestionType, number>> {
+    switch (lessonId) {
+        case 'lesson1':
+            // 基础听辨+拼读
+            return {
+                [QuestionType.SOUND_TO_LETTER]: 0.4,
+                [QuestionType.LETTER_TO_SOUND]: 0.4,
+                [QuestionType.SYLLABLE]: 0.2,
+            };
+
+        case 'lesson2':
+            // 引入元音长短对比
+            return {
+                [QuestionType.SOUND_TO_LETTER]: 0.25,
+                [QuestionType.SYLLABLE]: 0.3,
+                [QuestionType.VOWEL_LENGTH_CONTRAST]: 0.25,
+                [QuestionType.REVERSE_SYLLABLE]: 0.2,
+            };
+
+        case 'lesson3':
+            // 🔴 重点:送气音对比训练
+            return {
+                [QuestionType.ASPIRATED_CONTRAST]: 0.35,
+                [QuestionType.SYLLABLE]: 0.25,
+                [QuestionType.MISSING_LETTER]: 0.2,
+                [QuestionType.VOWEL_LENGTH_CONTRAST]: 0.2,
+            };
+
+        case 'lesson4':
+            // 🔴 重点:声调系统训练
+            return {
+                [QuestionType.TONE_PERCEPTION]: 0.4,
+                [QuestionType.CLASS_CHOICE]: 0.25,
+                [QuestionType.ASPIRATED_CONTRAST]: 0.2,
+                [QuestionType.FINAL_CONSONANT]: 0.15,
+            };
+
+        case 'lesson5':
+            // 综合复习,声调为主
+            return {
+                [QuestionType.TONE_PERCEPTION]: 0.3,
+                [QuestionType.CLASS_CHOICE]: 0.2,
+                [QuestionType.REVERSE_SYLLABLE]: 0.25,
+                [QuestionType.LETTER_NAME]: 0.15,
+                [QuestionType.ASPIRATED_CONTRAST]: 0.1,
+            };
+
+        case 'lesson6':
+            // 全题型综合测试
+            return {
+                [QuestionType.SOUND_TO_LETTER]: 0.1,
+                [QuestionType.ASPIRATED_CONTRAST]: 0.15,
+                [QuestionType.VOWEL_LENGTH_CONTRAST]: 0.15,
+                [QuestionType.SYLLABLE]: 0.15,
+                [QuestionType.TONE_PERCEPTION]: 0.25,
+                [QuestionType.CLASS_CHOICE]: 0.1,
+                [QuestionType.LETTER_NAME]: 0.1,
+            };
+
+        default:
+            // 默认均匀分布(基础题)
+            return {
+                [QuestionType.SOUND_TO_LETTER]: 0.33,
+                [QuestionType.LETTER_TO_SOUND]: 0.33,
+                [QuestionType.SYLLABLE]: 0.34,
+            };
+    }
+}
+
+/**
+ * 根据权重随机选择题型
+ * 
+ * @param weights - 题型权重映射
+ * @returns 选中的题型
+ */
+export function selectQuestionTypeByWeight(
+    weights: Partial<Record<QuestionType, number>>
+): QuestionType {
+    const types = Object.keys(weights) as QuestionType[];
+    const weightValues = types.map(t => weights[t] || 0);
+
+    // 计算累积权重
+    const cumulativeWeights: number[] = [];
+    let sum = 0;
+    for (const weight of weightValues) {
+        sum += weight;
+        cumulativeWeights.push(sum);
+    }
+
+    // 随机选择
+    const random = Math.random() * sum;
+    const index = cumulativeWeights.findIndex(w => random <= w);
+
+    return types[index] || types[0];
+}
+
+/**
+ * 获取题型图标(用于UI显示)
+ */
+export const QUESTION_TYPE_ICONS: Record<QuestionType, string> = {
+    [QuestionType.SOUND_TO_LETTER]: '🔊',
+    [QuestionType.LETTER_TO_SOUND]: '👁️',
+    [QuestionType.SYLLABLE]: '🔤',
+    [QuestionType.REVERSE_SYLLABLE]: '🔄',
+    [QuestionType.MISSING_LETTER]: '❓',
+    [QuestionType.ASPIRATED_CONTRAST]: '💨',
+    [QuestionType.VOWEL_LENGTH_CONTRAST]: '⏱️',
+    [QuestionType.FINAL_CONSONANT]: '🔚',
+    [QuestionType.TONE_PERCEPTION]: '🎵',
+    [QuestionType.CLASS_CHOICE]: '📊',
+    [QuestionType.LETTER_NAME]: '📝',
+    [QuestionType.INITIAL_SOUND]: '👂',
+};
+````
+
+## File: src/services/aiService.ts
+````typescript
+// src/services/aiService.ts
+
+import { callCloudFunction } from '../utils/apiClient';
+import { API_ENDPOINTS } from '../config/api.endpoints';
+import { API_TIMEOUT } from '../config/constants';
+import type { ExplainVocabularyResponse, MicroReadingResponse, MicroReadingWord, PronunciationFeedbackResponse, ExtractClozeHintsResponse } from '../entities/types/ai.types';
+import type { ApiResponse } from '../entities/types/api.types';
+
+/**
+ * AI 服务封装类 (类似一个拨号器)
+ * 作用：将复杂的网络请求打包，给前端页面直接调用
+ */
+export class AiService {
+  /**
+   * 呼叫云端的 explainVocab 动作，获取单词的 AI 解析
+   * 
+   * @param thaiWord 要查询的泰语单词 (例如: 'สวัสดี')
+   * @param vocabularyId (可选) 单词的 ID，如果在系统词库中有的话
+   * @param userId 目前用户的 ID
+   * @returns 返回一个 Promise，里面装了符合规范的 ApiResponse
+   */
+  static async explainVocabulary(
+    thaiWord: string,
+    userId: string,
+    language: string = 'zh', // 当前 UI 语言，用于让 AI 返回对应语言的内容
+    vocabularyId?: string
+  ): Promise<ApiResponse<ExplainVocabularyResponse>> {
+    
+    // 我们向谁打电话？向我们刚刚配好的 ai-engine 云端地址打。
+    const endpoint = API_ENDPOINTS.AI.ENGINE;
+
+    // 我们对云端说什么？我们说：
+    // action: "帮我执行解释词汇的任务"
+    // data: 包裹我们要查的词语
+    try {
+      const response = await callCloudFunction<ExplainVocabularyResponse>(
+        'explainVocab',  // 这必须和云端 index.js 里的 case 名字一模一样
         {
-            name: 'learning-preferences',
-            storage: createJSONStorage(() => AsyncStorage),
-        }
-    )
-);
+          userId,
+          thaiWord,
+          vocabularyId,
+          language,             // 将语言传将给云端，让 AI 返回正确语言的解析
+          appSecret: 'ThaiApp_2026_Secure' // ✅ 初级防御：我们给云端发送一个约定好的暗号
+        },
+        { endpoint, timeout: API_TIMEOUT.AI }
+      );
+
+      return response;
+    } catch (error: any) {
+      // 兜底保护：如果手机断网等极端情况，保证程序不崩
+      return {
+        success: false,
+        error: error.message || '查询 AI 失败',
+        code: 'AI_SERVICE_ERROR'
+      };
+    }
+  }
+
+  /**
+   * 调用云端 generateMicroReading，根据勾选词汇生成一段泰文短文
+   *
+   * @param words   用户勾选的词汇列表 [{ thaiWord, meaning }]
+   * @param language 当前 UI 语言 'zh' | 'en'
+   */
+  static async generateMicroReading(
+    words: MicroReadingWord[],
+    language: string = 'zh'
+  ): Promise<ApiResponse<MicroReadingResponse>> {
+    const endpoint = API_ENDPOINTS.AI.ENGINE;
+
+    try {
+      const response = await callCloudFunction<MicroReadingResponse>(
+        'generateMicroReading',   // 必须与云端 switch case 名称一致
+        {
+          words,
+          language,
+          appSecret: 'ThaiApp_2026_Secure',
+        },
+        { endpoint, timeout: API_TIMEOUT.AI }
+      );
+      return response;
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.message || '微阅读生成失败',
+        code: 'AI_SERVICE_ERROR',
+      };
+    }
+  }
+
+  /**
+   * 调用云端 analyzePronunciation，上传录音 base64 + 参考原文，获取 AI 发音分析
+   */
+  static async analyzePronunciation(
+    audioBase64: string,
+    referenceText: string,
+    language: string = 'zh'
+  ): Promise<ApiResponse<PronunciationFeedbackResponse>> {
+    const endpoint = API_ENDPOINTS.AI.ENGINE;
+
+    try {
+      const response = await callCloudFunction<PronunciationFeedbackResponse>(
+        'analyzePronunciation',
+        {
+          audioBase64,
+          referenceText,
+          language,
+          appSecret: 'ThaiApp_2026_Secure',
+        },
+        { endpoint, timeout: API_TIMEOUT.AI }
+      );
+      return response;
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.message || '发音分析失败',
+        code: 'AI_SERVICE_ERROR',
+      };
+    }
+  }
+
+  /**
+   * 调用云端 extractClozeHints，从泰语文章中提取半挖空提示性关键词
+   */
+  static async extractClozeHints(thaiText: string): Promise<ApiResponse<ExtractClozeHintsResponse>> {
+    const endpoint = API_ENDPOINTS.AI.ENGINE;
+
+    try {
+      const response = await callCloudFunction<ExtractClozeHintsResponse>(
+        'extractClozeHints',
+        {
+          thaiText,
+          appSecret: 'ThaiApp_2026_Secure',
+        },
+        { endpoint, timeout: API_TIMEOUT.AI }
+      );
+      return response;
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.message || '提示词提取失败',
+        code: 'AI_SERVICE_ERROR',
+      };
+    }
+  }
+
+  /* SHELVED: cursor-tracking TTS — 云端 TTS + 逐字时间戳，因 GFW 封存，参见 git 历史
+  static async textToSpeech(
+    text: string,
+    voiceName?: string
+  ): Promise<ApiResponse<TtsResponse>> {
+    const endpoint = API_ENDPOINTS.AI.ENGINE;
+    try {
+      const response = await callCloudFunction<TtsResponse>(
+        'textToSpeech',
+        { text, voiceName, appSecret: 'ThaiApp_2026_Secure' },
+        { endpoint, timeout: API_TIMEOUT.AI }
+      );
+      return response;
+    } catch (error: any) {
+      return { success: false, error: error.message || '语音合成失败', code: 'AI_SERVICE_ERROR' };
+    }
+  }
+  */
+}
 ````
 
 ## File: src/utils/alphabet/audioHelper.ts
@@ -12995,263 +17374,6 @@ module.exports = {
   vocabularyNotFoundResponse,
   serverErrorResponse,
 };
-````
-
-## File: src/components/courses/CourseCard.tsx
-````typescript
-import React from 'react';
-import { View, Text, StyleSheet, Pressable, Image, ImageSourcePropType } from 'react-native';
-import { useTranslation } from 'react-i18next';
-import { Colors } from '@/src/constants/colors';
-import { Typography } from '@/src/constants/typography';
-
-export interface CourseCardData {
-    id: string;
-    source: string;
-    title: string;
-    description: string;
-    level: string;
-    imageSource: ImageSourcePropType;
-    category: string;
-    lessons: number;
-}
-
-interface CourseCardProps {
-    course: CourseCardData;
-    isCurrent: boolean;
-    onStart: () => void;
-    onCardPress?: () => void;
-    progress?: {
-        completed: number;
-        total: number;
-    };
-    isLocked?: boolean; // Added: Locked state prop
-}
-
-export function CourseCard(
-    {
-        course,
-        isCurrent,
-        onStart,
-        onCardPress,
-        progress,
-        isLocked = false, // Default to unlocked
-    }: CourseCardProps
-) {
-    const { t } = useTranslation();
-
-    const progressPercent = progress && progress.total > 0
-        ? Math.min(100, Math.round((progress.completed / progress.total) * 100))
-        : null;
-
-    return (
-        <Pressable
-            key={course.id}
-            style={[
-                styles.card,
-                (isCurrent && !isLocked) && styles.activeCard,
-                // Removed: isLocked && styles.lockedCard (User requested normal look)
-            ]}
-            onPress={isLocked ? undefined : (onCardPress || onStart)} // Still disable press if locked
-            disabled={isLocked}
-        >
-            <Image
-                source={course.imageSource}
-                style={styles.image} // Removed: isLocked && styles.lockedImage
-            />
-            <View style={styles.info}>
-                <View style={styles.header}>
-                    <Text style={styles.title} numberOfLines={1}>
-                        {t(course.title)}
-                    </Text>
-                    {!isLocked && (
-                        <View style={styles.levelBadge}>
-                            <Text style={styles.levelText}>{t(course.level)}</Text>
-                        </View>
-                    )}
-                </View>
-
-                <Text style={styles.description} numberOfLines={2}>
-                    {t(course.description)}
-                </Text>
-
-                <View style={styles.footer}>
-                    {/* Meta Info (Hidden or dimmed when locked) */}
-                    <View style={styles.metaColumn}>
-                        {!isLocked && (
-                            progressPercent !== null ? (
-                                <>
-                                    <View style={styles.progressBar}>
-                                        <View style={[styles.progressFill, { width: `${progressPercent}%` }]} />
-                                    </View>
-                                    <Text style={styles.metaText}>
-                                        {progress?.completed}/{progress?.total} ({progressPercent}%)
-                                    </Text>
-                                </>
-                            ) : (
-                                <Text style={styles.metaText}>{course.lessons} 课时</Text>
-                            )
-                        )}
-                    </View>
-
-                    <Pressable
-                        style={[
-                            styles.startBtn,
-                            isCurrent && styles.activeStartBtn,
-                            isLocked && styles.lockedBtn // Locked button style
-                        ]}
-                        onPress={(e) => {
-                            if (isLocked) return;
-                            e.stopPropagation();
-                            onStart(); // <--- This calls the handler from courses.tsx
-                        }}
-                        disabled={isLocked}
-                    >
-
-                        <Text style={[
-                            styles.startBtnText,
-                            isCurrent && styles.activeStartBtnText,
-                            isLocked && styles.lockedBtnText // Locked text style
-                        ]}>
-                            {isLocked
-                                ? t('courses.locked', '未解锁')
-                                : (isCurrent ? t('courses.continue', '继续学习') : t('courses.startBtnText', '开始学习'))
-                            }
-                        </Text>
-
-                    </Pressable>
-                </View>
-            </View>
-        </Pressable>
-    );
-}
-
-const styles = StyleSheet.create({
-    card: {
-        flexDirection: 'row',
-        backgroundColor: Colors.white,
-        borderRadius: 16,
-        overflow: 'hidden',
-        borderWidth: 1,
-        borderColor: Colors.sand,
-        height: 136,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.05,
-        shadowRadius: 8,
-        elevation: 3,
-    },
-    activeCard: {
-        borderColor: Colors.thaiGold,
-        borderWidth: 2,
-        backgroundColor: '#FFFCF5',
-    },
-    lockedCard: {
-        backgroundColor: '#F5F5F5',
-        borderColor: '#E0E0E0',
-        elevation: 0,
-        shadowOpacity: 0,
-    },
-    image: {
-        width: 110,
-        height: '100%',
-        resizeMode: 'cover',
-    },
-    lockedImage: {
-        opacity: 0.5,
-        tintColor: 'gray', // Grayscale effect
-    },
-    info: {
-        flex: 1,
-        padding: 12,
-        justifyContent: 'space-between',
-        gap: 8,
-    },
-    header: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'flex-start',
-        gap: 8,
-    },
-    title: {
-        flex: 1,
-        fontFamily: Typography.notoSerifBold,
-        fontSize: 16,
-        color: Colors.ink,
-    },
-    lockedText: {
-        color: '#A0A0A0',
-    },
-    levelBadge: {
-        paddingHorizontal: 6,
-        paddingVertical: 2,
-        backgroundColor: 'rgba(212, 175, 55, 0.1)',
-        borderRadius: 4,
-        borderWidth: 1,
-        borderColor: 'rgba(212, 175, 55, 0.3)',
-    },
-    levelText: {
-        fontSize: 10,
-        color: Colors.thaiGold,
-        fontFamily: Typography.notoSerifRegular,
-    },
-    description: {
-        fontFamily: Typography.notoSerifRegular,
-        fontSize: 12,
-        color: Colors.taupe,
-        lineHeight: 16,
-    },
-    footer: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        gap: 12,
-    },
-    metaColumn: {
-        flex: 1,
-        gap: 6,
-    },
-    metaText: {
-        fontSize: 11,
-        color: Colors.taupe,
-        fontFamily: Typography.notoSerifRegular,
-    },
-    progressBar: {
-        height: 6,
-        backgroundColor: '#F0F0F0',
-        borderRadius: 3,
-        overflow: 'hidden',
-    },
-    progressFill: {
-        height: '100%',
-        backgroundColor: Colors.thaiGold,
-        borderRadius: 3,
-    },
-    startBtn: {
-        paddingHorizontal: 14,
-        paddingVertical: 10,
-        backgroundColor: Colors.ink,
-        borderRadius: 12,
-    },
-    activeStartBtn: {
-        backgroundColor: Colors.thaiGold,
-    },
-    lockedBtn: {
-        backgroundColor: '#E0E0E0',
-    },
-    startBtnText: {
-        fontSize: 12,
-        color: Colors.white,
-        fontFamily: Typography.notoSerifRegular,
-    },
-    activeStartBtnText: {
-        color: Colors.white,
-        fontWeight: '600',
-    },
-    lockedBtnText: {
-        color: '#9E9E9E',
-    },
-});
 ````
 
 ## File: src/components/learning/vocabulary/ReviewWordView.tsx
@@ -14598,6 +18720,105 @@ export function getLessonStatistics() {
 }
 ````
 
+## File: src/config/constants.ts
+````typescript
+// src/config/constants.ts
+
+/**
+ * 应用常量配置
+ *
+ * 目标：
+ * 1. 统一管理全局常量（集合名 / 超时 / 文本等），避免在代码中散落硬编码字符串；
+ * 2. COLLECTIONS 中只放“真实存在或规划中的集合名”，并通过注释区分「已使用」与「预留/废弃」。
+ */
+
+// ==================== 数据库集合名称 ====================
+export const COLLECTIONS = {
+  // ===== 核心用户与进度集合（CloudBase 已实际使用） =====
+  USERS: 'users',
+  USER_PROGRESS: 'user_progress',
+  USER_ALPHABET_PROGRESS: 'user_alphabet_progress',
+  USER_VOCABULARY_PROGRESS: 'user_vocabulary_progress',
+
+  // ===== 学习实体集合（CloudBase 已实际使用） =====
+  LETTERS: 'letters',
+  VOCABULARY: 'vocabulary',
+  VOCABULARIES: 'vocabularies', // 特定 handler（getSkippedWords）使用的词汇集合
+  SENTENCES: 'sentences',
+  MEMORY_STATUS: 'memory_status',
+
+  // ===== 字母课程与拼读规则（已迁移的课程配置） =====
+  ALPHABET_LESSONS: 'alphabet_lessons',
+  PHONICS_RULES: 'phonics_rules',
+
+  // ===== 字母测试相关 =====
+  LETTER_TEST_BANK: 'letter_test_bank',
+
+  // ===== 预留 / 规划中的集合（当前代码中未实际使用） =====
+  COURSES: 'courses',
+  LESSONS: 'lessons',
+  EXERCISES: 'exercises',
+  ARTICLES: 'articles',
+  PRONUNCIATION_RECORDS: 'pronunciationRecords',
+  PROGRESS: 'progress',
+  REVIEW_SCHEDULES: 'reviewSchedules',
+  LEARNING_RECORDS: 'learningRecords',
+
+  // ===== 已废弃命名（仅兼容旧版本，不推荐再使用） =====
+  // 旧版字母集合，现已统一使用 LETTERS: 'letters'
+  ALPHABETS: 'alphabets',
+} as const;
+
+// ==================== API 超时配置 ====================
+export const API_TIMEOUT = {
+  DEFAULT: 10000,   // 10 秒 - 一般请求
+  UPLOAD: 30000,    // 30 秒 - 文件上传
+  LONG: 60000,      // 60 秒 - 长时间操作（如发音评估）
+  AI: 120000,       // 120 秒 - AI 生成（微阅读/词汇解析等，云端上限 200s）
+};
+
+// ==================== 错误消息 ====================
+export const ERROR_MESSAGES = {
+  NETWORK_ERROR: '网络连接失败，请检查您的网络。',
+  TIMEOUT_ERROR: '请求超时，请稍后重试。',
+  AUTH_ERROR: '身份验证失败，请重新登录。',
+  TOKEN_EXPIRED: '登录已过期，请重新登录。',
+  SERVER_ERROR: '服务器错误，请稍后重试。',
+  INVALID_INPUT: '输入信息不完整或格式错误。',
+  UNKNOWN_ERROR: '未知错误，请联系客服。',
+};
+
+// ==================== 用户角色 ====================
+export const USER_ROLES = {
+  LEARNER: 'LEARNER',
+  ADMIN: 'ADMIN',
+} as const;
+
+// ==================== 学习等级 ====================
+export const LEVELS = {
+  BEGINNER_A: 'BEGINNER_A',
+  BEGINNER_B: 'BEGINNER_B',
+  INTERMEDIATE: 'INTERMEDIATE',
+  ADVANCED: 'ADVANCED',
+} as const;
+
+// ==================== 掌握程度 ====================
+export const MASTER_LEVELS = {
+  NOT_LEARNED: 'NOT_LEARNED',
+  LEARNING: 'LEARNING',
+  REVIEWING: 'REVIEWING',
+  MASTERED: 'MASTERED',
+} as const;
+
+// ==================== 内容类型 ====================
+export const CONTENT_TYPES = {
+  ALPHABET: 'alphabet',
+  VOCABULARY: 'vocabulary',
+  SENTENCE: 'sentence',
+  ARTICLE: 'article',
+} as const;
+````
+
 ## File: src/entities/enums/LearningPhase.enum.ts
 ````typescript
 // src/entities/enums/LearningPhase.enum.ts
@@ -14746,6 +18967,93 @@ export function getNextPhase(currentPhase: Phase): Phase | null {
   }
 
   return phaseSequence[currentIndex + 1];
+}
+````
+
+## File: src/entities/types/ai.types.ts
+````typescript
+// src/entities/types/ai.types.ts
+
+// 这说明了一句泰语例句长什么样
+export interface AiExample {
+    scene: string;    // 这个例句的使用场景
+    thai: string;     // 泰文句子内容
+    chinese: string;  // 中文翻译
+}
+
+// 这说明了云端返回的“整个词汇解析报告”长什么样，
+// 注意这里所有的字段名字，必须和刚才云端代码里 DeepSeek 吐出来的 JSON 名字一模一样！
+export interface ExplainVocabularyResponse {
+    vocabularyId: string;
+    thaiWord: string;
+    pronunciation: string; // ✅新增的发音字段
+    meaning: string;
+    breakdown: string;
+    extraExamples: AiExample[];
+}
+
+/**
+ * AI 微阅读生成结果
+ * 字段名称与 generateMicroReading.js 中 Prompt 要求的 JSON 完全一致
+ */
+export interface MicroReadingResponse {
+    title: string;         // AI 生成的泰文短文标题
+    thaiText: string;      // AI 生成的泰文短文（80-150 词）
+    translation: string;   // 中文逐段辅助翻译
+    wordsUsed: string[];   // AI 确认用到的目标词列表（用于校验）
+}
+
+/** 发给 AI 的单个词汇条目 */
+export interface MicroReadingWord {
+    thaiWord: string;
+    meaning: string;
+}
+
+/* SHELVED: cursor-tracking TTS — 因 GFW 封存，参见 git 历史
+export interface TtsSubtitle {
+    Text: string;
+    BeginTime: number;
+    EndTime: number;
+    BeginIndex: number;
+    EndIndex: number;
+    Phoneme: string | null;
+}
+
+export interface TtsResponse {
+    audio: string;
+    subtitles: TtsSubtitle[];
+}
+*/
+
+/** 发音分析 — 单维度评分 */
+export interface PronunciationDimension {
+    name: string;
+    score: number;       // 1-10
+    comment: string;
+}
+
+/** 发音分析 — AI 返回的完整反馈 */
+export interface PronunciationFeedbackResponse {
+    overallScore: number;
+    dimensions: PronunciationDimension[];
+    suggestions: string[];
+    transcription: string;
+}
+
+/** 半挖空提示词提取 — AI 返回的关键词列表 */
+export interface ExtractClozeHintsResponse {
+    keywords: string[];
+}
+
+/** 持久化到 AsyncStorage 的文章对象 */
+export interface SavedArticle {
+    id: string;
+    title: string;
+    thaiText: string;
+    translation: string;
+    wordsUsed: string[];
+    createdAt: number;
+    wordCount: number;
 }
 ````
 
@@ -14977,299 +19285,154 @@ export interface UnlockInfo {
 }
 ````
 
-## File: src/utils/lettersQuestionGenerator.ts
+## File: src/stores/learningPreferenceStore.ts
 ````typescript
-// src/utils/lettersQuestionGenerator.ts
+import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import type { ModuleType } from './moduleAccessStore';
 
-/**
- * Letters Question Generator
- *
- * 字母题目生成器 - Phase 2 重构版本
- * 按照 alphabet-module-spec.md 第6章和统一 Question Engine 协议实现
- *
- * 变更说明:
- * - 移除了 LETTER_NAME_TO_THAI 和 THAI_TO_LETTER_NAME 题型
- * - 使用新的 AlphabetGameType 枚举
- * - 函数签名改为 generateQuestion(queueItem, allLetters)
- * - 添加 TONE_CALCULATION 和 PHONICS_MATH 占位实现
- */
+type DailyLimitMap = Partial<Record<ModuleType, number>>;
 
-import type { Letter } from '@/src/entities/types/letter.types';
-import type {
-  AlphabetQueueItem,
-  AlphabetQuestion,
-} from '@/src/entities/types/alphabet.types';
-import { AlphabetGameType } from '@/src/entities/types/alphabetGameTypes';
-import { generateLetterDistractors } from './lettersDistractorEngine';
-import { getLetterAudioUrl } from './alphabet/audioHelper';
+// 系统默认每日学习上限，与后端 getTodayMemories 默认值保持一致
+export const DEFAULT_DAILY_LIMIT = 20;
 
-/**
- * 生成字母题目
- *
- * @param queueItem - 队列项,包含目标字母和题型信息
- * @param allLetters - 所有字母池,用于生成干扰项
- * @returns 生成的题目对象
- */
-export function generateQuestion(
-  queueItem: AlphabetQueueItem,
-  allLetters: Letter[]
-): AlphabetQuestion {
-  const { letter, gameType } = queueItem;
-
-  // 🐛 P0-1 FIX: 生成干扰项 (3个) + 防御性检查
-  const distractorLetters =
-    allLetters && allLetters.length > 1
-      ? generateLetterDistractors({ pool: allLetters, correct: letter, count: 3 })
-      : [];
-
-  // 🐛 P0-1 FIX: 确保有足够的干扰项
-  if (distractorLetters.length < 3) {
-    console.warn('⚠️ 干扰项不足！', {
-      expected: 3,
-      actual: distractorLetters.length,
-      poolSize: allLetters?.length || 0,
-      letterId: letter._id,
-      gameType
-    });
-
-    // 如果池子太小，用正确字母复制填充（临时方案）
-    while (distractorLetters.length < 3) {
-      distractorLetters.push({ ...letter, _id: `dummy-${distractorLetters.length}` });
-    }
-  }
-
-  // 根据题型生成题目
-  switch (gameType) {
-    case AlphabetGameType.SOUND_TO_LETTER:
-      return generateSoundToLetterQuestion(letter, distractorLetters);
-
-    case AlphabetGameType.LETTER_TO_SOUND:
-      return generateLetterToSoundQuestion(letter, distractorLetters);
-
-    case AlphabetGameType.CONSONANT_CLASS:
-      return generateConsonantClassQuestion(letter);
-
-    case AlphabetGameType.INITIAL_SOUND:
-      return generateInitialSoundQuestion(letter, distractorLetters);
-
-    case AlphabetGameType.FINAL_SOUND:
-      return generateFinalSoundQuestion(letter, distractorLetters);
-
-    case AlphabetGameType.TONE_CALCULATION:
-      return generateToneCalculationQuestion(letter);
-
-    case AlphabetGameType.PHONICS_MATH:
-      return generatePhonicsMathQuestion(letter);
-
-    default:
-      // STRICT MODE: Do not fallback to simple questions for unknown types.
-      // If we get here, it means we requested a type that isn't handled.
-      console.error('❌ Unknown Game Type requested:', gameType);
-      // We must return *something* to avoid crash, but let's log loudly.
-      // Ideally this should trigger a "Content Error" state in UI.
-      // For now, return a placeholder valid object but log error.
-      // BUT for strict requirement: "不允许 fallback 为简单题". 
-      // This implies if we asked for Unknown/Complex, we shouldn't get Simple.
-      // But if the code asked for it, it's a bug in the engine.
-      // The Engine asked for `CONSONANT_CLASS`, we are in case `CONSONANT_CLASS`.
-
-      // If the case is handled, we are good.
-      // The only risk is if `generateConsonantClassQuestion` fails?
-      // It currently always returns a question (options are fixed).
-
-      // So this default block is only for truly unknown enum values.
-      throw new Error(`[Generator] Unsupported Game Type: ${gameType}`);
-  }
+/** 获取本地日期 YYYY-MM-DD */
+function getTodayLocal(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-// ===== 各题型的具体实现 =====
-
-/**
- * 听音选字 - 播放字母发音,选择正确的字母
- */
-function generateSoundToLetterQuestion(
-  letter: Letter,
-  distractors: Letter[]
-): AlphabetQuestion {
-  const options = shuffle([letter, ...distractors]);
-
-  return {
-    id: `sound-to-letter-${letter._id}-${Date.now()}`,
-    gameType: AlphabetGameType.SOUND_TO_LETTER,
-    targetLetter: letter,
-    options,
-    correctAnswer: letter.thaiChar,
-    audioUrl: getLetterAudioUrl(letter, 'letter'),
-  };
+/** 获取昨天本地日期 YYYY-MM-DD */
+function getYesterdayLocal(): string {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-/**
- * 看字选音 - 显示字母,选择正确的发音
- */
-function generateLetterToSoundQuestion(
-  letter: Letter,
-  distractors: Letter[]
-): AlphabetQuestion {
-  const options = shuffle([letter, ...distractors]);
+/** 每日学习时长（秒），按日期 YYYY-MM-DD 存储 */
+type DailyStudyTimeMap = Record<string, number>;
 
-  return {
-    id: `letter-to-sound-${letter._id}-${Date.now()}`,
-    gameType: AlphabetGameType.LETTER_TO_SOUND,
-    targetLetter: letter,
-    options,
-    correctAnswer: letter.initialSound || letter.fullSoundUrl || letter._id,
-    audioUrl: getLetterAudioUrl(letter, 'letter'),
-  };
+/** 每日提醒时间，格式 HH:mm，默认 09:00 */
+export const DEFAULT_DAILY_REMINDER_TIME = '09:00';
+
+interface LearningPreferenceStore {
+    streakDays: number;
+    lastCheckInDate: string | null; // YYYY-MM-DD，上次打卡日期
+    /** 每日提醒开关 */
+    dailyReminderEnabled: boolean;
+    /** 每日提醒时间 HH:mm */
+    dailyReminderTime: string;
+    updateStreak: (days: number) => void;
+    /** 每日打卡：每天可点击一次，返回 true 表示打卡成功，false 表示今日已打卡 */
+    checkIn: () => boolean;
+    /** 今日是否已打卡 */
+    hasCheckedInToday: () => boolean;
+    dailyLimits: DailyLimitMap;
+    setDailyLimit: (module: ModuleType, limit: number) => void;
+    hasDailyLimit: (module: ModuleType) => boolean;
+    /** 当日学习时长（秒），按日期持久化 */
+    dailyStudyTimeByDate: DailyStudyTimeMap;
+    /** 当前学习会话开始时间戳（毫秒），进入字母/单词学习页时设置，离开时清除 */
+    activeSessionStart: number | null;
+    /** 进入学习页时调用，开始计时 */
+    startStudySession: () => void;
+    /** 离开学习页时调用，将本次时长累加到当日 */
+    stopStudySession: () => void;
+    /** 获取当日学习总时长（秒），含当前进行中的会话 */
+    getTodayStudyTimeSeconds: () => number;
+    /** 设置每日提醒开关与时间 */
+    setDailyReminder: (enabled: boolean, time?: string) => void;
+    clearForLogout: () => void; // 登出时清除所有用户专属偏好
 }
 
-/**
- * 辅音类别判断 - 判断字母属于高/中/低辅音
- */
-function generateConsonantClassQuestion(letter: Letter): AlphabetQuestion {
-  // 固定的三个选项: 高辅音、中辅音、低辅音
-  const classOptions: Letter[] = [
-    { ...letter, thaiChar: '高辅音', class: 'high' } as Letter,
-    { ...letter, thaiChar: '中辅音', class: 'mid' } as Letter,
-    { ...letter, thaiChar: '低辅音', class: 'low' } as Letter,
-  ];
-
-  return {
-    id: `consonant-class-${letter._id}-${Date.now()}`,
-    gameType: AlphabetGameType.CONSONANT_CLASS,
-    targetLetter: letter,
-    options: classOptions,
-    correctAnswer: mapClassToLabel(letter.class || 'low'),
-    audioUrl: getLetterAudioUrl(letter, 'letter'),
-  };
-}
-
-/**
- * 首音判断 - 判断字母的首辅音发音
- */
-function generateInitialSoundQuestion(
-  letter: Letter,
-  distractors: Letter[]
-): AlphabetQuestion {
-  const options = shuffle([letter, ...distractors]);
-
-  return {
-    id: `initial-sound-${letter._id}-${Date.now()}`,
-    gameType: AlphabetGameType.INITIAL_SOUND,
-    targetLetter: letter,
-    options,
-    correctAnswer: letter.initialSound,
-    audioUrl: getLetterAudioUrl(letter, 'letter'),
-  };
-}
-
-/**
- * 尾音判断 - 判断字母作为尾音时的发音
- */
-function generateFinalSoundQuestion(
-  letter: Letter,
-  distractors: Letter[]
-): AlphabetQuestion {
-  const options = shuffle([letter, ...distractors]);
-
-  return {
-    id: `final-sound-${letter._id}-${Date.now()}`,
-    gameType: AlphabetGameType.FINAL_SOUND,
-    targetLetter: letter,
-    options,
-    correctAnswer: letter.finalSound || letter.initialSound,
-    audioUrl: getLetterAudioUrl(letter, 'letter'),
-  };
-}
-
-/**
- * 声调计算 - 占位实现
- *
- * TODO: 在后续迭代中实现完整的声调计算逻辑
- * 需要考虑: 辅音类别 + 元音长短 + 声调符号 → 最终声调
- */
-function generateToneCalculationQuestion(letter: Letter): AlphabetQuestion {
-  // 占位实现: 返回一个简单的固定题目
-  const placeholderOptions: Letter[] = [
-    { ...letter, thaiChar: '第1声(平声)' } as Letter,
-    { ...letter, thaiChar: '第2声(低声)' } as Letter,
-    { ...letter, thaiChar: '第3声(降声)' } as Letter,
-  ];
-
-  return {
-    id: `tone-calculation-${letter._id}-${Date.now()}`,
-    gameType: AlphabetGameType.TONE_CALCULATION,
-    targetLetter: letter,
-    options: placeholderOptions,
-    correctAnswer: '第1声(平声)', // 占位答案
-    audioUrl: getLetterAudioUrl(letter, 'letter'),
-  };
-}
-
-/**
- * 拼读数学 - 占位实现
- *
- * TODO: 在后续迭代中实现完整的拼读逻辑
- * 需要考虑: 辅音 + 元音的组合发音
- */
-function generatePhonicsMathQuestion(letter: Letter): AlphabetQuestion {
-  // 占位实现: 返回一个简单的拼读题
-  const syllable = `${letter.thaiChar}า`; // 辅音 + 长元音 า
-  const placeholderOptions: Letter[] = [
-    { ...letter, thaiChar: syllable } as Letter,
-    { ...letter, thaiChar: `${letter.thaiChar}ิ` } as Letter,
-    { ...letter, thaiChar: `${letter.thaiChar}ุ` } as Letter,
-  ];
-
-  return {
-    id: `phonics-math-${letter._id}-${Date.now()}`,
-    gameType: AlphabetGameType.PHONICS_MATH,
-    targetLetter: letter,
-    options: placeholderOptions,
-    correctAnswer: syllable, // 占位答案
-    audioUrl: getLetterAudioUrl(letter, 'syllable'),
-  };
-}
-
-// ===== 辅助函数 =====
-
-/**
- * 随机打乱数组
- */
-function shuffle<T>(arr: T[]): T[] {
-  return [...arr].sort(() => Math.random() - 0.5);
-}
-
-/**
- * 将辅音类别映射为中文标签
- */
-function mapClassToLabel(cls: string): string {
-  if (cls === 'mid') return '中辅音';
-  if (cls === 'high') return '高辅音';
-  return '低辅音';
-}
-
-// ===== 向后兼容的导出 =====
-
-/**
- * @deprecated 请使用新的 generateQuestion 函数
- *
- * 为了向后兼容,保留旧的函数签名
- * 会在后续版本中移除
- */
-export function generateAlphabetQuestion(
-  letter: Letter,
-  pool: Letter[],
-  preferredType?: any // 使用 any 避免导入旧的 QuestionType
-): any {
-  // 将旧的调用转换为新的格式
-  const queueItem: AlphabetQueueItem = {
-    letterId: letter._id,
-    gameType: AlphabetGameType.SOUND_TO_LETTER, // 默认使用听音选字
-    letter,
-  };
-
-  return generateQuestion(queueItem, pool);
-}
+export const useLearningPreferenceStore = create<LearningPreferenceStore>()(
+    persist(
+        (set, get) => ({
+            streakDays: 0,
+            lastCheckInDate: null,
+            dailyReminderEnabled: false,
+            dailyReminderTime: DEFAULT_DAILY_REMINDER_TIME,
+            updateStreak: (days) => set({ streakDays: days }),
+            setDailyReminder: (enabled, time) =>
+                set((state) => ({
+                    dailyReminderEnabled: enabled,
+                    dailyReminderTime: time ?? state.dailyReminderTime,
+                })),
+            checkIn: () => {
+                const today = getTodayLocal();
+                const yesterday = getYesterdayLocal();
+                const { lastCheckInDate, streakDays } = get();
+                if (lastCheckInDate === today) return false;
+                // 昨日已打卡 → 连续+1；首次打卡 → 1；中断后 → 0
+                const newStreak = lastCheckInDate === yesterday
+                    ? streakDays + 1
+                    : lastCheckInDate == null
+                        ? 1
+                        : 0;
+                set({ lastCheckInDate: today, streakDays: newStreak });
+                return true;
+            },
+            hasCheckedInToday: () => get().lastCheckInDate === getTodayLocal(),
+            dailyLimits: {},
+            setDailyLimit: (module, limit) =>
+                set((state) => ({
+                    dailyLimits: {
+                        ...state.dailyLimits,
+                        [module]: limit,
+                    },
+                })),
+            hasDailyLimit: (module) => get().dailyLimits[module] !== undefined,
+            dailyStudyTimeByDate: {},
+            activeSessionStart: null,
+            startStudySession: () => set({ activeSessionStart: Date.now() }),
+            stopStudySession: () => {
+                const { activeSessionStart, dailyStudyTimeByDate } = get();
+                if (activeSessionStart == null) return;
+                const elapsed = Math.floor((Date.now() - activeSessionStart) / 1000);
+                const today = getTodayLocal();
+                const prev = dailyStudyTimeByDate[today] ?? 0;
+                set({
+                    activeSessionStart: null,
+                    dailyStudyTimeByDate: {
+                        ...dailyStudyTimeByDate,
+                        [today]: prev + elapsed,
+                    },
+                });
+            },
+            getTodayStudyTimeSeconds: () => {
+                const { dailyStudyTimeByDate, activeSessionStart } = get();
+                const today = getTodayLocal();
+                const stored = dailyStudyTimeByDate[today] ?? 0;
+                if (activeSessionStart == null) return stored;
+                return stored + Math.floor((Date.now() - activeSessionStart) / 1000);
+            },
+            // 登出时调用：重置所有用户专属偏好，防止跨用户继承
+            clearForLogout: () =>
+                set({
+                    streakDays: 0,
+                    lastCheckInDate: null,
+                    dailyLimits: {},
+                    dailyStudyTimeByDate: {},
+                    activeSessionStart: null,
+                    dailyReminderEnabled: false,
+                    dailyReminderTime: DEFAULT_DAILY_REMINDER_TIME,
+                }),
+        }),
+        {
+            name: 'learning-preferences',
+            storage: createJSONStorage(() => AsyncStorage),
+            partialize: (state) => ({
+                streakDays: state.streakDays,
+                lastCheckInDate: state.lastCheckInDate,
+                dailyLimits: state.dailyLimits,
+                dailyStudyTimeByDate: state.dailyStudyTimeByDate,
+                dailyReminderEnabled: state.dailyReminderEnabled,
+                dailyReminderTime: state.dailyReminderTime,
+            }),
+        }
+    )
+);
 ````
 
 ## File: app/alphabet/test.tsx
@@ -16529,60 +20692,261 @@ exports.main = async (event, context) => {
 };
 ````
 
-## File: cloudbase/cloudbaserc.json
-````json
-{
-  "envId": "cloud1-1gjcyrdd7ab927c6",
-  "region": "ap-shanghai",
-  "functionRoot": "./functions",
-  "functions": [
-    {
-      "name": "user-register",
-      "timeout": 15,
-      "runtime": "Nodejs18.15",
-      "handler": "index.main"
-    },
-    {
-      "name": "user-login",
-      "timeout": 15,
-      "runtime": "Nodejs18.15",
-      "handler": "index.main"
-    },
-    {
-      "name": "user-reset-password",
-      "timeout": 15,
-      "runtime": "Nodejs18.15",
-      "handler": "index.main"
-    },
-    {
-      "name": "user-update-profile",
-      "timeout": 15,
-      "runtime": "Nodejs18.15",
-      "handler": "index.main"
-    },
-    {
-      "name": "memory-engine",
-      "timeout": 20,
-      "runtime": "Nodejs18.15",
-      "handler": "index.main",
-      "installDependency": true
-    },
-    {
-      "name": "alphabet",
-      "timeout": 20,
-      "runtime": "Nodejs18.15",
-      "handler": "index.main",
-      "installDependency": true
-    },
-    {
-      "name": "storage-download",
-      "timeout": 20,
-      "runtime": "Nodejs18.15",
-      "handler": "index.main",
-      "installDependency": true
-    }
-  ]
+## File: src/components/courses/CourseCard.tsx
+````typescript
+import React from 'react';
+import { View, Text, StyleSheet, Pressable, Image, ImageSourcePropType } from 'react-native';
+import { useTranslation } from 'react-i18next';
+import { Colors } from '@/src/constants/colors';
+import { Typography } from '@/src/constants/typography';
+
+export interface CourseCardData {
+    id: string;
+    source: string;
+    title: string;
+    description: string;
+    level: string;
+    imageSource: ImageSourcePropType;
+    category: string;
+    lessons: number;
 }
+
+interface CourseCardProps {
+    course: CourseCardData;
+    isCurrent: boolean;
+    onStart: () => void;
+    onCardPress?: () => void;
+    progress?: {
+        completed: number;
+        total: number;
+    };
+    isLocked?: boolean; // Added: Locked state prop
+}
+
+export function CourseCard(
+    {
+        course,
+        isCurrent,
+        onStart,
+        onCardPress,
+        progress,
+        isLocked = false, // Default to unlocked
+    }: CourseCardProps
+) {
+    const { t } = useTranslation();
+
+    const progressPercent = progress && progress.total > 0
+        ? Math.min(100, Math.round((progress.completed / progress.total) * 100))
+        : null;
+
+    return (
+        <Pressable
+            key={course.id}
+            style={[
+                styles.card,
+                (isCurrent && !isLocked) && styles.activeCard,
+                // Removed: isLocked && styles.lockedCard (User requested normal look)
+            ]}
+            onPress={isLocked ? undefined : (onCardPress || onStart)} // Still disable press if locked
+            disabled={isLocked}
+        >
+            <Image
+                source={course.imageSource}
+                style={styles.image} // Removed: isLocked && styles.lockedImage
+            />
+            <View style={styles.info}>
+                <View style={styles.header}>
+                    <Text style={styles.title} numberOfLines={1}>
+                        {t(course.title)}
+                    </Text>
+                    {!isLocked && (
+                        <View style={styles.levelBadge}>
+                            <Text style={styles.levelText}>{t(course.level)}</Text>
+                        </View>
+                    )}
+                </View>
+
+                <Text style={styles.description} numberOfLines={2}>
+                    {t(course.description)}
+                </Text>
+
+                <View style={styles.footer}>
+                    {/* Meta Info (Hidden or dimmed when locked) */}
+                    <View style={styles.metaColumn}>
+                        {!isLocked && (
+                            progressPercent !== null ? (
+                                <>
+                                    <View style={styles.progressBar}>
+                                        <View style={[styles.progressFill, { width: `${progressPercent}%` }]} />
+                                    </View>
+                                    <Text style={styles.metaText}>
+                                        {progress?.completed}/{progress?.total} ({progressPercent}%)
+                                    </Text>
+                                </>
+                            ) : (
+                                <Text style={styles.metaText}>{course.lessons} {t('courses.lessons')}</Text>
+                            )
+                        )}
+                    </View>
+
+                    <Pressable
+                        style={[
+                            styles.startBtn,
+                            isCurrent && styles.activeStartBtn,
+                            isLocked && styles.lockedBtn // Locked button style
+                        ]}
+                        onPress={(e) => {
+                            if (isLocked) return;
+                            e.stopPropagation();
+                            onStart(); // <--- This calls the handler from courses.tsx
+                        }}
+                        disabled={isLocked}
+                    >
+
+                        <Text style={[
+                            styles.startBtnText,
+                            isCurrent && styles.activeStartBtnText,
+                            isLocked && styles.lockedBtnText // Locked text style
+                        ]}>
+                            {isLocked
+                                ? t('courses.locked', '未解锁')
+                                : (isCurrent ? t('courses.continue', '继续学习') : t('courses.startBtnText', '开始学习'))
+                            }
+                        </Text>
+
+                    </Pressable>
+                </View>
+            </View>
+        </Pressable>
+    );
+}
+
+const styles = StyleSheet.create({
+    card: {
+        flexDirection: 'row',
+        backgroundColor: Colors.white,
+        borderRadius: 16,
+        overflow: 'hidden',
+        borderWidth: 1,
+        borderColor: Colors.sand,
+        height: 136,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+        elevation: 3,
+    },
+    activeCard: {
+        borderColor: Colors.thaiGold,
+        borderWidth: 2,
+        backgroundColor: '#FFFCF5',
+    },
+    lockedCard: {
+        backgroundColor: '#F5F5F5',
+        borderColor: '#E0E0E0',
+        elevation: 0,
+        shadowOpacity: 0,
+    },
+    image: {
+        width: 110,
+        height: '100%',
+        resizeMode: 'cover',
+    },
+    lockedImage: {
+        opacity: 0.5,
+        tintColor: 'gray', // Grayscale effect
+    },
+    info: {
+        flex: 1,
+        padding: 12,
+        justifyContent: 'space-between',
+        gap: 8,
+    },
+    header: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+        gap: 8,
+    },
+    title: {
+        flex: 1,
+        fontFamily: Typography.notoSerifBold,
+        fontSize: 16,
+        color: Colors.ink,
+    },
+    lockedText: {
+        color: '#A0A0A0',
+    },
+    levelBadge: {
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        backgroundColor: 'rgba(212, 175, 55, 0.1)',
+        borderRadius: 4,
+        borderWidth: 1,
+        borderColor: 'rgba(212, 175, 55, 0.3)',
+    },
+    levelText: {
+        fontSize: 10,
+        color: Colors.thaiGold,
+        fontFamily: Typography.notoSerifRegular,
+    },
+    description: {
+        fontFamily: Typography.notoSerifRegular,
+        fontSize: 12,
+        color: Colors.taupe,
+        lineHeight: 16,
+    },
+    footer: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        gap: 12,
+    },
+    metaColumn: {
+        flex: 1,
+        gap: 6,
+    },
+    metaText: {
+        fontSize: 11,
+        color: Colors.taupe,
+        fontFamily: Typography.notoSerifRegular,
+    },
+    progressBar: {
+        height: 6,
+        backgroundColor: '#F0F0F0',
+        borderRadius: 3,
+        overflow: 'hidden',
+    },
+    progressFill: {
+        height: '100%',
+        backgroundColor: Colors.thaiGold,
+        borderRadius: 3,
+    },
+    startBtn: {
+        paddingHorizontal: 14,
+        paddingVertical: 10,
+        backgroundColor: Colors.ink,
+        borderRadius: 12,
+    },
+    activeStartBtn: {
+        backgroundColor: Colors.thaiGold,
+    },
+    lockedBtn: {
+        backgroundColor: '#E0E0E0',
+    },
+    startBtnText: {
+        fontSize: 12,
+        color: Colors.white,
+        fontFamily: Typography.notoSerifRegular,
+    },
+    activeStartBtnText: {
+        color: Colors.white,
+        fontWeight: '600',
+    },
+    lockedBtnText: {
+        color: '#9E9E9E',
+    },
+});
 ````
 
 ## File: src/components/learning/vocabulary/NewWordView.tsx
@@ -16929,6 +21293,301 @@ const initI18n = async () => {
 initI18n();  // 立即执行初始化
 
 export default i18n;
+````
+
+## File: src/utils/lettersQuestionGenerator.ts
+````typescript
+// src/utils/lettersQuestionGenerator.ts
+
+/**
+ * Letters Question Generator
+ *
+ * 字母题目生成器 - Phase 2 重构版本
+ * 按照 alphabet-module-spec.md 第6章和统一 Question Engine 协议实现
+ *
+ * 变更说明:
+ * - 移除了 LETTER_NAME_TO_THAI 和 THAI_TO_LETTER_NAME 题型
+ * - 使用新的 AlphabetGameType 枚举
+ * - 函数签名改为 generateQuestion(queueItem, allLetters)
+ * - 添加 TONE_CALCULATION 和 PHONICS_MATH 占位实现
+ */
+
+import type { Letter } from '@/src/entities/types/letter.types';
+import type {
+  AlphabetQueueItem,
+  AlphabetQuestion,
+} from '@/src/entities/types/alphabet.types';
+import { AlphabetGameType } from '@/src/entities/types/alphabetGameTypes';
+import { generateLetterDistractors } from './lettersDistractorEngine';
+import { getLetterAudioUrl } from './alphabet/audioHelper';
+
+/**
+ * 生成字母题目
+ *
+ * @param queueItem - 队列项,包含目标字母和题型信息
+ * @param allLetters - 所有字母池,用于生成干扰项
+ * @returns 生成的题目对象
+ */
+export function generateQuestion(
+  queueItem: AlphabetQueueItem,
+  allLetters: Letter[]
+): AlphabetQuestion {
+  const { letter, gameType } = queueItem;
+
+  // 🐛 P0-1 FIX: 生成干扰项 (3个) + 防御性检查
+  const distractorLetters =
+    allLetters && allLetters.length > 1
+      ? generateLetterDistractors({ pool: allLetters, correct: letter, count: 3 })
+      : [];
+
+  // 🐛 P0-1 FIX: 确保有足够的干扰项
+  if (distractorLetters.length < 3) {
+    console.warn('⚠️ 干扰项不足！', {
+      expected: 3,
+      actual: distractorLetters.length,
+      poolSize: allLetters?.length || 0,
+      letterId: letter._id,
+      gameType
+    });
+
+    // 如果池子太小，用正确字母复制填充（临时方案）
+    while (distractorLetters.length < 3) {
+      distractorLetters.push({ ...letter, _id: `dummy-${distractorLetters.length}` });
+    }
+  }
+
+  // 根据题型生成题目
+  switch (gameType) {
+    case AlphabetGameType.SOUND_TO_LETTER:
+      return generateSoundToLetterQuestion(letter, distractorLetters);
+
+    case AlphabetGameType.LETTER_TO_SOUND:
+      return generateLetterToSoundQuestion(letter, distractorLetters);
+
+    case AlphabetGameType.CONSONANT_CLASS:
+      return generateConsonantClassQuestion(letter);
+
+    case AlphabetGameType.INITIAL_SOUND:
+      return generateInitialSoundQuestion(letter, distractorLetters);
+
+    case AlphabetGameType.FINAL_SOUND:
+      return generateFinalSoundQuestion(letter, distractorLetters);
+
+    case AlphabetGameType.TONE_CALCULATION:
+      return generateToneCalculationQuestion(letter);
+
+    case AlphabetGameType.PHONICS_MATH:
+      return generatePhonicsMathQuestion(letter);
+
+    default:
+      // STRICT MODE: Do not fallback to simple questions for unknown types.
+      // If we get here, it means we requested a type that isn't handled.
+      console.error('❌ Unknown Game Type requested:', gameType);
+      // We must return *something* to avoid crash, but let's log loudly.
+      // Ideally this should trigger a "Content Error" state in UI.
+      // For now, return a placeholder valid object but log error.
+      // BUT for strict requirement: "不允许 fallback 为简单题". 
+      // This implies if we asked for Unknown/Complex, we shouldn't get Simple.
+      // But if the code asked for it, it's a bug in the engine.
+      // The Engine asked for `CONSONANT_CLASS`, we are in case `CONSONANT_CLASS`.
+
+      // If the case is handled, we are good.
+      // The only risk is if `generateConsonantClassQuestion` fails?
+      // It currently always returns a question (options are fixed).
+
+      // So this default block is only for truly unknown enum values.
+      throw new Error(`[Generator] Unsupported Game Type: ${gameType}`);
+  }
+}
+
+// ===== 各题型的具体实现 =====
+
+/**
+ * 听音选字 - 播放字母发音,选择正确的字母
+ */
+function generateSoundToLetterQuestion(
+  letter: Letter,
+  distractors: Letter[]
+): AlphabetQuestion {
+  const options = shuffle([letter, ...distractors]);
+
+  return {
+    id: `sound-to-letter-${letter._id}-${Date.now()}`,
+    gameType: AlphabetGameType.SOUND_TO_LETTER,
+    targetLetter: letter,
+    options,
+    correctAnswer: letter.thaiChar,
+    audioUrl: getLetterAudioUrl(letter, 'letter'),
+  };
+}
+
+/**
+ * 看字选音 - 显示字母,选择正确的发音
+ */
+function generateLetterToSoundQuestion(
+  letter: Letter,
+  distractors: Letter[]
+): AlphabetQuestion {
+  const options = shuffle([letter, ...distractors]);
+
+  return {
+    id: `letter-to-sound-${letter._id}-${Date.now()}`,
+    gameType: AlphabetGameType.LETTER_TO_SOUND,
+    targetLetter: letter,
+    options,
+    correctAnswer: letter.initialSound || letter.fullSoundUrl || letter._id,
+    audioUrl: getLetterAudioUrl(letter, 'letter'),
+  };
+}
+
+/**
+ * 辅音类别判断 - 判断字母属于高/中/低辅音
+ */
+function generateConsonantClassQuestion(letter: Letter): AlphabetQuestion {
+  // 固定的三个选项: 高辅音、中辅音、低辅音
+  const classOptions: Letter[] = [
+    { ...letter, thaiChar: 'components.miniReview.highClass', class: 'high' } as Letter,
+    { ...letter, thaiChar: 'components.miniReview.midClass', class: 'mid' } as Letter,
+    { ...letter, thaiChar: 'components.miniReview.lowClass', class: 'low' } as Letter,
+  ];
+
+  return {
+    id: `consonant-class-${letter._id}-${Date.now()}`,
+    gameType: AlphabetGameType.CONSONANT_CLASS,
+    targetLetter: letter,
+    options: classOptions,
+    correctAnswer: mapClassToLabel(letter.class || 'low'),
+    audioUrl: getLetterAudioUrl(letter, 'letter'),
+  };
+}
+
+/**
+ * 首音判断 - 判断字母的首辅音发音
+ */
+function generateInitialSoundQuestion(
+  letter: Letter,
+  distractors: Letter[]
+): AlphabetQuestion {
+  const options = shuffle([letter, ...distractors]);
+
+  return {
+    id: `initial-sound-${letter._id}-${Date.now()}`,
+    gameType: AlphabetGameType.INITIAL_SOUND,
+    targetLetter: letter,
+    options,
+    correctAnswer: letter.initialSound,
+    audioUrl: getLetterAudioUrl(letter, 'letter'),
+  };
+}
+
+/**
+ * 尾音判断 - 判断字母作为尾音时的发音
+ */
+function generateFinalSoundQuestion(
+  letter: Letter,
+  distractors: Letter[]
+): AlphabetQuestion {
+  const options = shuffle([letter, ...distractors]);
+
+  return {
+    id: `final-sound-${letter._id}-${Date.now()}`,
+    gameType: AlphabetGameType.FINAL_SOUND,
+    targetLetter: letter,
+    options,
+    correctAnswer: letter.finalSound || letter.initialSound,
+    audioUrl: getLetterAudioUrl(letter, 'letter'),
+  };
+}
+
+/**
+ * 声调计算 - 占位实现
+ *
+ * TODO: 在后续迭代中实现完整的声调计算逻辑
+ * 需要考虑: 辅音类别 + 元音长短 + 声调符号 → 最终声调
+ */
+function generateToneCalculationQuestion(letter: Letter): AlphabetQuestion {
+  // 占位实现: 返回一个简单的固定题目
+  const placeholderOptions: Letter[] = [
+    { ...letter, thaiChar: '第1声(平声)' } as Letter,
+    { ...letter, thaiChar: '第2声(低声)' } as Letter,
+    { ...letter, thaiChar: '第3声(降声)' } as Letter,
+  ];
+
+  return {
+    id: `tone-calculation-${letter._id}-${Date.now()}`,
+    gameType: AlphabetGameType.TONE_CALCULATION,
+    targetLetter: letter,
+    options: placeholderOptions,
+    correctAnswer: '第1声(平声)', // 占位答案
+    audioUrl: getLetterAudioUrl(letter, 'letter'),
+  };
+}
+
+/**
+ * 拼读数学 - 占位实现
+ *
+ * TODO: 在后续迭代中实现完整的拼读逻辑
+ * 需要考虑: 辅音 + 元音的组合发音
+ */
+function generatePhonicsMathQuestion(letter: Letter): AlphabetQuestion {
+  // 占位实现: 返回一个简单的拼读题
+  const syllable = `${letter.thaiChar}า`; // 辅音 + 长元音 า
+  const placeholderOptions: Letter[] = [
+    { ...letter, thaiChar: syllable } as Letter,
+    { ...letter, thaiChar: `${letter.thaiChar}ิ` } as Letter,
+    { ...letter, thaiChar: `${letter.thaiChar}ุ` } as Letter,
+  ];
+
+  return {
+    id: `phonics-math-${letter._id}-${Date.now()}`,
+    gameType: AlphabetGameType.PHONICS_MATH,
+    targetLetter: letter,
+    options: placeholderOptions,
+    correctAnswer: syllable, // 占位答案
+    audioUrl: getLetterAudioUrl(letter, 'syllable'),
+  };
+}
+
+// ===== 辅助函数 =====
+
+/**
+ * 随机打乱数组
+ */
+function shuffle<T>(arr: T[]): T[] {
+  return [...arr].sort(() => Math.random() - 0.5);
+}
+
+/**
+ * 将辅音类别映射为中文标签
+ */
+function mapClassToLabel(cls: string): string {
+  if (cls === 'mid') return 'components.miniReview.midClass';
+  if (cls === 'high') return 'components.miniReview.highClass';
+  return 'components.miniReview.lowClass';
+}
+
+// ===== 向后兼容的导出 =====
+
+/**
+ * @deprecated 请使用新的 generateQuestion 函数
+ *
+ * 为了向后兼容,保留旧的函数签名
+ * 会在后续版本中移除
+ */
+export function generateAlphabetQuestion(
+  letter: Letter,
+  pool: Letter[],
+  preferredType?: any // 使用 any 避免导入旧的 QuestionType
+): any {
+  // 将旧的调用转换为新的格式
+  const queueItem: AlphabetQueueItem = {
+    letterId: letter._id,
+    gameType: AlphabetGameType.SOUND_TO_LETTER, // 默认使用听音选字
+    letter,
+  };
+
+  return generateQuestion(queueItem, pool);
+}
 ````
 
 ## File: src/entities/types/alphabet.types.ts
@@ -17413,334 +22072,6 @@ export interface VocabularyProgress {
     totalCount: number;
     accuracy: number;
     masteredIds: string[];
-}
-````
-
-## File: src/utils/apiClient.ts
-````typescript
-// src/utils/apiClient.ts
-
-import {
-  getApiBaseUrl,
-  CURRENT_BACKEND,
-  logBackendInfo,
-} from '../config/backend.config';
-import { getEndpoint, replacePathParams } from '../config/api.endpoints';
-import type { EndpointMap } from '../config/api.endpoints';
-import { API_TIMEOUT, ERROR_MESSAGES } from '../config/constants';
-import type { ApiResponse } from '../entities/types/api.types';
-
-interface RequestOptions {
-  timeout?: number;
-  headers?: Record<string, string>;
-  pathParams?: Record<string, string>;  // 路径参数
-}
-
-// Cloud Function 调用可选参数
-export interface CloudFunctionOptions {
-  /**
-   * 云函数的 HTTP 触发路径，默认值为 '/learn-vocab'。
-   * 若项目中存在其他云函数（如 '/memory-engine'），请在调用时显式传入。
-   */
-  endpoint?: string | EndpointMap;
-}
-
-class ApiClient {
-  private baseUrl: string;
-  private authToken: string | null = null;
-
-  constructor() {
-    this.baseUrl = getApiBaseUrl();
-
-    // 打印后端信息（仅开发环境）
-    logBackendInfo();
-  }
-
-  // ==================== Token 管理 ====================
-
-  setAuthToken(token: string | null) {
-    this.authToken = token;
-    if (__DEV__) {
-      console.log('🔑 Token 已设置:', token ? token.substring(0, 20) + '...' : 'null');
-    }
-  }
-
-  getAuthToken(): string | null {
-    return this.authToken;
-  }
-
-  // ==================== 构建完整 URL ====================
-
-  private buildUrl(
-    endpoint: string | EndpointMap,
-    pathParams?: Record<string, string>
-  ): string {
-    let path: string;
-
-    // 如果是端点映射对象，根据当前后端选择路径
-    if (typeof endpoint === 'object') {
-      path = getEndpoint(endpoint, CURRENT_BACKEND);
-    } else {
-      path = endpoint;
-    }
-
-    // 替换路径参数（如 /api/courses/:id）
-    if (pathParams) {
-      path = replacePathParams(path, pathParams);
-    }
-
-    // 拼接完整 URL
-    const fullUrl = `${this.baseUrl}${path}`;
-
-    return fullUrl;
-  }
-
-  // ==================== 通用请求方法 ====================
-
-  private async request<T>(
-    endpoint: string | EndpointMap,
-    method: 'GET' | 'POST' | 'PUT' | 'DELETE',
-    data?: any,
-    options: RequestOptions = {}
-  ): Promise<ApiResponse<T>> {
-    const {
-      timeout = API_TIMEOUT.DEFAULT,
-      headers = {},
-      pathParams,
-    } = options;
-
-    // 构建请求头
-    const authToken = this.getAuthToken();
-    const requestHeaders: Record<string, string> = {
-      'Content-Type': 'application/json',
-      ...headers,
-    };
-
-    // 添加 Authorization 头
-    if (authToken) {
-      requestHeaders['Authorization'] = `Bearer ${authToken}`;
-    }
-
-    // 构建 URL
-    const url = this.buildUrl(endpoint, pathParams);
-
-    // 超时控制
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeout);
-
-    try {
-      if (__DEV__) {
-        console.log(`📤 [${method}] ${url}`);
-        if (data) console.log('📦 Request data:', data);
-      }
-
-      // 发送请求
-      const response = await fetch(url, {
-        method,
-        headers: requestHeaders,
-        body: method !== 'GET' ? JSON.stringify(data) : undefined,
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
-
-      if (__DEV__) {
-        console.log(`📥 Response status: ${response.status}`);
-      }
-
-      // 解析响应
-      let responseData;
-      try {
-        responseData = await response.json();
-      } catch (parseError) {
-        console.error('❌ 解析响应失败:', parseError);
-        return {
-          success: false,
-          error: ERROR_MESSAGES.SERVER_ERROR,
-          code: 'PARSE_ERROR',
-        };
-      }
-
-      // 检查 HTTP 状态码
-      if (!response.ok) {
-        // 401 Unauthorized - Token 失效
-        if (response.status === 401) {
-          return {
-            success: false,
-            error: responseData.error || ERROR_MESSAGES.TOKEN_EXPIRED,
-            code: 'TOKEN_EXPIRED',
-          };
-        }
-
-        // 其他错误
-        return {
-          success: false,
-          error: responseData.error || responseData.message || ERROR_MESSAGES.SERVER_ERROR,
-          code: responseData.code || 'SERVER_ERROR',
-        };
-      }
-
-      // Return a successful response
-      if (__DEV__) {
-        console.log('✅ Response data:', responseData);
-      }
-
-      return {
-        success: responseData.success,
-        data: responseData.data || responseData,
-      };
-
-    } catch (error: any) {
-      clearTimeout(timeoutId);
-
-      // 超时错误
-      if (error.name === 'AbortError') {
-        console.error('⏱️ 请求超时');
-        return {
-          success: false,
-          error: ERROR_MESSAGES.TIMEOUT_ERROR,
-          code: 'TIMEOUT',
-        };
-      }
-
-      // 网络错误
-      if (!navigator.onLine) {
-        console.error('📡 网络未连接');
-        return {
-          success: false,
-          error: ERROR_MESSAGES.NETWORK_ERROR,
-          code: 'NETWORK_ERROR',
-        };
-      }
-
-      // 其他错误
-      console.error('❌ 请求失败:', error);
-      return {
-        success: false,
-        error: error.message || ERROR_MESSAGES.UNKNOWN_ERROR,
-        code: 'UNKNOWN_ERROR',
-      };
-    }
-  }
-
-  // ==================== HTTP 方法 ====================
-
-  async get<T>(
-    endpoint: string | EndpointMap,
-    options?: RequestOptions
-  ): Promise<ApiResponse<T>> {
-    return this.request<T>(endpoint, 'GET', undefined, options);
-  }
-
-  async post<T>(
-    endpoint: string | EndpointMap,
-    data?: any,
-    options?: RequestOptions
-  ): Promise<ApiResponse<T>> {
-    return this.request<T>(endpoint, 'POST', data, options);
-  }
-
-  async put<T>(
-    endpoint: string | EndpointMap,
-    data?: any,
-    options?: RequestOptions
-  ): Promise<ApiResponse<T>> {
-    return this.request<T>(endpoint, 'PUT', data, options);
-  }
-
-  async delete<T>(
-    endpoint: string | EndpointMap,
-    options?: RequestOptions
-  ): Promise<ApiResponse<T>> {
-    return this.request<T>(endpoint, 'DELETE', undefined, options);
-  }
-}
-
-// ==================== 导出单例 ====================
-export const apiClient = new ApiClient();
-
-// ==================== Cloud Function 适配器 ====================
-
-/**
- * 通用 CloudBase 云函数调用工具，适用于所有基于 `action` 参数的云函数。
- *
- * 说明（结合 V9 快照）：
- * - 对于多 action 云函数（如 `/memory-engine`、`/learn-vocab`），请求体统一为：
- *   `{ action, data }`
- * - 返回结构统一为 `ApiResponse<T>`，与 apiClient 其余 HTTP 调用保持一致。
- *
- * @param action   云函数内部业务标识，例如 'getTodayMemories'、'submitMemoryResult' 等。
- * @param data     业务请求参数对象，会被包装在 `{ action, data }` 中发送。
- * @param options  可选配置，当前支持自定义云函数入口路径（默认 '/learn-vocab'）。
- */
-export async function callCloudFunction<T>(
-  action: string,
-  data: Record<string, any>,
-  options?: CloudFunctionOptions
-): Promise<ApiResponse<T>> {
-  // DEPRECATED DEFAULT: '/learn-vocab' was removed.
-  // Ideally, callers should always provide options.endpoint, but falling back to memory-engine is safer now.
-  const endpoint = options?.endpoint ?? '/memory-engine';
-
-  try {
-    // 统一的请求体结构：{ action, data }
-    const response = await apiClient.post<T>(endpoint, {
-      action,
-      data,
-    });
-
-    // 直接返回后端的标准结构，调用方只需要判断 `success`
-    return response;
-  } catch (err: any) {
-    // 理论上 apiClient 已经捕获大部分错误，这里是兜底防护
-    console.error(`❌ CloudFunction "${action}" 调用异常:`, err);
-
-    return {
-      success: false,
-      error: err?.message ?? '网络请求异常',
-      code: err?.code ?? 'NETWORK_ERROR',
-    };
-  }
-}
-````
-
-## File: app.json
-````json
-{
-  "expo": {
-    "name": "ThaiLearningApp",
-    "slug": "ThaiLearningApp",
-    "scheme": "thailearningapp",
-    "version": "1.0.0",
-    "orientation": "portrait",
-    "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
-    "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "com.asherlliang.ThaiLearningApp"
-    },
-    "android": {
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
-      },
-      "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false,
-      "package": "com.asherlliang.ThaiLearningApp"
-    },
-    "web": {
-      "favicon": "./assets/favicon.png"
-    },
-    "plugins": [
-      "expo-localization",
-      "expo-font"
-    ]
-  }
 }
 ````
 
@@ -18319,688 +22650,6 @@ const styles = StyleSheet.create({
 });
 ````
 
-## File: app/alphabet/index.tsx
-````typescript
-// app/alphabet/index.tsx
-// 字母课程总览页（课程入口 → Lesson 1~5）
-
-import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  Pressable,
-  ActivityIndicator,
-  Modal,
-  Animated,
-  Dimensions,
-  TouchableWithoutFeedback
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
-import { ArrowLeft, X, BookOpen, ChevronRight } from 'lucide-react-native';
-
-import { Colors } from '@/src/constants/colors';
-import { Typography } from '@/src/constants/typography';
-
-import { ThaiPatternBackground } from '@/src/components/common/ThaiPatternBackground';
-import { getAllLessons } from '@/src/config/alphabet/lessonMetadata.config';
-import type { LessonMetadata } from '@/src/entities/types/phonicsRule.types';
-import { callCloudFunction } from '@/src/utils/apiClient';
-import { API_ENDPOINTS } from '@/src/config/api.endpoints';
-import { useModuleAccessStore } from '@/src/stores/moduleAccessStore';
-
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
-
-interface LessonCardProps {
-  id: string;
-  title: string;
-  description: string;
-  letterKeys: string[];
-  lessonData: LessonMetadata; // Store full metadata for drawer
-  isCurrent: boolean;
-  progress?: {
-    completed: number;
-    total: number;
-  };
-}
-
-// --- Drawer Component ---
-
-interface LessonDrawerProps {
-  visible: boolean;
-  lesson: LessonCardProps | null;
-  onClose: () => void;
-  onStart: () => void;
-  unlocked: boolean;
-}
-
-const LessonDrawer = ({ visible, lesson, onClose, onStart, unlocked }: LessonDrawerProps) => {
-  const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    if (visible) {
-      Animated.parallel([
-        Animated.timing(slideAnim, {
-          toValue: 0,
-          duration: 300,
-          useNativeDriver: true,
-        }),
-        Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: 300,
-          useNativeDriver: true,
-        }),
-      ]).start();
-    } else {
-      Animated.parallel([
-        Animated.timing(slideAnim, {
-          toValue: SCREEN_HEIGHT,
-          duration: 250,
-          useNativeDriver: true,
-        }),
-        Animated.timing(fadeAnim, {
-          toValue: 0,
-          duration: 250,
-          useNativeDriver: true,
-        }),
-      ]).start();
-    }
-  }, [visible, slideAnim, fadeAnim]);
-
-  if (!lesson) return null;
-
-  const { lessonData } = lesson;
-  const allLetters = [
-    ...lessonData.consonants,
-    ...lessonData.vowels,
-    ...lessonData.tones
-  ];
-
-  return (
-    <Modal transparent visible={visible} onRequestClose={onClose}>
-      <View style={drawerStyles.overlay}>
-        <TouchableWithoutFeedback onPress={onClose}>
-          <Animated.View style={[drawerStyles.backdrop, { opacity: fadeAnim }]} />
-        </TouchableWithoutFeedback>
-
-        <Animated.View
-          style={[
-            drawerStyles.sheet,
-            { transform: [{ translateY: slideAnim }] }
-          ]}
-        >
-          <View style={drawerStyles.handle} />
-
-          {/* Header */}
-          <View style={drawerStyles.header}>
-            <View style={{ flex: 1 }}>
-              <Text style={drawerStyles.title}>{lesson.title}</Text>
-              <Text style={drawerStyles.subtitle}>Expected time: 15 mins</Text>
-            </View>
-            <Pressable onPress={onClose} style={drawerStyles.closeButton}>
-              <X size={24} color={Colors.taupe} />
-            </Pressable>
-          </View>
-
-          <ScrollView contentContainerStyle={drawerStyles.content}>
-            <Text style={drawerStyles.sectionTitle}>Description</Text>
-            <Text style={drawerStyles.description}>{lesson.description}</Text>
-
-            <Text style={drawerStyles.sectionTitle}>Content Preview ({allLetters.length} items)</Text>
-            <View style={drawerStyles.grid}>
-              {allLetters.map((char, index) => (
-                <View key={index} style={drawerStyles.gridItem}>
-                  <Text style={drawerStyles.gridChar}>{char}</Text>
-                </View>
-              ))}
-            </View>
-          </ScrollView>
-
-          {/* Footer Action */}
-          <View style={drawerStyles.footer}>
-            <Pressable
-              style={[drawerStyles.startButton, !unlocked && drawerStyles.disabledBtn]}
-              onPress={onStart}
-              disabled={!unlocked}
-            >
-              <Text style={drawerStyles.startButtonText}>
-                {unlocked ? 'Start Learning' : 'Locked'}
-              </Text>
-              {unlocked && <ChevronRight size={20} color={Colors.white} />}
-            </Pressable>
-          </View>
-        </Animated.View>
-      </View>
-    </Modal>
-  );
-};
-
-// --- Main Screen ---
-
-export default function AlphabetCoursesScreen() {
-  const router = useRouter();
-
-  const [lessons, setLessons] = useState<LessonCardProps[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-
-  // Drawer State
-  const [selectedLesson, setSelectedLesson] = useState<LessonCardProps | null>(null);
-  const [drawerVisible, setDrawerVisible] = useState(false);
-
-  // 🔥 TODO-07: 使用 moduleAccessStore 读取已完成课程列表
-  const { userProgress, getUserProgress } = useModuleAccessStore();
-  const completedLessons = userProgress?.completedAlphabetLessons ?? [];
-
-  // 🔥 TODO-07: 确保进入页面时加载用户进度
-  useEffect(() => {
-    getUserProgress();
-  }, [getUserProgress]);
-
-  useEffect(() => {
-    let mounted = true;
-
-    const mapLessons = (list: LessonMetadata[]): LessonCardProps[] =>
-      list.map((lesson) => {
-        const letterKeys = [
-          ...lesson.consonants,
-          ...lesson.vowels,
-          ...lesson.tones,
-        ];
-
-        return {
-          id: lesson.lessonId,
-          title: lesson.title,
-          description: lesson.description,
-          letterKeys,
-          lessonData: lesson,
-          isCurrent: false,
-          progress: {
-            completed: 0,
-            total: lesson.totalCount,
-          },
-        };
-      });
-
-    (async () => {
-      try {
-        const res = await callCloudFunction<{ lessons: LessonMetadata[] }>(
-          'getAlphabetLessons',
-          {},
-          {
-            endpoint: API_ENDPOINTS.MEMORY.GET_TODAY_MEMORIES.cloudbase,
-          },
-        );
-
-        const list: LessonMetadata[] =
-          (res.success && res.data?.lessons) || getAllLessons();
-
-        if (!mounted) return;
-        setLessons(mapLessons(list));
-      } catch {
-        if (!mounted) return;
-        setLessons(mapLessons(getAllLessons()));
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    })();
-
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  // 🔥 TODO-07: 进度百分比基于已完成课程数,而非字母数
-  const totalLessons = lessons.length;
-  const overallProgressPercent =
-    totalLessons > 0
-      ? Math.min(100, Math.round((completedLessons.length / totalLessons) * 100))
-      : 0;
-
-  const handleCardPress = (lesson: LessonCardProps) => {
-    setSelectedLesson(lesson);
-    setDrawerVisible(true);
-  };
-
-  const handleStartLesson = (lessonId: string) => {
-    setDrawerVisible(false);
-    router.push(`/alphabet/${lessonId}`);
-  };
-
-  // 🔥 TODO-07: 课程解锁逻辑只依赖 completedAlphabetLessons
-  // 规则: lesson1 永远解锁, lessonN 需要 lesson(N-1) 已完成
-  const isLessonUnlocked = useCallback((lessonIndex: number): boolean => {
-    if (lessonIndex === 0) return true; // lesson1 永远解锁
-    const prevLessonId = lessons[lessonIndex - 1]?.id;
-    return prevLessonId ? completedLessons.includes(prevLessonId) : false;
-  }, [lessons, completedLessons]);
-
-  // Helper to check unlocked status for modal
-  const isSelectedUnlocked = useMemo(() => {
-    if (!selectedLesson) return false;
-    const index = lessons.findIndex(l => l.id === selectedLesson.id);
-    if (index === -1) return false;
-    return isLessonUnlocked(index);
-  }, [selectedLesson, lessons, isLessonUnlocked]);
-
-
-  return (
-    <SafeAreaView edges={['top', 'bottom']} style={styles.container}>
-
-      <View style={styles.backRow}>
-        <Pressable onPress={() => router.back()} style={styles.backButton}>
-          <ArrowLeft size={24} color={Colors.taupe} />
-          <Text style={styles.backText}>Back</Text>
-        </Pressable>
-      </View>
-
-      <View style={styles.headerContainer}>
-        <Text style={styles.headerTitle}>Alphabet Course</Text>
-        <Text style={styles.headerSubtitle}>
-          {lessons.length} Lessons · {overallProgressPercent}% Completed
-        </Text>
-      </View>
-
-      {loading ? (
-        <View style={{ flex: 1, justifyContent: 'center' }}>
-          <ActivityIndicator size="large" color={Colors.thaiGold} />
-        </View>
-      ) : (
-        <View style={{ flex: 1 }}>
-          <ScrollView style={styles.scroll} contentContainerStyle={styles.inner}>
-            <ThaiPatternBackground opacity={0.12} />
-
-            {lessons.map((lesson, index) => {
-              // 🔥 TODO-07: 解锁逻辑统一为 completedAlphabetLessons
-              const unlocked = isLessonUnlocked(index);
-
-              // 🔥 TODO-07: "当前课程" = 第一个已解锁但未完成的课程
-              const isCompleted = completedLessons.includes(lesson.id);
-              const isCurrent = unlocked && !isCompleted;
-
-              return (
-                <Pressable
-                  key={lesson.id}
-                  style={[styles.card, isCurrent && styles.activeCard]}
-                  onPress={() => handleCardPress(lesson)}
-                >
-                  <View style={styles.cardPressable}>
-                    <View style={styles.info}>
-                      <View style={styles.cardHeader}>
-                        <Text style={styles.title} numberOfLines={1}>
-                          {lesson.title}
-                        </Text>
-                        {isCurrent && (
-                          <View style={styles.currentBadge}>
-                            <Text style={styles.currentBadgeText}>Current</Text>
-                          </View>
-                        )}
-                      </View>
-
-                      <Text style={styles.description} numberOfLines={2}>
-                        {lesson.description}
-                      </Text>
-
-                      <View style={styles.footer}>
-                        <View style={styles.metaColumn}>
-                          <Text style={styles.lessonMeta}>
-                            {lesson.letterKeys.length} letters
-                          </Text>
-                        </View>
-
-                        {/* Start Learning Button - Direct Access */}
-                        <Pressable
-                          disabled={!unlocked}
-                          style={[
-                            styles.startBtn,
-                            isCurrent && styles.activeStartBtn,
-                            !unlocked && styles.disabledStartBtn,
-                          ]}
-                          // Stop propagation to prevent opening drawer when clicking Start directly
-                          onPress={(e) => {
-                            e.stopPropagation();
-                            router.push(`/alphabet/${lesson.id}`);
-                          }}
-                        >
-                          <Text
-                            style={[
-                              styles.startBtnText,
-                              isCurrent && styles.activeStartBtnText,
-                            ]}
-                          >
-                            {unlocked ? 'Start' : 'Locked'}
-                          </Text>
-                        </Pressable>
-                      </View>
-                    </View>
-                  </View>
-                </Pressable>
-              );
-            })}
-
-            <View style={{ height: 100 }} />
-          </ScrollView>
-
-          {/* Fixed Footer for Test Entry */}
-          <View style={styles.footerContainer}>
-            <Pressable
-              style={({ pressed }) => [
-                styles.unlockAllBtn,
-                pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] }
-              ]}
-              onPress={() => router.push('/alphabet/test')}
-            >
-              <Text style={styles.unlockAllText}>
-                Take Test to Unlock All
-              </Text>
-            </Pressable>
-          </View>
-        </View>
-      )}
-
-      {/* Detail Drawer */}
-      <LessonDrawer
-        visible={drawerVisible}
-        lesson={selectedLesson}
-        unlocked={isSelectedUnlocked}
-        onClose={() => setDrawerVisible(false)}
-        onStart={() => selectedLesson && handleStartLesson(selectedLesson.id)}
-      />
-
-    </SafeAreaView >
-  );
-}
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.paper,
-  },
-  headerContainer: {
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  scroll: {
-    flex: 1,
-  },
-  inner: {
-    paddingHorizontal: 24,
-    paddingVertical: 16,
-    gap: 16,
-    paddingBottom: 48,
-  },
-  backRow: {
-    width: '100%',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    alignItems: 'flex-start',
-  },
-  backButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 8,
-    borderRadius: 8,
-  },
-  backText: {
-    fontFamily: Typography.notoSerifRegular,
-    fontSize: 16,
-    color: Colors.taupe,
-    marginLeft: 4,
-  },
-  headerTitle: {
-    fontFamily: Typography.playfairBold,
-    fontSize: 28,
-    color: Colors.ink,
-    marginBottom: 4,
-  },
-  headerSubtitle: {
-    fontFamily: Typography.notoSerifRegular,
-    fontSize: 14,
-    color: Colors.taupe,
-  },
-  card: {
-    flexDirection: 'row',
-    backgroundColor: Colors.white,
-    borderRadius: 16,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#EFEFEF',
-    minHeight: 120,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  activeCard: {
-    borderColor: Colors.thaiGold,
-    borderWidth: 1.5,
-    backgroundColor: '#FFFCF5',
-  },
-  cardPressable: {
-    flex: 1,
-    flexDirection: 'row',
-  },
-  info: {
-    flex: 1,
-    padding: 16,
-    justifyContent: 'space-between',
-    gap: 8,
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 8,
-  },
-  title: {
-    flex: 1,
-    fontFamily: Typography.notoSerifBold,
-    fontSize: 16,
-    color: Colors.ink,
-  },
-  currentBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    backgroundColor: 'rgba(212, 175, 55, 0.1)',
-    borderRadius: 4,
-  },
-  currentBadgeText: {
-    fontSize: 10,
-    color: Colors.thaiGold,
-    fontFamily: Typography.notoSerifBold,
-    textTransform: 'uppercase',
-  },
-  description: {
-    fontFamily: Typography.notoSerifRegular,
-    fontSize: 13,
-    color: Colors.taupe,
-    lineHeight: 18,
-  },
-  lessonMeta: {
-    fontFamily: Typography.notoSerifBold,
-    fontSize: 12,
-    color: Colors.taupe,
-  },
-  footer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  metaColumn: {
-    flex: 1,
-  },
-  startBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: Colors.ink,
-    borderRadius: 20,
-  },
-  activeStartBtn: {
-    backgroundColor: Colors.thaiGold,
-  },
-  startBtnText: {
-    fontSize: 12,
-    color: Colors.white,
-    fontFamily: Typography.notoSerifBold,
-  },
-  activeStartBtnText: {
-    color: Colors.white,
-  },
-  disabledStartBtn: {
-    backgroundColor: '#E0E0E0',
-  },
-  // Footer Button Styles
-  footerContainer: {
-    padding: 24,
-    paddingBottom: 34, // Extra padding for safe area
-    backgroundColor: Colors.white,
-    borderTopWidth: 1,
-    borderTopColor: Colors.sand,
-  },
-  unlockAllBtn: {
-    width: '100%',
-    backgroundColor: Colors.ink,
-    paddingVertical: 16,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  unlockAllText: {
-    fontFamily: Typography.playfairBold,
-    fontSize: 16,
-    color: Colors.white,
-    letterSpacing: 0.5,
-  },
-});
-
-const drawerStyles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.5)',
-  },
-  backdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'black',
-  },
-  sheet: {
-    backgroundColor: Colors.paper,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    maxHeight: '80%',
-    minHeight: '50%',
-    paddingBottom: 34,
-  },
-  handle: {
-    width: 40,
-    height: 4,
-    backgroundColor: '#E0E0E0',
-    borderRadius: 2,
-    alignSelf: 'center',
-    marginTop: 12,
-    marginBottom: 8,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    paddingHorizontal: 24,
-    paddingTop: 16,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
-  },
-  title: {
-    fontFamily: Typography.playfairBold,
-    fontSize: 24,
-    color: Colors.ink,
-    marginBottom: 4,
-  },
-  subtitle: {
-    fontFamily: Typography.notoSerifRegular,
-    fontSize: 14,
-    color: Colors.taupe,
-  },
-  closeButton: {
-    padding: 4,
-  },
-  content: {
-    padding: 24,
-  },
-  sectionTitle: {
-    fontFamily: Typography.notoSerifBold,
-    fontSize: 16,
-    color: Colors.ink,
-    marginBottom: 12,
-    marginTop: 8,
-  },
-  description: {
-    fontFamily: Typography.notoSerifRegular,
-    fontSize: 15,
-    color: Colors.taupe,
-    lineHeight: 22,
-    marginBottom: 24,
-  },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  gridItem: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-    backgroundColor: Colors.white,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#EFEFEF',
-  },
-  gridChar: {
-    fontFamily: Typography.playfairBold,
-    fontSize: 20,
-    color: Colors.ink,
-  },
-  footer: {
-    padding: 24,
-    borderTopWidth: 1,
-    borderTopColor: '#F0F0F0',
-  },
-  startButton: {
-    backgroundColor: Colors.thaiGold,
-    borderRadius: 16,
-    paddingVertical: 16,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 8,
-    shadowColor: Colors.thaiGold,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  startButtonText: {
-    fontFamily: Typography.notoSerifBold,
-    fontSize: 18,
-    color: Colors.white,
-  },
-  disabledBtn: {
-    backgroundColor: '#E0E0E0',
-    shadowOpacity: 0,
-  }
-});
-````
-
 ## File: cloudbase/functions/user-register/index.js
 ````javascript
 const cloud = require('wx-server-sdk');
@@ -19155,6 +22804,69 @@ exports.main = async (event, context) => {
     };
   }
 };
+````
+
+## File: cloudbase/cloudbaserc.json
+````json
+{
+  "envId": "cloud1-1gjcyrdd7ab927c6",
+  "region": "ap-shanghai",
+  "functionRoot": "./functions",
+  "functions": [
+    {
+      "name": "user-register",
+      "timeout": 15,
+      "runtime": "Nodejs18.15",
+      "handler": "index.main"
+    },
+    {
+      "name": "user-login",
+      "timeout": 15,
+      "runtime": "Nodejs18.15",
+      "handler": "index.main"
+    },
+    {
+      "name": "user-reset-password",
+      "timeout": 15,
+      "runtime": "Nodejs18.15",
+      "handler": "index.main"
+    },
+    {
+      "name": "user-update-profile",
+      "timeout": 15,
+      "runtime": "Nodejs18.15",
+      "handler": "index.main"
+    },
+    {
+      "name": "memory-engine",
+      "timeout": 20,
+      "runtime": "Nodejs18.15",
+      "handler": "index.main",
+      "installDependency": true
+    },
+    {
+      "name": "alphabet",
+      "timeout": 20,
+      "runtime": "Nodejs18.15",
+      "handler": "index.main",
+      "installDependency": true
+    },
+    {
+      "name": "storage-download",
+      "timeout": 20,
+      "runtime": "Nodejs18.15",
+      "handler": "index.main",
+      "installDependency": true
+    },
+    {
+      "name": "ai-engine",
+      "timeout": 200,
+      "runtime": "Nodejs18.15",
+      "handler": "index.main",
+      "installDependency": true
+    }
+  ]
+}
 ````
 
 ## File: src/components/learning/alphabet/AlphabetLearningView.tsx
@@ -19714,6 +23426,693 @@ docs/project-freeze
 .env.local
 ````
 
+## File: app/alphabet/index.tsx
+````typescript
+// app/alphabet/index.tsx
+// 字母课程总览页（课程入口 → Lesson 1~5）
+
+import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  Pressable,
+  ActivityIndicator,
+  Modal,
+  Animated,
+  Dimensions,
+  TouchableWithoutFeedback
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
+import { ArrowLeft, X, BookOpen, ChevronRight } from 'lucide-react-native';
+import { useTranslation } from 'react-i18next';
+
+import { Colors } from '@/src/constants/colors';
+import { Typography } from '@/src/constants/typography';
+
+import { ThaiPatternBackground } from '@/src/components/common/ThaiPatternBackground';
+import { getAllLessons } from '@/src/config/alphabet/lessonMetadata.config';
+import type { LessonMetadata } from '@/src/entities/types/phonicsRule.types';
+import { callCloudFunction } from '@/src/utils/apiClient';
+import { API_ENDPOINTS } from '@/src/config/api.endpoints';
+import { useModuleAccessStore } from '@/src/stores/moduleAccessStore';
+
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+
+interface LessonCardProps {
+  id: string;
+  title: string;
+  description: string;
+  letterKeys: string[];
+  lessonData: LessonMetadata; // Store full metadata for drawer
+  isCurrent: boolean;
+  progress?: {
+    completed: number;
+    total: number;
+  };
+}
+
+// --- Drawer Component ---
+
+interface LessonDrawerProps {
+  visible: boolean;
+  lesson: LessonCardProps | null;
+  onClose: () => void;
+  onStart: () => void;
+  unlocked: boolean;
+}
+
+const LessonDrawer = ({ visible, lesson, onClose, onStart, unlocked }: LessonDrawerProps) => {
+  const { t } = useTranslation();
+  const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (visible) {
+      Animated.parallel([
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    } else {
+      Animated.parallel([
+        Animated.timing(slideAnim, {
+          toValue: SCREEN_HEIGHT,
+          duration: 250,
+          useNativeDriver: true,
+        }),
+        Animated.timing(fadeAnim, {
+          toValue: 0,
+          duration: 250,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [visible, slideAnim, fadeAnim]);
+
+  if (!lesson) return null;
+
+  const { lessonData } = lesson;
+  const allLetters = [
+    ...lessonData.consonants,
+    ...lessonData.vowels,
+    ...lessonData.tones
+  ];
+
+  return (
+    <Modal transparent visible={visible} onRequestClose={onClose}>
+      <View style={drawerStyles.overlay}>
+        <TouchableWithoutFeedback onPress={onClose}>
+          <Animated.View style={[drawerStyles.backdrop, { opacity: fadeAnim }]} />
+        </TouchableWithoutFeedback>
+
+        <Animated.View
+          style={[
+            drawerStyles.sheet,
+            { transform: [{ translateY: slideAnim }] }
+          ]}
+        >
+          <View style={drawerStyles.handle} />
+
+          {/* Header */}
+          <View style={drawerStyles.header}>
+            <View style={{ flex: 1 }}>
+              <Text style={drawerStyles.title}>{lesson.title}</Text>
+              <Text style={drawerStyles.subtitle}>{t('alphabetCourse.drawer.expectedTime')}</Text>
+            </View>
+            <Pressable onPress={onClose} style={drawerStyles.closeButton}>
+              <X size={24} color={Colors.taupe} />
+            </Pressable>
+          </View>
+
+          <ScrollView contentContainerStyle={drawerStyles.content}>
+            <Text style={drawerStyles.sectionTitle}>{t('alphabetCourse.drawer.description')}</Text>
+            <Text style={drawerStyles.description}>
+              {t(`alphabetCourse.lessons.${lesson.id}.description`, { defaultValue: lesson.description })}
+            </Text>
+
+            <Text style={drawerStyles.sectionTitle}>{t('alphabetCourse.drawer.contentPreview', { count: allLetters.length })}</Text>
+            <View style={drawerStyles.grid}>
+              {allLetters.map((char, index) => (
+                <View key={index} style={drawerStyles.gridItem}>
+                  <Text style={drawerStyles.gridChar}>{char}</Text>
+                </View>
+              ))}
+            </View>
+          </ScrollView>
+
+          {/* Footer Action */}
+          <View style={drawerStyles.footer}>
+            <Pressable
+              style={[drawerStyles.startButton, !unlocked && drawerStyles.disabledBtn]}
+              onPress={onStart}
+              disabled={!unlocked}
+            >
+              <Text style={drawerStyles.startButtonText}>
+                {unlocked ? t('alphabet.start') : t('courses.locked')}
+              </Text>
+              {unlocked && <ChevronRight size={20} color={Colors.white} />}
+            </Pressable>
+          </View>
+        </Animated.View>
+      </View>
+    </Modal>
+  );
+};
+
+// --- Main Screen ---
+
+export default function AlphabetCoursesScreen() {
+  const router = useRouter();
+  const { t } = useTranslation();
+
+  const [lessons, setLessons] = useState<LessonCardProps[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+
+  // Drawer State
+  const [selectedLesson, setSelectedLesson] = useState<LessonCardProps | null>(null);
+  const [drawerVisible, setDrawerVisible] = useState(false);
+
+  // 🔥 TODO-07: 使用 moduleAccessStore 读取已完成课程列表
+  const { userProgress, getUserProgress } = useModuleAccessStore();
+  const completedLessons = userProgress?.completedAlphabetLessons ?? [];
+
+  // 🔥 TODO-07: 确保进入页面时加载用户进度
+  useEffect(() => {
+    getUserProgress();
+  }, [getUserProgress]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const mapLessons = (list: LessonMetadata[]): LessonCardProps[] =>
+      list.map((lesson) => {
+        const letterKeys = [
+          ...lesson.consonants,
+          ...lesson.vowels,
+          ...lesson.tones,
+        ];
+
+        return {
+          id: lesson.lessonId,
+          title: lesson.title,
+          description: lesson.description,
+          letterKeys,
+          lessonData: lesson,
+          isCurrent: false,
+          progress: {
+            completed: 0,
+            total: lesson.totalCount,
+          },
+        };
+      });
+
+    (async () => {
+      try {
+        const res = await callCloudFunction<{ lessons: LessonMetadata[] }>(
+          'getAlphabetLessons',
+          {},
+          {
+            endpoint: API_ENDPOINTS.MEMORY.GET_TODAY_MEMORIES.cloudbase,
+          },
+        );
+
+        const list: LessonMetadata[] =
+          (res.success && res.data?.lessons) || getAllLessons();
+
+        if (!mounted) return;
+        setLessons(mapLessons(list));
+      } catch {
+        if (!mounted) return;
+        setLessons(mapLessons(getAllLessons()));
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  // 🔥 TODO-07: 进度百分比基于已完成课程数,而非字母数
+  const totalLessons = lessons.length;
+  const overallProgressPercent =
+    totalLessons > 0
+      ? Math.min(100, Math.round((completedLessons.length / totalLessons) * 100))
+      : 0;
+
+  const handleCardPress = (lesson: LessonCardProps) => {
+    setSelectedLesson(lesson);
+    setDrawerVisible(true);
+  };
+
+  const handleStartLesson = (lessonId: string) => {
+    setDrawerVisible(false);
+    router.push(`/alphabet/${lessonId}`);
+  };
+
+  // 🔥 TODO-07: 课程解锁逻辑只依赖 completedAlphabetLessons
+  // 规则: lesson1 永远解锁, lessonN 需要 lesson(N-1) 已完成
+  const isLessonUnlocked = useCallback((lessonIndex: number): boolean => {
+    if (lessonIndex === 0) return true; // lesson1 永远解锁
+    const prevLessonId = lessons[lessonIndex - 1]?.id;
+    return prevLessonId ? completedLessons.includes(prevLessonId) : false;
+  }, [lessons, completedLessons]);
+
+  // Helper to check unlocked status for modal
+  const isSelectedUnlocked = useMemo(() => {
+    if (!selectedLesson) return false;
+    const index = lessons.findIndex(l => l.id === selectedLesson.id);
+    if (index === -1) return false;
+    return isLessonUnlocked(index);
+  }, [selectedLesson, lessons, isLessonUnlocked]);
+
+
+  return (
+    <SafeAreaView edges={['top', 'bottom']} style={styles.container}>
+
+      <View style={styles.backRow}>
+        <Pressable onPress={() => router.back()} style={styles.backButton}>
+          <ArrowLeft size={24} color={Colors.taupe} />
+          <Text style={styles.backText}>{t('alphabetCourse.back')}</Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.headerContainer}>
+        <Text style={styles.headerTitle}>{t('alphabetCourse.title')}</Text>
+        <Text style={styles.headerSubtitle}>
+          {t('alphabetCourse.headerSubtitle', { count: lessons.length, percent: overallProgressPercent })}
+        </Text>
+      </View>
+
+      {loading ? (
+        <View style={{ flex: 1, justifyContent: 'center' }}>
+          <ActivityIndicator size="large" color={Colors.thaiGold} />
+        </View>
+      ) : (
+        <View style={{ flex: 1 }}>
+          <ScrollView style={styles.scroll} contentContainerStyle={styles.inner}>
+            <ThaiPatternBackground opacity={0.12} />
+
+            {lessons.map((lesson, index) => {
+              // 🔥 TODO-07: 解锁逻辑统一为 completedAlphabetLessons
+              const unlocked = isLessonUnlocked(index);
+
+              // 🔥 TODO-07: "当前课程" = 第一个已解锁但未完成的课程
+              const isCompleted = completedLessons.includes(lesson.id);
+              const isCurrent = unlocked && !isCompleted;
+
+              return (
+                <Pressable
+                  key={lesson.id}
+                  style={[styles.card, isCurrent && styles.activeCard]}
+                  onPress={() => handleCardPress(lesson)}
+                >
+                  <View style={styles.cardPressable}>
+                    <View style={styles.info}>
+                      <View style={styles.cardHeader}>
+                        <Text style={styles.title} numberOfLines={1}>
+                          {t(`alphabetCourse.lessons.${lesson.id}.title`, { defaultValue: lesson.title })}
+                        </Text>
+                        {isCurrent && (
+                          <View style={styles.currentBadge}>
+                            <Text style={styles.currentBadgeText}>{t('alphabetCourse.currentBadge')}</Text>
+                          </View>
+                        )}
+                      </View>
+
+                      <Text style={styles.description} numberOfLines={2}>
+                        {t(`alphabetCourse.lessons.${lesson.id}.description`, { defaultValue: lesson.description })}
+                      </Text>
+
+                      <View style={styles.footer}>
+                        <View style={styles.metaColumn}>
+                          <Text style={styles.lessonMeta}>
+                            {t('alphabetCourse.letterCount', { count: lesson.letterKeys.length })}
+                          </Text>
+                        </View>
+
+                        {/* Start Learning Button - Direct Access */}
+                        <Pressable
+                          disabled={!unlocked}
+                          style={[
+                            styles.startBtn,
+                            isCurrent && styles.activeStartBtn,
+                            !unlocked && styles.disabledStartBtn,
+                          ]}
+                          // Stop propagation to prevent opening drawer when clicking Start directly
+                          onPress={(e) => {
+                            e.stopPropagation();
+                            router.push(`/alphabet/${lesson.id}`);
+                          }}
+                        >
+                          <Text
+                            style={[
+                              styles.startBtnText,
+                              isCurrent && styles.activeStartBtnText,
+                            ]}
+                          >
+                            {unlocked ? t('alphabetCourse.start') : t('courses.locked')}
+                          </Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  </View>
+                </Pressable>
+              );
+            })}
+
+            <View style={{ height: 100 }} />
+          </ScrollView>
+
+          {/* Fixed Footer for Test Entry */}
+          <View style={styles.footerContainer}>
+            <Pressable
+              style={({ pressed }) => [
+                styles.unlockAllBtn,
+                pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] }
+              ]}
+              onPress={() => router.push('/alphabet/test')}
+            >
+              <Text style={styles.unlockAllText}>
+                {t('alphabetCourse.takeTest')}
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
+
+      {/* Detail Drawer */}
+      <LessonDrawer
+        visible={drawerVisible}
+        lesson={selectedLesson}
+        unlocked={isSelectedUnlocked}
+        onClose={() => setDrawerVisible(false)}
+        onStart={() => selectedLesson && handleStartLesson(selectedLesson.id)}
+      />
+
+    </SafeAreaView >
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: Colors.paper,
+  },
+  headerContainer: {
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  scroll: {
+    flex: 1,
+  },
+  inner: {
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    gap: 16,
+    paddingBottom: 48,
+  },
+  backRow: {
+    width: '100%',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    alignItems: 'flex-start',
+  },
+  backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 8,
+    borderRadius: 8,
+  },
+  backText: {
+    fontFamily: Typography.notoSerifRegular,
+    fontSize: 16,
+    color: Colors.taupe,
+    marginLeft: 4,
+  },
+  headerTitle: {
+    fontFamily: Typography.playfairBold,
+    fontSize: 28,
+    color: Colors.ink,
+    marginBottom: 4,
+  },
+  headerSubtitle: {
+    fontFamily: Typography.notoSerifRegular,
+    fontSize: 14,
+    color: Colors.taupe,
+  },
+  card: {
+    flexDirection: 'row',
+    backgroundColor: Colors.white,
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#EFEFEF',
+    minHeight: 120,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  activeCard: {
+    borderColor: Colors.thaiGold,
+    borderWidth: 1.5,
+    backgroundColor: '#FFFCF5',
+  },
+  cardPressable: {
+    flex: 1,
+    flexDirection: 'row',
+  },
+  info: {
+    flex: 1,
+    padding: 16,
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 8,
+  },
+  title: {
+    flex: 1,
+    fontFamily: Typography.notoSerifBold,
+    fontSize: 16,
+    color: Colors.ink,
+  },
+  currentBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    backgroundColor: 'rgba(212, 175, 55, 0.1)',
+    borderRadius: 4,
+  },
+  currentBadgeText: {
+    fontSize: 10,
+    color: Colors.thaiGold,
+    fontFamily: Typography.notoSerifBold,
+    textTransform: 'uppercase',
+  },
+  description: {
+    fontFamily: Typography.notoSerifRegular,
+    fontSize: 13,
+    color: Colors.taupe,
+    lineHeight: 18,
+  },
+  lessonMeta: {
+    fontFamily: Typography.notoSerifBold,
+    fontSize: 12,
+    color: Colors.taupe,
+  },
+  footer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  metaColumn: {
+    flex: 1,
+  },
+  startBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: Colors.ink,
+    borderRadius: 20,
+  },
+  activeStartBtn: {
+    backgroundColor: Colors.thaiGold,
+  },
+  startBtnText: {
+    fontSize: 12,
+    color: Colors.white,
+    fontFamily: Typography.notoSerifBold,
+  },
+  activeStartBtnText: {
+    color: Colors.white,
+  },
+  disabledStartBtn: {
+    backgroundColor: '#E0E0E0',
+  },
+  // Footer Button Styles
+  footerContainer: {
+    padding: 24,
+    paddingBottom: 34, // Extra padding for safe area
+    backgroundColor: Colors.white,
+    borderTopWidth: 1,
+    borderTopColor: Colors.sand,
+  },
+  unlockAllBtn: {
+    width: '100%',
+    backgroundColor: Colors.ink,
+    paddingVertical: 16,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  unlockAllText: {
+    fontFamily: Typography.playfairBold,
+    fontSize: 16,
+    color: Colors.white,
+    letterSpacing: 0.5,
+  },
+});
+
+const drawerStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'black',
+  },
+  sheet: {
+    backgroundColor: Colors.paper,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '80%',
+    minHeight: '50%',
+    paddingBottom: 34,
+  },
+  handle: {
+    width: 40,
+    height: 4,
+    backgroundColor: '#E0E0E0',
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    paddingHorizontal: 24,
+    paddingTop: 16,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+  },
+  title: {
+    fontFamily: Typography.playfairBold,
+    fontSize: 24,
+    color: Colors.ink,
+    marginBottom: 4,
+  },
+  subtitle: {
+    fontFamily: Typography.notoSerifRegular,
+    fontSize: 14,
+    color: Colors.taupe,
+  },
+  closeButton: {
+    padding: 4,
+  },
+  content: {
+    padding: 24,
+  },
+  sectionTitle: {
+    fontFamily: Typography.notoSerifBold,
+    fontSize: 16,
+    color: Colors.ink,
+    marginBottom: 12,
+    marginTop: 8,
+  },
+  description: {
+    fontFamily: Typography.notoSerifRegular,
+    fontSize: 15,
+    color: Colors.taupe,
+    lineHeight: 22,
+    marginBottom: 24,
+  },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  gridItem: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: Colors.white,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#EFEFEF',
+  },
+  gridChar: {
+    fontFamily: Typography.playfairBold,
+    fontSize: 20,
+    color: Colors.ink,
+  },
+  footer: {
+    padding: 24,
+    borderTopWidth: 1,
+    borderTopColor: '#F0F0F0',
+  },
+  startButton: {
+    backgroundColor: Colors.thaiGold,
+    borderRadius: 16,
+    paddingVertical: 16,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+    shadowColor: Colors.thaiGold,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  startButtonText: {
+    fontFamily: Typography.notoSerifBold,
+    fontSize: 18,
+    color: Colors.white,
+  },
+  disabledBtn: {
+    backgroundColor: '#E0E0E0',
+    shadowOpacity: 0,
+  }
+});
+````
+
 ## File: app/_layout.tsx
 ````typescript
 import { Stack, useRouter, useSegments, useRootNavigationState } from 'expo-router';
@@ -19806,128 +24205,6 @@ export default function RootLayout() {
     </GestureHandlerRootView>
   );
 }
-````
-
-## File: cloudbase/functions/memory-engine/handlers/getUserProgress.js
-````javascript
-/**
- * 获取用户学习进度
- * Action: getUserProgress
- */
-'use strict';
-
-const { createResponse } = require('../utils/response');
-
-/**
- * @param {Object} db - 数据库实例
- * @param {Object} params - 请求参数
- */
-async function getUserProgress(db, params) {
-  const { userId } = params;
-
-  // 🔍 调试日志：打印收到的 userId
-  console.log('📥 [getUserProgress] 收到请求，userId:', userId);
-
-  if (!userId) {
-    return createResponse(false, null, 'Missing userId', 'INVALID_PARAMS');
-  }
-
-  try {
-    // 2. 获取用户进度记录
-    // ❌ 修正: 不要用 getOne(), 用 limit(1).get()
-    const progressResult = await db.collection('user_progress')
-      .where({ userId })
-      .limit(1)
-      .get();
-
-    if (!progressResult.data || progressResult.data.length === 0) {
-      return createResponse(false, null, '用户进度记录不存在', 'USER_PROGRESS_NOT_FOUND');
-    }
-
-    const progress = progressResult.data[0];
-
-    // 🔥 获取字母模块专属进度（包含 currentRound）
-    let alphabetProgress = null;
-    if (params.entityType === 'letter') {
-      const alphabetProgressResult = await db.collection('user_alphabet_progress')
-        .where({ userId })
-        .limit(1)
-        .get();
-
-      console.log('📊 [getUserProgress] alphabetProgressResult:', {
-        found: alphabetProgressResult.data?.length > 0,
-        data: alphabetProgressResult.data?.[0]
-      });
-
-      if (alphabetProgressResult.data && alphabetProgressResult.data.length > 0) {
-        alphabetProgress = alphabetProgressResult.data[0];
-        console.log('📊 [getUserProgress] alphabetProgress.currentRound:', alphabetProgress.currentRound);
-      } else {
-        console.log('⚠️ [getUserProgress] No alphabet progress found for user:', userId);
-      }
-    }
-
-    // 3. 统计各模块学习数据
-    // 注意: 如果数据量很大，count() 比 get() 更高效
-    const letterCountResult = await db.collection('memory_status')
-      .where({ userId, entityType: 'letter' })
-      .count();
-
-    const letterMasteredResult = await db.collection('memory_status')
-      .where({ userId, entityType: 'letter', masteryLevel: db.command.gte(0.7) })
-      .count();
-
-    const wordCountResult = await db.collection('memory_status')
-      .where({ userId, entityType: 'word' })
-      .count();
-
-    const wordMasteredResult = await db.collection('memory_status')
-      .where({ userId, entityType: 'word', masteryLevel: db.command.gte(0.7) })
-      .count();
-
-    // 4. 组装
-    const result = {
-      ...progress,
-      // 🔥 合并字母模块专属字段（currentRound, completedLessons, roundHistory）
-      ...(alphabetProgress ? {
-        currentRound: alphabetProgress.currentRound,
-        completedLessons: alphabetProgress.completedLessons || [],  // 🔥 新增字段
-        roundHistory: alphabetProgress.roundHistory || []  // 🔥 P0-A: 补充 roundHistory
-      } : {}),
-      statistics: {
-        letter: {
-          total: 44,
-          learned: letterCountResult.total,
-          mastered: letterMasteredResult.total,
-          progress: letterCountResult.total > 0 ? (letterMasteredResult.total / 44).toFixed(2) : 0
-        },
-        word: {
-          total: 3500,
-          learned: wordCountResult.total,
-          mastered: wordMasteredResult.total,
-          progress: wordCountResult.total > 0 ? (wordMasteredResult.total / 3500).toFixed(2) : 0
-        }
-      },
-      unlockStatus: {
-        letter: true,
-        word: progress.wordUnlocked,
-        sentence: progress.sentenceUnlocked,
-        article: progress.articleUnlocked
-      }
-    };
-
-    console.log('📊 [getUserProgress] roundHistory returned:', (alphabetProgress?.roundHistory || []).length);
-
-    // 与前端约定：data.progress 为进度对象
-    return createResponse(true, { progress: result }, '获取用户进度成功');
-
-  } catch (error) {
-    console.error('getUserProgress error:', error);
-    return createResponse(false, null, error.message, 'SERVER_ERROR');
-  }
-}
-
-module.exports = getUserProgress;
 ````
 
 ## File: src/components/learning/alphabet/AlphabetLearningEngineView.tsx
@@ -20577,6 +24854,347 @@ export const useUserStore = create<UserState>()(
 );
 ````
 
+## File: src/utils/apiClient.ts
+````typescript
+// src/utils/apiClient.ts
+
+import { Platform } from 'react-native';
+import {
+  getApiBaseUrl,
+  CURRENT_BACKEND,
+  logBackendInfo,
+} from '../config/backend.config';
+import { getEndpoint, replacePathParams } from '../config/api.endpoints';
+import type { EndpointMap } from '../config/api.endpoints';
+import { API_TIMEOUT, ERROR_MESSAGES } from '../config/constants';
+import type { ApiResponse } from '../entities/types/api.types';
+
+interface RequestOptions {
+  timeout?: number;
+  headers?: Record<string, string>;
+  pathParams?: Record<string, string>;  // 路径参数
+}
+
+// Cloud Function 调用可选参数
+export interface CloudFunctionOptions {
+  /**
+   * 云函数的 HTTP 触发路径，默认值为 '/learn-vocab'。
+   * 若项目中存在其他云函数（如 '/memory-engine'），请在调用时显式传入。
+   */
+  endpoint?: string | EndpointMap;
+  /** 请求超时（毫秒），不传则使用 API_TIMEOUT.DEFAULT。AI 类请求建议传 API_TIMEOUT.AI。 */
+  timeout?: number;
+}
+
+class ApiClient {
+  private baseUrl: string;
+  private authToken: string | null = null;
+
+  constructor() {
+    this.baseUrl = getApiBaseUrl();
+
+    // 打印后端信息（仅开发环境）
+    logBackendInfo();
+  }
+
+  // ==================== Token 管理 ====================
+
+  setAuthToken(token: string | null) {
+    this.authToken = token;
+    if (__DEV__) {
+      console.log('🔑 Token 已设置:', token ? token.substring(0, 20) + '...' : 'null');
+    }
+  }
+
+  getAuthToken(): string | null {
+    return this.authToken;
+  }
+
+  // ==================== 构建完整 URL ====================
+
+  private buildUrl(
+    endpoint: string | EndpointMap,
+    pathParams?: Record<string, string>
+  ): string {
+    let path: string;
+
+    // 如果是端点映射对象，根据当前后端选择路径
+    if (typeof endpoint === 'object') {
+      path = getEndpoint(endpoint, CURRENT_BACKEND);
+    } else {
+      path = endpoint;
+    }
+
+    // 替换路径参数（如 /api/courses/:id）
+    if (pathParams) {
+      path = replacePathParams(path, pathParams);
+    }
+
+    // 拼接完整 URL
+    const fullUrl = `${this.baseUrl}${path}`;
+
+    return fullUrl;
+  }
+
+  // ==================== 通用请求方法 ====================
+
+  private async request<T>(
+    endpoint: string | EndpointMap,
+    method: 'GET' | 'POST' | 'PUT' | 'DELETE',
+    data?: any,
+    options: RequestOptions = {}
+  ): Promise<ApiResponse<T>> {
+    const {
+      timeout = API_TIMEOUT.DEFAULT,
+      headers = {},
+      pathParams,
+    } = options;
+
+    // 构建请求头
+    const authToken = this.getAuthToken();
+    const requestHeaders: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...headers,
+    };
+
+    // 添加 Authorization 头
+    if (authToken) {
+      requestHeaders['Authorization'] = `Bearer ${authToken}`;
+    }
+
+    // 构建 URL
+    const url = this.buildUrl(endpoint, pathParams);
+
+    // 超时控制
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+    try {
+      if (__DEV__) {
+        console.log(`📤 [${method}] ${url}`);
+        if (data) console.log('📦 Request data:', data);
+      }
+
+      // 发送请求
+      const response = await fetch(url, {
+        method,
+        headers: requestHeaders,
+        body: method !== 'GET' ? JSON.stringify(data) : undefined,
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (__DEV__) {
+        console.log(`📥 Response status: ${response.status}`);
+      }
+
+      // 解析响应
+      let responseData;
+      try {
+        responseData = await response.json();
+      } catch (parseError) {
+        console.error('❌ 解析响应失败:', parseError);
+        return {
+          success: false,
+          error: ERROR_MESSAGES.SERVER_ERROR,
+          code: 'PARSE_ERROR',
+        };
+      }
+
+      // 检查 HTTP 状态码
+      if (!response.ok) {
+        // 401 Unauthorized - Token 失效
+        if (response.status === 401) {
+          return {
+            success: false,
+            error: responseData.error || ERROR_MESSAGES.TOKEN_EXPIRED,
+            code: 'TOKEN_EXPIRED',
+          };
+        }
+
+        // 其他错误
+        return {
+          success: false,
+          error: responseData.error || responseData.message || ERROR_MESSAGES.SERVER_ERROR,
+          code: responseData.code || 'SERVER_ERROR',
+        };
+      }
+
+      // Return a successful response
+      if (__DEV__) {
+        console.log('✅ Response data:', responseData);
+      }
+
+      return {
+        success: responseData.success,
+        data: responseData.data || responseData,
+      };
+
+    } catch (error: any) {
+      clearTimeout(timeoutId);
+
+      // 超时错误
+      if (error.name === 'AbortError') {
+        console.error('⏱️ 请求超时');
+        return {
+          success: false,
+          error: ERROR_MESSAGES.TIMEOUT_ERROR,
+          code: 'TIMEOUT',
+        };
+      }
+
+      // 网络错误：仅 Web 环境使用 navigator.onLine（RN 中不可用/不可靠）
+      if (Platform.OS === 'web' && typeof navigator !== 'undefined' && !navigator.onLine) {
+        console.error('📡 网络未连接');
+        return {
+          success: false,
+          error: ERROR_MESSAGES.NETWORK_ERROR,
+          code: 'NETWORK_ERROR',
+        };
+      }
+
+      // 其他错误
+      console.error('❌ 请求失败:', error);
+      return {
+        success: false,
+        error: error.message || ERROR_MESSAGES.UNKNOWN_ERROR,
+        code: 'UNKNOWN_ERROR',
+      };
+    }
+  }
+
+  // ==================== HTTP 方法 ====================
+
+  async get<T>(
+    endpoint: string | EndpointMap,
+    options?: RequestOptions
+  ): Promise<ApiResponse<T>> {
+    return this.request<T>(endpoint, 'GET', undefined, options);
+  }
+
+  async post<T>(
+    endpoint: string | EndpointMap,
+    data?: any,
+    options?: RequestOptions
+  ): Promise<ApiResponse<T>> {
+    return this.request<T>(endpoint, 'POST', data, options);
+  }
+
+  async put<T>(
+    endpoint: string | EndpointMap,
+    data?: any,
+    options?: RequestOptions
+  ): Promise<ApiResponse<T>> {
+    return this.request<T>(endpoint, 'PUT', data, options);
+  }
+
+  async delete<T>(
+    endpoint: string | EndpointMap,
+    options?: RequestOptions
+  ): Promise<ApiResponse<T>> {
+    return this.request<T>(endpoint, 'DELETE', undefined, options);
+  }
+}
+
+// ==================== 导出单例 ====================
+export const apiClient = new ApiClient();
+
+// ==================== Cloud Function 适配器 ====================
+
+/**
+ * 通用 CloudBase 云函数调用工具，适用于所有基于 `action` 参数的云函数。
+ *
+ * 说明（结合 V9 快照）：
+ * - 对于多 action 云函数（如 `/memory-engine`、`/learn-vocab`），请求体统一为：
+ *   `{ action, data }`
+ * - 返回结构统一为 `ApiResponse<T>`，与 apiClient 其余 HTTP 调用保持一致。
+ *
+ * @param action   云函数内部业务标识，例如 'getTodayMemories'、'submitMemoryResult' 等。
+ * @param data     业务请求参数对象，会被包装在 `{ action, data }` 中发送。
+ * @param options  可选配置，当前支持自定义云函数入口路径（默认 '/learn-vocab'）。
+ */
+export async function callCloudFunction<T>(
+  action: string,
+  data: Record<string, any>,
+  options?: CloudFunctionOptions
+): Promise<ApiResponse<T>> {
+  // DEPRECATED DEFAULT: '/learn-vocab' was removed.
+  // Ideally, callers should always provide options.endpoint, but falling back to memory-engine is safer now.
+  const endpoint = options?.endpoint ?? '/memory-engine';
+
+  try {
+    // 统一的请求体结构：{ action, data }
+    const response = await apiClient.post<T>(
+      endpoint,
+      { action, data },
+      options?.timeout != null ? { timeout: options.timeout } : undefined
+    );
+
+    // 直接返回后端的标准结构，调用方只需要判断 `success`
+    return response;
+  } catch (err: any) {
+    // 理论上 apiClient 已经捕获大部分错误，这里是兜底防护
+    console.error(`❌ CloudFunction "${action}" 调用异常:`, err);
+
+    return {
+      success: false,
+      error: err?.message ?? '网络请求异常',
+      code: err?.code ?? 'NETWORK_ERROR',
+    };
+  }
+}
+````
+
+## File: app.json
+````json
+{
+  "expo": {
+    "newArchEnabled": true,
+    "name": "ThaiLearningApp",
+    "slug": "ThaiLearningApp",
+    "scheme": "thailearningapp",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.asherlliang.ThaiLearningApp",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false,
+      "package": "com.asherlliang.ThaiLearningApp"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-localization",
+      "expo-font"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "90c8f7ee-1efa-4f8e-be1d-5864b0a51f21"
+      }
+    }
+  }
+}
+````
+
 ## File: app/(auth)/login.tsx
 ````typescript
 // app/(auth)/login.tsx
@@ -20830,12 +25448,153 @@ const styles = StyleSheet.create({
 });
 ````
 
+## File: cloudbase/functions/memory-engine/handlers/getUserProgress.js
+````javascript
+/**
+ * 获取用户学习进度
+ * Action: getUserProgress
+ */
+'use strict';
+
+const { createResponse } = require('../utils/response');
+
+/**
+ * @param {Object} db - 数据库实例
+ * @param {Object} params - 请求参数
+ */
+async function getUserProgress(db, params) {
+  const { userId } = params;
+
+  // 🔍 调试日志：打印收到的 userId
+  console.log('📥 [getUserProgress] 收到请求，userId:', userId);
+
+  if (!userId) {
+    return createResponse(false, null, 'Missing userId', 'INVALID_PARAMS');
+  }
+
+  try {
+    // 2. 获取用户进度记录
+    // ❌ 修正: 不要用 getOne(), 用 limit(1).get()
+    const progressResult = await db.collection('user_progress')
+      .where({ userId })
+      .limit(1)
+      .get();
+
+    if (!progressResult.data || progressResult.data.length === 0) {
+      return createResponse(false, null, '用户进度记录不存在', 'USER_PROGRESS_NOT_FOUND');
+    }
+
+    const progress = progressResult.data[0];
+
+    // 🔥 获取字母模块专属进度（包含 currentRound）
+    let alphabetProgress = null;
+    if (params.entityType === 'letter') {
+      const alphabetProgressResult = await db.collection('user_alphabet_progress')
+        .where({ userId })
+        .limit(1)
+        .get();
+
+      console.log('📊 [getUserProgress] alphabetProgressResult:', {
+        found: alphabetProgressResult.data?.length > 0,
+        data: alphabetProgressResult.data?.[0]
+      });
+
+      if (alphabetProgressResult.data && alphabetProgressResult.data.length > 0) {
+        alphabetProgress = alphabetProgressResult.data[0];
+        console.log('📊 [getUserProgress] alphabetProgress.currentRound:', alphabetProgress.currentRound);
+      } else {
+        console.log('⚠️ [getUserProgress] No alphabet progress found for user:', userId);
+      }
+    }
+
+    // 3. 统计各模块学习数据
+    // 注意: 如果数据量很大，count() 比 get() 更高效
+    const letterCountResult = await db.collection('memory_status')
+      .where({ userId, entityType: 'letter' })
+      .count();
+
+    const letterMasteredResult = await db.collection('memory_status')
+      .where({ userId, entityType: 'letter', masteryLevel: db.command.gte(0.7) })
+      .count();
+
+    const wordCountResult = await db.collection('memory_status')
+      .where({ userId, entityType: 'word' })
+      .count();
+
+    const wordMasteredResult = await db.collection('memory_status')
+      .where({ userId, entityType: 'word', masteryLevel: db.command.gte(0.7) })
+      .count();
+
+    // 🔥 按课程统计单词掌握数（entityId 格式: BaseThai_1_7, BaseThai_2_15 等）
+    const WORD_SOURCES = ['BaseThai_1', 'BaseThai_2', 'BaseThai_3', 'BaseThai_4'];
+    const wordProgressBySource = {};
+    for (const source of WORD_SOURCES) {
+      const prefix = `${source}_`;
+      const nextSource = source.replace(/\d+$/, (m) => String(parseInt(m, 10) + 1));
+      const masteredResult = await db.collection('memory_status')
+        .where({
+          userId,
+          entityType: 'word',
+          masteryLevel: db.command.gte(0.7),
+          entityId: db.command.gte(prefix).and(db.command.lt(nextSource))
+        })
+        .count();
+      wordProgressBySource[source] = { mastered: masteredResult.total };
+    }
+
+    // 4. 组装
+    const result = {
+      ...progress,
+      // 🔥 合并字母模块专属字段（currentRound, completedLessons, roundHistory）
+      ...(alphabetProgress ? {
+        currentRound: alphabetProgress.currentRound,
+        completedLessons: alphabetProgress.completedLessons || [],  // 🔥 新增字段
+        roundHistory: alphabetProgress.roundHistory || []  // 🔥 P0-A: 补充 roundHistory
+      } : {}),
+      statistics: {
+        letter: {
+          total: 44,
+          learned: letterCountResult.total,
+          mastered: letterMasteredResult.total,
+          progress: letterCountResult.total > 0 ? (letterMasteredResult.total / 44).toFixed(2) : 0
+        },
+        word: {
+          total: 3500,
+          learned: wordCountResult.total,
+          mastered: wordMasteredResult.total,
+          progress: wordCountResult.total > 0 ? (wordMasteredResult.total / 3500).toFixed(2) : 0
+        },
+        wordProgressBySource  // 🔥 按课程：{ BaseThai_1: { mastered: N }, ... }
+      },
+      unlockStatus: {
+        letter: true,
+        word: progress.wordUnlocked,
+        sentence: progress.sentenceUnlocked,
+        article: progress.articleUnlocked
+      }
+    };
+
+    console.log('📊 [getUserProgress] roundHistory returned:', (alphabetProgress?.roundHistory || []).length);
+
+    // 与前端约定：data.progress 为进度对象
+    return createResponse(true, { progress: result }, '获取用户进度成功');
+
+  } catch (error) {
+    console.error('getUserProgress error:', error);
+    return createResponse(false, null, error.message, 'SERVER_ERROR');
+  }
+}
+
+module.exports = getUserProgress;
+````
+
 ## File: app/alphabet/[lessonId].tsx
 ````typescript
 // app/alphabet/lesson/[lessonId].tsx
 
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import { View, Text, ActivityIndicator, StyleSheet, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, Lock } from 'lucide-react-native'; // Assuming Lock icon exists or use fallback
@@ -20843,6 +25602,7 @@ import { ArrowLeft, Lock } from 'lucide-react-native'; // Assuming Lock icon exi
 import { useAlphabetLearningEngine } from '@/src/hooks/useAlphabetLearningEngine';
 import { AlphabetLearningEngineView } from '@/src/components/learning/alphabet/AlphabetLearningEngineView';
 import { useModuleAccessStore } from '@/src/stores/moduleAccessStore';
+import { useLearningPreferenceStore } from '@/src/stores/learningPreferenceStore';
 import { getLessonMetadata, getAllLessons } from '@/src/config/alphabet/lessonMetadata.config';
 import { Colors } from '@/src/constants/colors';
 import { Typography } from '@/src/constants/typography';
@@ -20953,6 +25713,14 @@ export default function AlphabetLessonFlow() {
 // Inner component that actually invokes the engine hook
 function AuthenticatedLessonFlow({ lessonId }: { lessonId: string }) {
   const router = useRouter();
+  const { startStudySession, stopStudySession } = useLearningPreferenceStore();
+
+  useFocusEffect(
+    React.useCallback(() => {
+      startStudySession();
+      return () => stopStudySession();
+    }, [startStudySession, stopStudySession])
+  );
 
   const {
     phase,
@@ -21049,6 +25817,176 @@ const styles = StyleSheet.create({
     color: Colors.white,
   },
 });
+````
+
+## File: cloudbase/functions/memory-engine/handlers/submitMemoryResult.js
+````javascript
+/**
+ * 提交学习结果（支持单条 + 批量）
+ * 
+ * 支持两种请求格式：
+ * 1）旧版单条：
+ * {
+ *   userId,
+ *   entityType,
+ *   entityId,
+ *   quality
+ * }
+ * 
+ * 2）新版批量：
+ * {
+ *   userId,
+ *   results: [
+ *     { entityType, entityId, quality },
+ *     ...
+ *   ]
+ * }
+ */
+
+'use strict';
+
+const { createResponse } = require('../utils/response');
+const { updateMemoryAfterReview, updateUserWordProgress } = require('../utils/memoryEngine');
+
+const MAX_RESULTS = 30;
+const BATCH_SIZE = 5;
+
+/**
+ * @param {Object} db     - cloud.database()
+ * @param {Object} params - 请求参数（来自 index.js 中的 data）
+ */
+async function submitMemoryResult(db, params) {
+  console.log('[submitMemoryResult] params:', params);
+  const start = Date.now();
+  const { userId, entityType, entityId, quality, isSkipped, results, source, vId } = params || {}; //Destructuring assignment
+                                                                                      //receive parameters from the client
+
+  // 1. 基本校验：必须有 userId
+  if (!userId) {
+    return createResponse(
+      false,
+      null,
+      '缺少必填参数: userId',
+      'INVALID_PARAMS'
+    );
+  }
+
+  // 2. 规范化为统一的数组格式 items[]
+  let items = [];
+
+  // 2.1 新版：data.results 是数组
+  if (Array.isArray(results) && results.length > 0) {
+    //check if the number of results is greater than MAX_RESULTS
+    if (results.length > MAX_RESULTS) {
+      return createResponse(
+        false,
+        null,
+        `单次最多提交 ${MAX_RESULTS} 条结果，请分批提交`,
+        'RESULTS_TOO_MANY'
+      );
+    }
+    //==========submit start here==========
+    //map the results to items
+    items = results.map((r) => ({
+      entityType: r.entityType,
+      entityId: r.entityId,
+      quality: r.quality,
+      isSkipped: r.isSkipped,
+      source: r.source,
+      vId: r.vId
+    }));
+  }
+  // 2.2 兼容旧版：单条参数
+  else if (entityType && entityId && (quality || isSkipped)) {
+    items = [{ entityType, entityId, quality, isSkipped, source, vId }];
+  } else {
+    // 两种格式都不满足
+    return createResponse(
+      false,
+      null,
+      '缺少必填参数: entityType, entityId, (quality or isSkipped) 或 results[]',
+      'INVALID_PARAMS'
+    );
+  }
+
+  try {
+    const updatedMemories = [];
+
+    // 3. 分批并发更新记忆状态（防止超时）
+    for (let i = 0; i < items.length; i += BATCH_SIZE) {
+      //slice the items array into batches
+      const batch = items.slice(i, i + BATCH_SIZE);
+      //map the batch to batchResults
+      const batchResults = await Promise.all(
+        batch.map(async (item) => {
+          const { entityType, entityId, quality, isSkipped, vId, source } = item;
+
+          // 防御性校验，避免 results 里混入空对象
+          if (!entityType || !entityId) return null;
+          // non-skipped item must have quality
+          if (!isSkipped && !quality) return null;
+
+          const memoryState = await updateMemoryAfterReview(
+            db,
+            userId,
+            entityType,
+            entityId,
+            quality,
+            isSkipped,
+            vId
+          );
+          if (userId && source && vId) {
+            await updateUserWordProgress(db, userId, source, vId);
+          }
+
+          return {
+            entityType,
+            entityId,
+            quality,
+            isSkipped,
+            memoryState,
+            vId
+          };
+        })
+      );
+
+      batchResults
+        .filter(Boolean)
+        .forEach((res) => updatedMemories.push(res));//<--- res 的全称为 result，这里是将 res push 到 updatedMemories 数组中
+    }
+
+    if (updatedMemories.length === 0) {
+      return createResponse(
+        false,
+        null,
+        'results 中没有有效的记录',
+        'INVALID_PARAMS'
+      );
+    }
+
+    // 4. 返回统一结构
+    const response = createResponse(
+      true,
+      { updatedMemories },
+      '提交学习结果成功'
+    );
+    console.log('[FunctionCost] submitMemoryResult', Date.now() - start, 'ms');
+    return response;
+
+  } catch (error) {
+    console.error('[submitMemoryResult] error:', error);
+    console.log('[FunctionCost] submitMemoryResult', Date.now() - start, 'ms');
+
+    return createResponse(
+      false,
+      null,
+      error.message || '服务器内部错误',
+      'SERVER_ERROR'
+    );
+  }
+}
+
+module.exports = submitMemoryResult;
 ````
 
 ## File: src/components/learning/alphabet/AlphabetReviewView.tsx
@@ -21491,7 +26429,7 @@ export function AlphabetReviewView({
                   adjustsFontSizeToFit
                   numberOfLines={1}
                 >
-                  {displayValue}
+                  {question.gameType === AlphabetGameType.CONSONANT_CLASS ? t(displayValue) : displayValue}
                 </Text>
               )}
 
@@ -21712,7 +26650,7 @@ const styles = StyleSheet.create({
 ````typescript
 // app/(tabs)/profile.tsx
 import React from 'react';
-import { View, Text, Pressable, ScrollView, StyleSheet, Switch, Alert } from 'react-native';
+import { View, Text, Pressable, ScrollView, StyleSheet, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -21724,6 +26662,7 @@ import { useUserStore } from '@/src/stores/userStore';
 import { useVocabularyStore } from '@/src/stores/vocabularyStore';
 
 import { useLearningPreferenceStore } from '@/src/stores/learningPreferenceStore';
+import { cancelDailyReminder } from '@/src/utils/reminderNotification';
 import { Colors } from '@/src/constants/colors';
 import { Typography } from '@/src/constants/typography';
 
@@ -21736,8 +26675,7 @@ export default function ProfileScreen() {
   const { streakDays } = useLearningPreferenceStore();
   const { userProgress } = useModuleAccessStore();
 
-  const [dailyReminder, setDailyReminder] = React.useState(true);
-
+  const { dailyReminderEnabled, dailyReminderTime } = useLearningPreferenceStore();
 
 
   const handleLogout = () => {
@@ -21749,7 +26687,8 @@ export default function ProfileScreen() {
         {
           text: t('common.confirm'),
           style: 'destructive',
-          onPress: () => {
+          onPress: async () => {
+            await cancelDailyReminder();
             clearVocabForLogout();    // 清除单词 Store 持久化状态
             clearPrefForLogout();     // 清除 streakDays / dailyLimits
             logout();
@@ -21804,35 +26743,37 @@ export default function ProfileScreen() {
             </View>
           </View>
           <Text style={styles.displayName}>{currentUser?.displayName || 'Unknow'}</Text>
-          <Text style={styles.subtitle}>显示当前登录邮箱</Text>
+          <Text style={styles.subtitle}>{currentUser?.email || ''}</Text>
         </Animated.View>
 
-        {/* Achievements Section */}
-        <Animated.View entering={FadeInDown.delay(200).duration(500)} style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Award size={20} color={Colors.ink} />
-            <Text style={styles.sectionTitle}>{t('profile.achievements')}</Text>
-          </View>
-
-          <View style={styles.achievementsContainer}>
-            <View style={styles.achievementsGrid}>
-              {achievements.map((achievement, index) => (
-                <View
-                  key={achievement.id}
-                  style={[
-                    styles.achievementBadge,
-                    !achievement.unlocked && styles.achievementBadgeLocked,
-                  ]}
-                >
-                  <View style={styles.achievementIcon}>
-                    <Text style={styles.achievementEmoji}>{achievement.icon}</Text>
-                  </View>
-                  <Text style={styles.achievementLabel}>{achievement.label}</Text>
-                </View>
-              ))}
+        {/* Achievements Section - 已屏蔽 */}
+        {false && (
+          <Animated.View entering={FadeInDown.delay(200).duration(500)} style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Award size={20} color={Colors.ink} />
+              <Text style={styles.sectionTitle}>{t('profile.achievements')}</Text>
             </View>
-          </View>
-        </Animated.View>
+
+            <View style={styles.achievementsContainer}>
+              <View style={styles.achievementsGrid}>
+                {achievements.map((achievement, index) => (
+                  <View
+                    key={achievement.id}
+                    style={[
+                      styles.achievementBadge,
+                      !achievement.unlocked && styles.achievementBadgeLocked,
+                    ]}
+                  >
+                    <View style={styles.achievementIcon}>
+                      <Text style={styles.achievementEmoji}>{achievement.icon}</Text>
+                    </View>
+                    <Text style={styles.achievementLabel}>{achievement.label}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          </Animated.View>
+        )}
 
         {/* Settings Section */}
         <Animated.View entering={FadeInDown.delay(300).duration(500)} style={styles.section}>
@@ -21840,15 +26781,18 @@ export default function ProfileScreen() {
 
           <View style={styles.settingsCard}>
             {/* Daily Reminder */}
-            <View style={styles.settingItem}>
+            <Pressable
+              style={styles.settingItem}
+              onPress={() => router.push('/learning/reminder-settings')}
+            >
               <Text style={styles.settingLabel}>{t('profile.dailyReminder')}</Text>
-              <Switch
-                value={dailyReminder}
-                onValueChange={setDailyReminder}
-                trackColor={{ false: Colors.sand, true: Colors.ink }}
-                thumbColor={Colors.white}
-              />
-            </View>
+              <View style={styles.settingRight}>
+                <Text style={styles.settingValue}>
+                  {dailyReminderEnabled ? dailyReminderTime : t('profile.reminder.off')}
+                </Text>
+                <ChevronRight size={20} color={Colors.taupe} />
+              </View>
+            </Pressable>
 
             {/* Daily Learning Limit */}
             <View style={styles.divider} />
@@ -22072,182 +27016,11 @@ const styles = StyleSheet.create({
 });
 ````
 
-## File: cloudbase/functions/memory-engine/handlers/submitMemoryResult.js
-````javascript
-/**
- * 提交学习结果（支持单条 + 批量）
- * 
- * 支持两种请求格式：
- * 1）旧版单条：
- * {
- *   userId,
- *   entityType,
- *   entityId,
- *   quality
- * }
- * 
- * 2）新版批量：
- * {
- *   userId,
- *   results: [
- *     { entityType, entityId, quality },
- *     ...
- *   ]
- * }
- */
-
-'use strict';
-
-const { createResponse } = require('../utils/response');
-const { updateMemoryAfterReview, updateUserWordProgress } = require('../utils/memoryEngine');
-
-const MAX_RESULTS = 30;
-const BATCH_SIZE = 5;
-
-/**
- * @param {Object} db     - cloud.database()
- * @param {Object} params - 请求参数（来自 index.js 中的 data）
- */
-async function submitMemoryResult(db, params) {
-  console.log('[submitMemoryResult] params:', params);
-  const start = Date.now();
-  const { userId, entityType, entityId, quality, isSkipped, results, source, vId } = params || {}; //Destructuring assignment
-                                                                                      //receive parameters from the client
-
-  // 1. 基本校验：必须有 userId
-  if (!userId) {
-    return createResponse(
-      false,
-      null,
-      '缺少必填参数: userId',
-      'INVALID_PARAMS'
-    );
-  }
-
-  // 2. 规范化为统一的数组格式 items[]
-  let items = [];
-
-  // 2.1 新版：data.results 是数组
-  if (Array.isArray(results) && results.length > 0) {
-    //check if the number of results is greater than MAX_RESULTS
-    if (results.length > MAX_RESULTS) {
-      return createResponse(
-        false,
-        null,
-        `单次最多提交 ${MAX_RESULTS} 条结果，请分批提交`,
-        'RESULTS_TOO_MANY'
-      );
-    }
-    //==========submit start here==========
-    //map the results to items
-    items = results.map((r) => ({
-      entityType: r.entityType,
-      entityId: r.entityId,
-      quality: r.quality,
-      isSkipped: r.isSkipped,
-      source: r.source,
-      vId: r.vId
-    }));
-  }
-  // 2.2 兼容旧版：单条参数
-  else if (entityType && entityId && (quality || isSkipped)) {
-    items = [{ entityType, entityId, quality, isSkipped, source, vId }];
-  } else {
-    // 两种格式都不满足
-    return createResponse(
-      false,
-      null,
-      '缺少必填参数: entityType, entityId, (quality or isSkipped) 或 results[]',
-      'INVALID_PARAMS'
-    );
-  }
-
-  try {
-    const updatedMemories = [];
-
-    // 3. 分批并发更新记忆状态（防止超时）
-    for (let i = 0; i < items.length; i += BATCH_SIZE) {
-      //slice the items array into batches
-      const batch = items.slice(i, i + BATCH_SIZE);
-      //map the batch to batchResults
-      const batchResults = await Promise.all(
-        batch.map(async (item) => {
-          const { entityType, entityId, quality, isSkipped, vId, source } = item;
-
-          // 防御性校验，避免 results 里混入空对象
-          if (!entityType || !entityId) return null;
-          // non-skipped item must have quality
-          if (!isSkipped && !quality) return null;
-
-          const memoryState = await updateMemoryAfterReview(
-            db,
-            userId,
-            entityType,
-            entityId,
-            quality,
-            isSkipped,
-            vId
-          );
-          if (userId && source && vId) {
-            await updateUserWordProgress(db, userId, source, vId);
-          }
-
-          return {
-            entityType,
-            entityId,
-            quality,
-            isSkipped,
-            memoryState,
-            vId
-          };
-        })
-      );
-
-      batchResults
-        .filter(Boolean)
-        .forEach((res) => updatedMemories.push(res));//<--- res 的全称为 result，这里是将 res push 到 updatedMemories 数组中
-    }
-
-    if (updatedMemories.length === 0) {
-      return createResponse(
-        false,
-        null,
-        'results 中没有有效的记录',
-        'INVALID_PARAMS'
-      );
-    }
-
-    // 4. 返回统一结构
-    const response = createResponse(
-      true,
-      { updatedMemories },
-      '提交学习结果成功'
-    );
-    console.log('[FunctionCost] submitMemoryResult', Date.now() - start, 'ms');
-    return response;
-
-  } catch (error) {
-    console.error('[submitMemoryResult] error:', error);
-    console.log('[FunctionCost] submitMemoryResult', Date.now() - start, 'ms');
-
-    return createResponse(
-      false,
-      null,
-      error.message || '服务器内部错误',
-      'SERVER_ERROR'
-    );
-  }
-}
-
-module.exports = submitMemoryResult;
-````
-
 ## File: src/components/courses/AlphabetCourseCard.tsx
 ````typescript
 // src/components/courses/AlphabetCourseCard.tsx
 import React from 'react';
 import { View, Text, StyleSheet, Pressable, Image, ImageSourcePropType } from 'react-native';
-import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { Colors } from '@/src/constants/colors';
 import { Typography } from '@/src/constants/typography';
@@ -22263,28 +27036,12 @@ interface AlphabetCourseCardProps {
     lessons: number;
   };
   isCurrent: boolean;
-  progress?: {
-    completed: number;
-    total: number;
-  };
+  progress?: { completed: number; total: number }; // 保留以兼容调用方，字母模块暂不显示
   onStart: () => void;
 }
 
-export function AlphabetCourseCard({ course, isCurrent, progress, onStart }: AlphabetCourseCardProps) {
-  const router = useRouter();
+export function AlphabetCourseCard({ course, isCurrent, onStart }: AlphabetCourseCardProps) {
   const { t } = useTranslation();
-
-  const progressPercent = (() => {
-    if (!progress) {
-      return null;
-    }
-    const completed = progress.completed || 0;
-    const total = progress.total || 44; // Default total if not provided
-    if (total === 0) {
-      return 0; // Or null, depending on desired behavior for 0 total
-    }
-    return Math.min(100, Math.round((completed / total) * 100));
-  })();
 
   return (
     <View style={[styles.card, isCurrent && styles.activeCard]}>
@@ -22305,20 +27062,8 @@ export function AlphabetCourseCard({ course, isCurrent, progress, onStart }: Alp
           </Text>
 
           <View style={styles.footer}>
-            <View style={styles.metaColumn}>
-              {progressPercent !== null ? (
-                <>
-                  <View style={styles.progressBar}>
-                    <View style={[styles.progressFill, { width: `${progressPercent}%` }]} />
-                  </View>
-                  <Text style={styles.metaText}>
-                    {progress?.completed}/{progress?.total} ({progressPercent}%)
-                  </Text>
-                </>
-              ) : (
-                <Text style={styles.metaText}>{course.lessons} 课时</Text>
-              )}
-            </View>
+            {/* 字母模块不显示课时/进度 */}
+            <View style={styles.metaColumn} />
 
             {/* Start Learning 按钮 */}
             <Pressable
@@ -22795,6 +27540,14 @@ export const STORAGE_ENDPOINTS = {
   } as EndpointMap,
 };
 
+//=====================AI Function API ====================
+
+export const AI_ENDPOINTS = {
+  ENGINE: {
+    cloudbase: '/ai-engine',
+    java: '/api/ai/engine',
+  } as EndpointMap,
+};
 // ==================== 汇总所有端点 ====================
 export const API_ENDPOINTS = {
   AUTH: AUTH_ENDPOINTS,
@@ -22808,1094 +27561,8 @@ export const API_ENDPOINTS = {
   MODULE: MODULE_ENDPOINTS,
   MEMORY: MEMORY_ENDPOINTS,
   STORAGE: STORAGE_ENDPOINTS,
+  AI: AI_ENDPOINTS,
 };
-````
-
-## File: src/stores/moduleAccessStore.ts
-````typescript
-// src/stores/moduleAccessStore.ts
-
-/**
- * 模块访问控制 Store
- * 
- * 功能：
- * 1. 检查用户是否有权限访问某个模块
- * 2. 缓存访问权限结果
- * 3. 提供全局进度数据
- */
-
-import { create } from 'zustand';
-import { callCloudFunction } from '@/src/utils/apiClient';
-import { API_ENDPOINTS } from '@/src/config/api.endpoints';
-import { useUserStore } from './userStore';
-import { LESSON_METADATA } from '@/src/config/alphabet/lessonMetadata.config';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-
-
-const getCompletedLessonsStorageKey = (userId: string): string =>
-    `@alphabet_completed_lessons_${userId}`;
-
-
-
-// ==================== 类型定义 ====================
-
-/**
- * 模块类型
- * 
- * 注意：
- * - 与后端 memory-engine.checkModuleAccess 保持一致，字母模块使用 'letter'
- */
-export type ModuleType = 'letter' | 'word' | 'sentence' | 'article';
-
-/**
- * 用户进度数据
- */
-export interface UserProgress {
-    // 字母学习进度
-    letterProgress: number;           // 0-1 (后端存储为比例值)
-    letterCompleted: boolean;         // Added: Whether letter learning is completed
-    letterMasteredCount: number;      // 已掌握字母数
-    letterTotalCount: number;         // 总字母数
-
-    // 单词学习进度
-    wordProgress: number;             // 0-100
-    wordMasteredCount: number;        // 已掌握单词数
-    wordTotalCount: number;           // 总单词数
-
-    // 句子学习进度
-    sentenceProgress: number;         // 0-100
-    sentenceMasteredCount: number;    // 已掌握句子数
-    sentenceTotalCount: number;       // 总句子数
-
-    // 文章学习进度
-    articleProgress: number;          // 0-100
-    articleMasteredCount: number;     // 已掌握文章数
-    articleTotalCount: number;        // 总文章数
-
-    // 解锁状态
-    wordUnlocked: boolean;            // 单词模块是否解锁
-    sentenceUnlocked: boolean;        // 句子模块是否解锁
-    articleUnlocked: boolean;         // 文章模块是否解锁
-
-    /**
-     * 字母课程完成情况（仅前端使用）
-     * 例如: ['lesson1','lesson2',...]
-     */
-    completedAlphabetLessons?: string[];
-
-    // 设置
-    dailyLimit?: number;              // 每日学习数量设置
-}
-
-/**
- * 访问检查响应
- */
-interface CheckAccessResponse {
-    allowed: boolean;
-    reason?: string;
-    requiredProgress?: number;
-    currentProgress?: number;
-}
-
-/**
- * 用户进度响应（后端返回）
- */
-interface UserProgressResponse {
-    progress: UserProgress & {
-        completedLessons?: string[];  // 🔥 后端返回字段（user_alphabet_progress.completedLessons）
-    };
-}
-
-// ==================== Store 定义 ====================
-
-interface ModuleAccessStore {
-    // ===== 状态 =====
-    userProgress: UserProgress | null;
-    accessCache: Map<ModuleType, boolean>;
-    isLoading: boolean;
-    error: string | null;
-
-    // ===== 方法 =====
-    checkAccess: (moduleType: ModuleType) => Promise<boolean>;
-    checkAccessLocally: (moduleType: ModuleType) => boolean;
-    getUserProgress: () => Promise<void>;
-    clearCache: () => void;
-    setError: (error: string | null) => void;
-    setDailyLimit: (moduleType: ModuleType, limit: number) => void;
-    /**
-     * 标记某个字母课程已完成（仅用于字母模块解锁链路）
-     */
-    markAlphabetLessonCompleted: (lessonId: string) => void;
-}
-
-// ==================== 默认进度数据 ====================
-
-const defaultProgress: UserProgress = {
-    letterProgress: 0,
-    letterCompleted: false,
-    letterMasteredCount: 0,
-    letterTotalCount: 44,
-    wordProgress: 0,
-    wordMasteredCount: 0,
-    wordTotalCount: 0,
-    sentenceProgress: 0,
-    sentenceMasteredCount: 0,
-    sentenceTotalCount: 0,
-    articleProgress: 0,
-    articleMasteredCount: 0,
-    articleTotalCount: 0,
-    wordUnlocked: false,
-    sentenceUnlocked: false,
-    articleUnlocked: false,
-};
-
-// ==================== Store 实现 ====================
-
-export const useModuleAccessStore = create<ModuleAccessStore>()((set, get) => ({
-    // ===== 初始状态 =====
-    userProgress: null,
-    accessCache: new Map<ModuleType, boolean>(),
-    isLoading: false,
-    error: null,
-
-    // ===== 检查模块访问权限 =====
-    /**
-     * 检查用户是否有权限访问某个模块
-     * 
-     * @param moduleType 模块类型
-     * @returns 是否有权限访问
-     */
-    checkAccess: async (moduleType: ModuleType): Promise<boolean> => {
-        const { accessCache } = get();
-        const userId = useUserStore.getState().currentUser?.userId;
-
-        if (!userId) {
-            console.warn('⚠️ 用户未登录，无法检查模块访问权限');
-            return false;
-        }
-
-        // 1. 检查缓存
-        if (accessCache.has(moduleType)) {
-            const cachedResult = accessCache.get(moduleType);
-            console.log(`✅ 从缓存获取 ${moduleType} 访问权限:`, cachedResult);
-            return cachedResult!;
-        }
-
-        try {
-            set({ isLoading: true, error: null });
-
-            // 2. 调用云函数检查权限
-            const result = await callCloudFunction<CheckAccessResponse>(
-                'checkModuleAccess',
-                {
-                    userId,
-                    moduleType,
-                },
-                {
-                    endpoint: API_ENDPOINTS.MEMORY.GET_TODAY_MEMORIES.cloudbase,
-                }
-            );
-
-            if (result.success && result.data) {
-                const allowed = result.data.allowed;
-
-                // 3. 缓存结果
-                const newCache = new Map(accessCache);
-                newCache.set(moduleType, allowed);
-                set({ accessCache: newCache, isLoading: false });
-
-                console.log(`✅ ${moduleType} 访问权限检查完成:`, allowed);
-
-                // 如果不允许，记录原因
-                if (!allowed && result.data.reason) {
-                    console.log(`📌 拒绝原因: ${result.data.reason}`);
-                }
-
-                return allowed;
-            } else {
-                // 请求失败，降级处理
-                console.warn('⚠️ 云函数调用失败，使用本地逻辑判断');
-                const localAllowed = get().checkAccessLocally(moduleType);
-
-                // 缓存本地判断结果
-                const newCache = new Map(accessCache);
-                newCache.set(moduleType, localAllowed);
-                set({ accessCache: newCache, isLoading: false });
-
-                return localAllowed;
-            }
-        } catch (error: any) {
-            console.error('❌ checkAccess error:', error);
-            set({ error: error.message || '检查权限失败', isLoading: false });
-
-            // 降级到本地逻辑
-            const localAllowed = get().checkAccessLocally(moduleType);
-
-            // 缓存本地判断结果
-            const newCache = new Map(get().accessCache);
-            newCache.set(moduleType, localAllowed);
-            set({ accessCache: newCache });
-
-            return localAllowed;
-        }
-    },
-
-    // ===== 本地权限检查逻辑（降级方案）=====
-    /**
-     * 本地权限检查逻辑（降级方案）
-     * 
-     * @param moduleType 模块类型
-     * @returns 是否有权限访问
-     */
-    checkAccessLocally: (moduleType: ModuleType): boolean => {
-        const { userProgress } = get();
-
-        if (!userProgress) {
-            // 如果没有进度数据，允许访问字母模块，其他模块不允许
-            return moduleType === 'letter';
-        }
-
-        // 与后端 memory-engine.checkModuleAccess 的意图保持一致：
-        // - 字母模块始终可访问
-        // - 只要 letterCompleted 为 true，或 letterProgress ≥ 0.8，所有非字母模块统一解锁
-        if (moduleType === 'letter') {
-            return true;
-        }
-
-        const finishedByTest = !!userProgress.letterCompleted;
-        const finishedByProgress = (userProgress.letterProgress ?? 0) >= 0.8;
-
-        return finishedByTest || finishedByProgress;
-    },
-
-    // ===== 获取用户进度 =====
-    // ===== 获取用户进度 =====
-    /**
-     * 从后端获取用户进度数据
-     */
-    getUserProgress: async (): Promise<void> => {
-        const userId = useUserStore.getState().currentUser?.userId;
-
-        if (!userId) {
-            console.warn('⚠️ 用户未登录，无法获取进度数据');
-            set({ userProgress: defaultProgress });
-            return;
-        }
-
-        try {
-            const oldKey = '@alphabet_completed_lessons';
-            const oldData = await AsyncStorage.getItem(oldKey);
-            if (oldData) {
-                await AsyncStorage.removeItem(oldKey);
-                console.log('Old key has been delete.');
-            }
-        } catch (e) {
-            console.warn('删除旧key失败：', e)
-        }
-
-        set({ isLoading: true, error: null });
-
-        // Helper to try fetch
-        const fetchProgress = async (endpoint: string) => {
-            return await callCloudFunction<UserProgressResponse>(
-                'getUserProgress',
-                { userId, entityType: 'letter' },  // 添加 entityType 参数
-                { endpoint }
-            );
-        };
-
-        try {
-            // 1. Try Primary Endpoint (memory-engine)
-            let result = await fetchProgress(API_ENDPOINTS.MEMORY.GET_TODAY_MEMORIES.cloudbase);
-
-            if (result.success && result.data) {
-                console.log(`🌐 后端返回的每日限额: ${result.data.progress.dailyLimit}`);
-                // 🔥 Step 3: 以后端数据为准，本地仅作缓存
-                const remoteCompleted = result.data.progress.completedLessons || [];
-
-                // 🔥 更新本地缓存（用于离线时加速）
-                const storageKey = getCompletedLessonsStorageKey(userId);
-                AsyncStorage.setItem(storageKey, JSON.stringify(remoteCompleted)).catch(err => {
-                    console.warn('⚠️ Failed to cache completed lessons:', err);
-                });
-
-                set({
-                    userProgress: {
-                        ...result.data.progress,
-                        completedAlphabetLessons: remoteCompleted  // 🔥 字段映射
-                    },
-                    isLoading: false,
-                });
-                console.log('✅ 用户进度数据已更新 (Backend-first):', {
-                    ...result.data.progress,
-                    completedAlphabetLessons: remoteCompleted
-                });
-            } else {
-                // 🔥 后端失败时，尝试从本地缓存加载（降级方案）
-                console.warn('⚠️ 获取用户进度失败 (Primary & Fallback)，尝试从本地缓存加载');
-                try {
-                    const storageKey = getCompletedLessonsStorageKey(userId);
-                    const cached = await AsyncStorage.getItem(storageKey);
-                    const cachedCompleted = cached ? JSON.parse(cached) : [];
-
-                    set({
-                        userProgress: {
-                            ...defaultProgress,
-                            completedAlphabetLessons: cachedCompleted
-                        },
-                        isLoading: false,
-                        error: result.error || 'Failed to fetch progress'
-                    });
-                    console.log('⚠️ 使用本地缓存数据:', cachedCompleted);
-                } catch (cacheError) {
-                    set({
-                        userProgress: defaultProgress,
-                        isLoading: false,
-                        error: result.error || 'Failed to fetch progress'
-                    });
-                }
-            }
-        } catch (error: any) {
-            console.error('❌ getUserProgress error:', error);
-
-            // 🔥 异常时，尝试从本地缓存加载（降级方案）
-            try {
-                const storageKey = getCompletedLessonsStorageKey(userId);
-                const cached = await AsyncStorage.getItem(storageKey);
-                const cachedCompleted = cached ? JSON.parse(cached) : [];
-
-                set({
-                    error: error.message || '获取进度失败',
-                    userProgress: {
-                        ...defaultProgress,
-                        completedAlphabetLessons: cachedCompleted
-                    },
-                    isLoading: false,
-                });
-                console.log('⚠️ 异常时使用本地缓存:', cachedCompleted);
-            } catch (cacheError) {
-                set({
-                    error: error.message || '获取进度失败',
-                    userProgress: defaultProgress,
-                    isLoading: false,
-                });
-            }
-        }
-    },
-
-    // ===== 清除缓存 =====
-    /**
-     * 清除访问权限缓存
-     * 用于：用户完成学习后需要重新检查权限
-     */
-    clearCache: (): void => {
-        set({ accessCache: new Map<ModuleType, boolean>() });
-        console.log('🗑️ 访问权限缓存已清除');
-    },
-
-    // ===== 设置错误 =====
-    setError: (error: string | null): void => {
-        set({ error });
-    },
-
-    // ===== 更新每日学习量（前端缓存）=====
-    setDailyLimit: async (moduleType: ModuleType, limit: number) => {
-        // 1. 先更新本地 UI（保证响应速度）
-        set((state) => ({
-            userProgress: {
-                ...(state.userProgress || { ...defaultProgress }),
-                dailyLimit: limit,
-            },
-        }));
-        // 2. 立即推送到后端持久化
-        const userId = useUserStore.getState().currentUser?.userId;
-        if (userId) {
-            try {
-                await callCloudFunction(
-                    'setDailyLimit',
-                    {
-                        userId,
-                        dailyLimit: limit
-                    },
-                    { endpoint: API_ENDPOINTS.MEMORY.SET_DAILY_LIMIT.cloudbase }
-                );
-                console.log(`✅ 已成功同步 ${moduleType} 限额 ${limit} 到云端`);
-            } catch (error) {
-                console.error('❌ 更新每日学习量失败:', error);
-            }
-        };
-
-        console.log(`📌 已更新 ${moduleType} dailyLimit 为 ${limit}`);
-    },
-
-    // ===== 标记字母课程完成（前端本地）=====
-    markAlphabetLessonCompleted: (lessonId: string) => {
-        const userId = useUserStore.getState().currentUser?.userId;
-        if (!userId) {
-            console.warn('⚠️ 用户未登录，无法标记课程完成');
-            return;
-        }
-
-        const totalLessons = Object.keys(LESSON_METADATA).length;
-        const coreLessons = 6; // 完成前 6 课视为“核心字母已学完”
-
-        set((state) => {
-            const prev = state.userProgress || { ...defaultProgress };
-
-            const prevCompleted = new Set(prev.completedAlphabetLessons ?? []);
-            prevCompleted.add(lessonId);
-            const completedAlphabetLessons = Array.from(prevCompleted);
-
-            const completedCount = completedAlphabetLessons.length;
-            const allLessonsDone = completedCount >= totalLessons;
-
-            // 进度：
-            // - 完成 lesson1-4 视为 0.8
-            // - 完成 lesson1-6 视为 0.9（核心字母全部完成）
-            // - 完成全部 7 课视为 1.0（含罕用/古体字母）
-            let nextLetterProgress = prev.letterProgress;
-            if (completedCount >= 4 && nextLetterProgress < 0.8) {
-                nextLetterProgress = 0.8;
-            }
-            if (completedCount >= coreLessons && nextLetterProgress < 0.9) {
-                nextLetterProgress = 0.9;
-            }
-            if (completedCount >= totalLessons && nextLetterProgress < 1) {
-                nextLetterProgress = 1;
-            }
-
-            // 完成前 6 课即视为核心字母学习完成，
-            // lesson7 作为补充课程不影响其他模块解锁
-            const coreLessonsDone = completedCount >= coreLessons;
-            const nextLetterCompleted =
-                prev.letterCompleted || coreLessonsDone;
-
-            const updated: UserProgress = {
-                ...prev,
-                completedAlphabetLessons,
-                letterCompleted: nextLetterCompleted,
-                letterProgress: nextLetterProgress,
-            };
-
-            // 🔥 Persist to AsyncStorage (Fire and forget)
-            const storageKey = getCompletedLessonsStorageKey(userId);
-            AsyncStorage.setItem(storageKey, JSON.stringify(completedAlphabetLessons)).catch(err => {
-                console.error('❌ Failed to persist completed alphabet lessons:', err);
-            });
-
-            return {
-                userProgress: updated,
-                accessCache: allLessonsDone
-                    ? new Map<ModuleType, boolean>()
-                    : state.accessCache,
-            };
-        });
-
-        console.log(`✅ 字母课程已完成: ${lessonId}`);
-    },
-}));
-````
-
-## File: app/(tabs)/index.tsx
-````typescript
-// app/(tabs)/index.tsx
-import React, { useState, useEffect } from 'react';
-import { useTranslation } from 'react-i18next';
-import { ScrollView, View, Text, Pressable, StyleSheet } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
-import { Play, TrendingUp, Clock, Award, Star, Wrench } from 'lucide-react-native';
-import { BlurView } from 'expo-blur';
-import { ThaiPatternBackground } from '@/src/components/common/ThaiPatternBackground';
-import { FloatingBubbles } from '@/src/components/common/FloatingBubbles';
-import { Colors } from '@/src/constants/colors';
-import { Typography } from '@/src/constants/typography';
-import { ReviewItem } from '@/src/entities/types/entities';
-import { useUserStore } from '@/src/stores/userStore';
-import { useModuleAccessStore } from '@/src/stores/moduleAccessStore';
-
-const MOCK_REVIEWS: ReviewItem[] = [
-  { id: '1', char: 'ข', phonetic: 'Khor Khai', type: 'Review', dueIn: 'Today' },
-  { id: '2', char: 'ค', phonetic: 'Khor Khwai', type: 'Hard', dueIn: 'Today' },
-  { id: '3', char: 'ง', phonetic: 'Ngor Ngu', type: 'New', dueIn: 'Today' },
-  { id: '4', char: 'จ', phonetic: 'Jor Jan', type: 'Review', dueIn: 'Today' },
-];
-
-export default function HomeScreen() {
-  const { t } = useTranslation();
-  const [reviews, setReviews] = useState<ReviewItem[]>([]);
-  const router = useRouter();
-
-  // Stores
-  const { currentUser } = useUserStore();
-  const { userProgress } = useModuleAccessStore();
-
-  useEffect(() => {
-    setTimeout(() => setReviews(MOCK_REVIEWS), 800);
-  }, []);
-
-  const handleBubbleClick = () => {
-    router.push('/review-modal');
-    setTimeout(() => setReviews([]), 500);
-  };
-
-  // Helper to determine current course based on progress
-  const getCurrentCourse = () => {
-    if (!userProgress) {
-      return {
-        name: t('modules.alphabet'),
-        level: t('alphabet.level'),
-        progress: 0,
-        route: '/learning' as const,
-        module: 'letter' as const,
-        thaiText: 'กขฃค',
-        translation: t('alphabet.description'),
-      };
-    }
-
-    const { letterProgress, wordProgress, sentenceProgress } = userProgress;
-
-    // 1. Alphabet Phase
-    // 后端 letterProgress 为 0-1，这里用 80% 作为阶段切换阈值
-    if (letterProgress < 0.8) {
-      return {
-        name: t('modules.alphabet'),
-        level: t('alphabet.level'),
-        progress: Math.round(letterProgress * 100),
-        route: '/learning' as const,
-        module: 'letter' as const,
-        thaiText: 'ก ข ฃ ค',
-        translation: t('alphabet.description'),
-      };
-    }
-
-    // 2. Vocabulary Phase
-    if (wordProgress < 80) {
-      return {
-        name: t('modules.word'),
-        level: 'Intermediate 1', // TODO: Add to i18n
-        progress: wordProgress,
-        route: '/learning' as const, // Points to app/learning/index.tsx
-        module: 'word' as const,
-        thaiText: 'คำศัพท์',
-        translation: 'Expand your vocabulary',
-      };
-    }
-
-    // 3. Sentence Phase
-    if (sentenceProgress < 80) {
-      return {
-        name: t('modules.sentence'),
-        level: 'Intermediate 2',
-        progress: sentenceProgress,
-        route: '/learning' as const, // Placeholder
-        module: 'sentence' as const,
-        thaiText: 'ประโยค',
-        translation: 'Master sentence structures',
-      };
-    }
-
-    // 4. Article Phase
-    return {
-      name: t('modules.article'),
-      level: 'Advanced',
-      progress: userProgress.articleProgress || 0,
-      route: '/learning' as const, // Placeholder
-      module: 'article' as const,
-      thaiText: 'บทความ',
-      translation: 'Read authentic articles',
-    };
-  };
-
-  const currentCourse = getCurrentCourse();
-  const displayName = currentUser?.displayName || 'Student';
-
-  return (
-    <SafeAreaView edges={['top']} style={styles.safeArea}>
-      <ThaiPatternBackground opacity={0.15} />
-
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Header */}
-        <View style={styles.header}>
-          <BlurView intensity={80} tint="light" style={StyleSheet.absoluteFill} />
-
-          <View style={styles.headerContent}>
-            <View>
-              <View style={styles.greetingContainer}>
-                <Text style={styles.greetingText}>ສະບາຍດີ, {displayName}</Text>
-                <Text style={styles.greetingDot}>.</Text>
-              </View>
-              <Text style={styles.subtitleText}>
-                {t('home.todayProgress')} {currentCourse.progress}%
-              </Text>
-            </View>
-
-            <View style={styles.awardBadge}>
-              {/* 右上角荣誉图标 */}
-              <Award size={18} color={Colors.ink} />
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.contentContainer}>
-          {/* Floating Bubbles */}
-          {/* <FloatingBubbles reviews={reviews} onOpenReview={handleBubbleClick} /> */}
-
-          {/* Hero Progress Card */}
-          <View>
-            {(() => {
-              // 🔒 Lock Check for Hero Card
-              const { checkAccessLocally } = useModuleAccessStore.getState();
-              const isHeroLocked = currentCourse.module !== 'letter' && !checkAccessLocally(currentCourse.module);
-
-              return (
-                <Pressable
-                  style={[styles.heroCard, isHeroLocked && { opacity: 0.8, backgroundColor: '#333' }]} // Visual feedback
-                  disabled={isHeroLocked}
-                  onPress={() => {
-                    if (isHeroLocked) return;
-
-                    router.push({
-                      pathname: currentCourse.route,
-                      params: { module: currentCourse.module }
-                    });
-                  }}
-                >
-                  <View style={styles.heroContent}>
-                    <View style={styles.heroTopRow}>
-                      <View>
-                        <Text style={styles.courseLabel}>{t('home.currentCourse')}</Text>
-                        <Text style={styles.courseName}>
-                          {currentCourse.name} {isHeroLocked ? '(Locked)' : ''}
-                        </Text>
-                      </View>
-                      <View style={styles.levelBadge}>
-                        <Text style={styles.levelText}>{currentCourse.level}</Text>
-                      </View>
-                    </View>
-
-                    <View style={styles.heroBottomRow}>
-                      <View style={styles.heroTextContainer}>
-                        <Text style={styles.thaiText}>{currentCourse.thaiText}</Text>
-                        <Text style={styles.translationText}>{currentCourse.translation}</Text>
-                      </View>
-
-                      <View style={[styles.playButtonLarge, isHeroLocked && { backgroundColor: '#666' }]}>
-                        <Play size={20} fill={isHeroLocked ? '#999' : Colors.ink} color={isHeroLocked ? '#999' : Colors.ink} />
-                      </View>
-                    </View>
-                  </View>
-
-                  <View style={styles.heroGradient1} />
-                  <View style={styles.heroGradient2} />
-                </Pressable>
-              );
-            })()}
-          </View>
-
-          {/* Stats Grid */}
-          <View style={styles.statsGrid}>
-            <View style={styles.statCard}>
-              <View style={styles.statTopRow}>
-                <View style={styles.statIconContainer}>
-                  <TrendingUp size={20} color={Colors.ink} />
-                </View>
-                <Text style={styles.statLabel}>{t('profile.streakDays')}</Text>
-              </View>
-              <Text style={styles.statValue}>12</Text>
-              <Text style={styles.statUnit}>{t('home.streak')}</Text>
-            </View>
-
-            <View style={styles.statCard}>
-              <View style={styles.statTopRow}>
-                <View style={styles.statIconContainer}>
-                  <Clock size={20} color={Colors.ink} />
-                </View>
-                <Text style={styles.statLabel}>{t('profile.studyTime')}</Text>
-              </View>
-              <Text style={styles.statValue}>4.5</Text>
-              <Text style={styles.statUnit}>{t('home.hoursThisWeek')}</Text>
-            </View>
-          </View>
-
-          {/* Recent Achievements */}
-          <View style={styles.achievementsSection}>
-            <View style={styles.achievementsHeader}>
-              <Star size={16} color={Colors.thaiGold} fill={Colors.thaiGold} />
-              <Text style={styles.achievementsTitle}>{t('home.recentMastered')}</Text>
-            </View>
-
-            <View style={styles.achievementsList}>
-              <AchievementItem
-                char="ข"
-                name="Khor Khai (蛋)"
-                category="高辅音"
-              />
-              <View style={styles.divider} />
-              <AchievementItem
-                char="สี"
-                name="Sii (颜色)"
-                category="上声"
-              />
-            </View>
-          </View>
-          {/* Dev Playground Entry - Only visible in DEV */}
-          {__DEV__ && (
-            <Pressable
-              style={{
-                marginTop: 20,
-                padding: 12,
-                backgroundColor: Colors.ink,
-                borderRadius: 16,
-                alignItems: 'center',
-                flexDirection: 'row',
-                justifyContent: 'center',
-                gap: 8,
-              }}
-              onPress={() => router.push('/(dev)/playground')}
-            >
-              <Wrench size={16} color={Colors.thaiGold} />
-              <Text style={{ color: Colors.white, fontFamily: Typography.notoSerifBold, fontSize: 12 }}>
-                Open Dev Playground
-              </Text>
-            </Pressable>
-          )}
-        </View>
-      </ScrollView>
-    </SafeAreaView>
-  );
-}
-
-interface AchievementItemProps {
-  char: string;
-  name: string;
-  category: string;
-}
-
-const AchievementItem: React.FC<AchievementItemProps> = ({ char, name, category }) => (
-  <Pressable style={styles.achievementItem}>
-    <View style={styles.achievementLeft}>
-      <View style={styles.achievementIconBox}>
-        <Text style={styles.achievementChar}>{char}</Text>
-      </View>
-      <View>
-        <Text style={styles.achievementName}>{name}</Text>
-        <Text style={styles.achievementCategory}>{category}</Text>
-      </View>
-    </View>
-    <View style={styles.masteredBadge}>
-      <Text style={styles.masteredText}>已掌握</Text>
-    </View>
-  </Pressable>
-);
-
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: Colors.paper,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingBottom: 120,
-  },
-  header: {
-    paddingHorizontal: 24,
-    paddingBottom: 24,
-    paddingTop: 48,
-    borderBottomWidth: 1,
-    borderBottomColor: 'transparent',
-  },
-  headerContent: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-    zIndex: 10,
-  },
-  greetingContainer: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    position: 'relative',
-  },
-  greetingText: {
-    fontFamily: Typography.playfairRegular,
-    fontSize: 30,
-    letterSpacing: -0.5,
-    color: Colors.ink,
-  },
-  greetingDot: {
-    fontFamily: Typography.playfairRegular,
-    position: 'absolute',
-    right: -12,
-    top: -4,
-    fontSize: 20,
-    color: Colors.thaiGold,
-  },
-  subtitleText: {
-    fontFamily: Typography.notoSerifRegular,
-    marginTop: 4,
-    fontSize: 14,
-    letterSpacing: 0.5,
-    color: Colors.taupe,
-  },
-  awardBadge: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(212, 175, 55, 0.2)',
-    backgroundColor: 'rgba(212, 175, 55, 0.1)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  contentContainer: {
-    paddingHorizontal: 24,
-    width: '100%',
-    maxWidth: 672,
-    alignSelf: 'center',
-  },
-  heroCard: {
-    backgroundColor: Colors.ink,
-    padding: 32,
-    borderRadius: 32,
-    marginBottom: 32,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.15,
-    shadowRadius: 16,
-    elevation: 8,
-  },
-  heroContent: {
-    zIndex: 10,
-  },
-  heroTopRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 48,
-  },
-  courseLabel: {
-    fontFamily: Typography.notoSerifBold,
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 1.5,
-    color: Colors.thaiGold,
-    marginBottom: 4,
-    textTransform: 'uppercase',
-  },
-  courseName: {
-    fontFamily: Typography.notoSerifRegular,
-    fontSize: 20,
-    color: Colors.white,
-  },
-  levelBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  levelText: {
-    fontFamily: Typography.notoSerifRegular,
-    fontSize: 10,
-    color: Colors.sand,
-  },
-  heroBottomRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
-  },
-  heroTextContainer: {
-    flex: 1,
-  },
-  thaiText: {
-    fontFamily: Typography.sarabunRegular,
-    fontSize: 48,
-    letterSpacing: 1,
-    color: Colors.white,
-    marginBottom: 8,
-  },
-  translationText: {
-    fontFamily: Typography.notoSerifRegular,
-    fontSize: 14,
-    fontWeight: '300',
-    color: Colors.sand,
-    opacity: 0.6,
-  },
-  playButtonLarge: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: Colors.thaiGold,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: 'rgba(212, 175, 55, 0.4)',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 1,
-    shadowRadius: 15,
-    elevation: 8,
-  },
-  heroGradient1: {
-    position: 'absolute',
-    right: -48,
-    top: -48,
-    width: 192,
-    height: 192,
-    borderRadius: 96,
-    backgroundColor: 'rgba(212, 175, 55, 0.2)',
-    opacity: 0.5,
-  },
-  heroGradient2: {
-    position: 'absolute',
-    left: -40,
-    bottom: -40,
-    width: 160,
-    height: 160,
-    borderRadius: 80,
-    backgroundColor: 'rgba(184, 149, 106, 0.2)',
-  },
-  statsGrid: {
-    flexDirection: 'row',
-    gap: 16,
-    marginBottom: 32,
-  },
-  statCard: {
-    flex: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.8)',
-    padding: 24,
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: Colors.sand,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  statTopRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 16,
-  },
-  statIconContainer: {
-    padding: 8,
-    backgroundColor: Colors.paper,
-    borderRadius: 12,
-  },
-  statLabel: {
-    fontFamily: Typography.notoSerifRegular,
-    fontSize: 10,
-    letterSpacing: 1.5,
-    color: Colors.taupe,
-    textTransform: 'uppercase',
-  },
-  statValue: {
-    fontFamily: Typography.playfairRegular,
-    fontSize: 36,
-    color: Colors.ink,
-  },
-  statUnit: {
-    fontFamily: Typography.notoSerifRegular,
-    marginTop: 4,
-    fontSize: 12,
-    color: Colors.taupe,
-  },
-  achievementsSection: {
-    paddingBottom: 24,
-  },
-  achievementsHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 16,
-  },
-  achievementsTitle: {
-    fontFamily: Typography.notoSerifBold,
-    fontSize: 18,
-    fontWeight: '700',
-    color: Colors.ink,
-  },
-  achievementsList: {
-    backgroundColor: 'rgba(255, 255, 255, 0.6)',
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: Colors.sand,
-    padding: 8,
-  },
-  achievementItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 16,
-    borderRadius: 16,
-  },
-  achievementLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-  },
-  achievementIconBox: {
-    width: 48,
-    height: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: Colors.sand,
-    backgroundColor: Colors.paper,
-  },
-  achievementChar: {
-    fontFamily: Typography.sarabunRegular,
-    fontSize: 20,
-    color: Colors.ink,
-  },
-  achievementName: {
-    fontFamily: Typography.playfairRegular,
-    fontSize: 16,
-    fontWeight: '500',
-    color: Colors.ink,
-  },
-  achievementCategory: {
-    fontFamily: Typography.notoSerifRegular,
-    fontSize: 10,
-    letterSpacing: 1,
-    color: Colors.taupe,
-    textTransform: 'uppercase',
-  },
-  masteredBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: Colors.sand,
-    backgroundColor: Colors.paper,
-  },
-  masteredText: {
-    fontFamily: Typography.notoSerifRegular,
-    fontSize: 12,
-    color: 'rgba(26, 26, 26, 0.6)',
-  },
-  divider: {
-    width: '90%',
-    height: 1,
-    backgroundColor: 'rgba(229, 226, 219, 0.5)',
-    alignSelf: 'center',
-    marginVertical: 4,
-  },
-});
 ````
 
 ## File: src/hooks/useAlphabetLearningEngine.ts
@@ -24583,6 +28250,513 @@ export function useAlphabetLearningEngine(lessonId: string) {
     onSkipYesterdayReview: handleSkipYesterdayReview,
   };
 }
+````
+
+## File: src/stores/moduleAccessStore.ts
+````typescript
+// src/stores/moduleAccessStore.ts
+
+/**
+ * 模块访问控制 Store
+ * 
+ * 功能：
+ * 1. 检查用户是否有权限访问某个模块
+ * 2. 缓存访问权限结果
+ * 3. 提供全局进度数据
+ */
+
+import { create } from 'zustand';
+import { callCloudFunction } from '@/src/utils/apiClient';
+import { API_ENDPOINTS } from '@/src/config/api.endpoints';
+import { useUserStore } from './userStore';
+import { LESSON_METADATA } from '@/src/config/alphabet/lessonMetadata.config';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+
+const getCompletedLessonsStorageKey = (userId: string): string =>
+    `@alphabet_completed_lessons_${userId}`;
+
+
+
+// ==================== 类型定义 ====================
+
+/**
+ * 模块类型
+ * 
+ * 注意：
+ * - 与后端 memory-engine.checkModuleAccess 保持一致，字母模块使用 'letter'
+ */
+export type ModuleType = 'letter' | 'word' | 'sentence' | 'article';
+
+/**
+ * 用户进度数据
+ */
+export interface UserProgress {
+    // 字母学习进度
+    letterProgress: number;           // 0-1 (后端存储为比例值)
+    letterCompleted: boolean;         // Added: Whether letter learning is completed
+    letterMasteredCount: number;      // 已掌握字母数
+    letterTotalCount: number;         // 总字母数
+
+    // 单词学习进度
+    wordProgress: number;             // 0-100
+    wordMasteredCount: number;        // 已掌握单词数
+    wordTotalCount: number;           // 总单词数
+
+    // 句子学习进度
+    sentenceProgress: number;         // 0-100
+    sentenceMasteredCount: number;    // 已掌握句子数
+    sentenceTotalCount: number;       // 总句子数
+
+    // 文章学习进度
+    articleProgress: number;          // 0-100
+    articleMasteredCount: number;     // 已掌握文章数
+    articleTotalCount: number;        // 总文章数
+
+    // 解锁状态
+    wordUnlocked: boolean;            // 单词模块是否解锁
+    sentenceUnlocked: boolean;        // 句子模块是否解锁
+    articleUnlocked: boolean;         // 文章模块是否解锁
+
+    /**
+     * 字母课程完成情况（仅前端使用）
+     * 例如: ['lesson1','lesson2',...]
+     */
+    completedAlphabetLessons?: string[];
+
+    /**
+     * 按课程来源的单词掌握数（CoursePage 进度条用）
+     * 例: { BaseThai_1: { mastered: 5 }, BaseThai_2: { mastered: 3 }, ... }
+     */
+    wordProgressBySource?: Record<string, { mastered: number }>;
+
+    // 设置
+    dailyLimit?: number;              // 每日学习数量设置
+}
+
+/**
+ * 访问检查响应
+ */
+interface CheckAccessResponse {
+    allowed: boolean;
+    reason?: string;
+    requiredProgress?: number;
+    currentProgress?: number;
+}
+
+/**
+ * 用户进度响应（后端返回）
+ */
+interface UserProgressResponse {
+    progress: UserProgress & {
+        completedLessons?: string[];  // 🔥 后端返回字段（user_alphabet_progress.completedLessons）
+    };
+}
+
+// ==================== Store 定义 ====================
+
+interface ModuleAccessStore {
+    // ===== 状态 =====
+    userProgress: UserProgress | null;
+    accessCache: Map<ModuleType, boolean>;
+    isLoading: boolean;
+    error: string | null;
+
+    // ===== 方法 =====
+    checkAccess: (moduleType: ModuleType) => Promise<boolean>;
+    checkAccessLocally: (moduleType: ModuleType) => boolean;
+    getUserProgress: () => Promise<void>;
+    clearCache: () => void;
+    setError: (error: string | null) => void;
+    setDailyLimit: (moduleType: ModuleType, limit: number) => void;
+    /**
+     * 标记某个字母课程已完成（仅用于字母模块解锁链路）
+     */
+    markAlphabetLessonCompleted: (lessonId: string) => void;
+}
+
+// ==================== 默认进度数据 ====================
+
+const defaultProgress: UserProgress = {
+    letterProgress: 0,
+    letterCompleted: false,
+    letterMasteredCount: 0,
+    letterTotalCount: 44,
+    wordProgress: 0,
+    wordMasteredCount: 0,
+    wordTotalCount: 0,
+    sentenceProgress: 0,
+    sentenceMasteredCount: 0,
+    sentenceTotalCount: 0,
+    articleProgress: 0,
+    articleMasteredCount: 0,
+    articleTotalCount: 0,
+    wordUnlocked: false,
+    sentenceUnlocked: false,
+    articleUnlocked: false,
+};
+
+// ==================== Store 实现 ====================
+
+export const useModuleAccessStore = create<ModuleAccessStore>()((set, get) => ({
+    // ===== 初始状态 =====
+    userProgress: null,
+    accessCache: new Map<ModuleType, boolean>(),
+    isLoading: false,
+    error: null,
+
+    // ===== 检查模块访问权限 =====
+    /**
+     * 检查用户是否有权限访问某个模块
+     * 
+     * @param moduleType 模块类型
+     * @returns 是否有权限访问
+     */
+    checkAccess: async (moduleType: ModuleType): Promise<boolean> => {
+        const { accessCache } = get();
+        const userId = useUserStore.getState().currentUser?.userId;
+
+        if (!userId) {
+            console.warn('⚠️ 用户未登录，无法检查模块访问权限');
+            return false;
+        }
+
+        // 1. 检查缓存
+        if (accessCache.has(moduleType)) {
+            const cachedResult = accessCache.get(moduleType);
+            console.log(`✅ 从缓存获取 ${moduleType} 访问权限:`, cachedResult);
+            return cachedResult!;
+        }
+
+        try {
+            set({ isLoading: true, error: null });
+
+            // 2. 调用云函数检查权限
+            const result = await callCloudFunction<CheckAccessResponse>(
+                'checkModuleAccess',
+                {
+                    userId,
+                    moduleType,
+                },
+                {
+                    endpoint: API_ENDPOINTS.MEMORY.GET_TODAY_MEMORIES.cloudbase,
+                }
+            );
+
+            if (result.success && result.data) {
+                const allowed = result.data.allowed;
+
+                // 3. 缓存结果
+                const newCache = new Map(accessCache);
+                newCache.set(moduleType, allowed);
+                set({ accessCache: newCache, isLoading: false });
+
+                console.log(`✅ ${moduleType} 访问权限检查完成:`, allowed);
+
+                // 如果不允许，记录原因
+                if (!allowed && result.data.reason) {
+                    console.log(`📌 拒绝原因: ${result.data.reason}`);
+                }
+
+                return allowed;
+            } else {
+                // 请求失败，降级处理
+                console.warn('⚠️ 云函数调用失败，使用本地逻辑判断');
+                const localAllowed = get().checkAccessLocally(moduleType);
+
+                // 缓存本地判断结果
+                const newCache = new Map(accessCache);
+                newCache.set(moduleType, localAllowed);
+                set({ accessCache: newCache, isLoading: false });
+
+                return localAllowed;
+            }
+        } catch (error: any) {
+            console.error('❌ checkAccess error:', error);
+            set({ error: error.message || '检查权限失败', isLoading: false });
+
+            // 降级到本地逻辑
+            const localAllowed = get().checkAccessLocally(moduleType);
+
+            // 缓存本地判断结果
+            const newCache = new Map(get().accessCache);
+            newCache.set(moduleType, localAllowed);
+            set({ accessCache: newCache });
+
+            return localAllowed;
+        }
+    },
+
+    // ===== 本地权限检查逻辑（降级方案）=====
+    /**
+     * 本地权限检查逻辑（降级方案）
+     * 
+     * @param moduleType 模块类型
+     * @returns 是否有权限访问
+     */
+    checkAccessLocally: (moduleType: ModuleType): boolean => {
+        const { userProgress } = get();
+
+        if (!userProgress) {
+            // 如果没有进度数据，允许访问字母模块，其他模块不允许
+            return moduleType === 'letter';
+        }
+
+        // 与后端 memory-engine.checkModuleAccess 的意图保持一致：
+        // - 字母模块始终可访问
+        // - 只要 letterCompleted 为 true，或 letterProgress ≥ 0.8，所有非字母模块统一解锁
+        if (moduleType === 'letter') {
+            return true;
+        }
+
+        const finishedByTest = !!userProgress.letterCompleted;
+        const finishedByProgress = (userProgress.letterProgress ?? 0) >= 0.8;
+
+        return finishedByTest || finishedByProgress;
+    },
+
+    // ===== 获取用户进度 =====
+    // ===== 获取用户进度 =====
+    /**
+     * 从后端获取用户进度数据
+     */
+    getUserProgress: async (): Promise<void> => {
+        const userId = useUserStore.getState().currentUser?.userId;
+
+        if (!userId) {
+            console.warn('⚠️ 用户未登录，无法获取进度数据');
+            set({ userProgress: defaultProgress });
+            return;
+        }
+
+        try {
+            const oldKey = '@alphabet_completed_lessons';
+            const oldData = await AsyncStorage.getItem(oldKey);
+            if (oldData) {
+                await AsyncStorage.removeItem(oldKey);
+                console.log('Old key has been delete.');
+            }
+        } catch (e) {
+            console.warn('删除旧key失败：', e)
+        }
+
+        set({ isLoading: true, error: null });
+
+        // Helper to try fetch
+        const fetchProgress = async (endpoint: string) => {
+            return await callCloudFunction<UserProgressResponse>(
+                'getUserProgress',
+                { userId, entityType: 'letter' },  // 添加 entityType 参数
+                { endpoint }
+            );
+        };
+
+        try {
+            // 1. Try Primary Endpoint (memory-engine)
+            let result = await fetchProgress(API_ENDPOINTS.MEMORY.GET_TODAY_MEMORIES.cloudbase);
+
+            if (result.success && result.data) {
+                console.log(`🌐 后端返回的每日限额: ${result.data.progress.dailyLimit}`);
+                // 🔥 Step 3: 以后端数据为准，本地仅作缓存
+                const remoteCompleted = result.data.progress.completedLessons || [];
+                const stats = (result.data.progress as any).statistics;
+
+                // 🔥 映射后端 statistics 为前端期望的扁平字段（CoursePage 进度条依赖）
+                const letterMasteredCount = stats?.letter?.mastered ?? result.data.progress.letterMasteredCount ?? 0;
+                const letterTotalCount = stats?.letter?.total ?? result.data.progress.letterTotalCount ?? 44;
+                const wordMasteredCount = stats?.word?.mastered ?? result.data.progress.wordMasteredCount ?? 0;
+                const wordTotalCount = stats?.word?.total ?? result.data.progress.wordTotalCount ?? 0;
+                const wordProgressBySource = stats?.wordProgressBySource ?? result.data.progress.wordProgressBySource ?? {};
+
+                // 🔥 更新本地缓存（用于离线时加速）
+                const storageKey = getCompletedLessonsStorageKey(userId);
+                AsyncStorage.setItem(storageKey, JSON.stringify(remoteCompleted)).catch(err => {
+                    console.warn('⚠️ Failed to cache completed lessons:', err);
+                });
+
+                set({
+                    userProgress: {
+                        ...result.data.progress,
+                        completedAlphabetLessons: remoteCompleted,
+                        letterMasteredCount,
+                        letterTotalCount,
+                        wordMasteredCount,
+                        wordTotalCount,
+                        wordProgressBySource,
+                    },
+                    isLoading: false,
+                });
+                console.log('✅ 用户进度数据已更新 (Backend-first):', {
+                    letterMasteredCount,
+                    letterTotalCount,
+                    wordMasteredCount,
+                    wordTotalCount,
+                    completedAlphabetLessons: remoteCompleted,
+                });
+            } else {
+                // 🔥 后端失败时，尝试从本地缓存加载（降级方案）
+                console.warn('⚠️ 获取用户进度失败 (Primary & Fallback)，尝试从本地缓存加载');
+                try {
+                    const storageKey = getCompletedLessonsStorageKey(userId);
+                    const cached = await AsyncStorage.getItem(storageKey);
+                    const cachedCompleted = cached ? JSON.parse(cached) : [];
+
+                    set({
+                        userProgress: {
+                            ...defaultProgress,
+                            completedAlphabetLessons: cachedCompleted
+                        },
+                        isLoading: false,
+                        error: result.error || 'Failed to fetch progress'
+                    });
+                    console.log('⚠️ 使用本地缓存数据:', cachedCompleted);
+                } catch (cacheError) {
+                    set({
+                        userProgress: defaultProgress,
+                        isLoading: false,
+                        error: result.error || 'Failed to fetch progress'
+                    });
+                }
+            }
+        } catch (error: any) {
+            console.error('❌ getUserProgress error:', error);
+
+            // 🔥 异常时，尝试从本地缓存加载（降级方案）
+            try {
+                const storageKey = getCompletedLessonsStorageKey(userId);
+                const cached = await AsyncStorage.getItem(storageKey);
+                const cachedCompleted = cached ? JSON.parse(cached) : [];
+
+                set({
+                    error: error.message || '获取进度失败',
+                    userProgress: {
+                        ...defaultProgress,
+                        completedAlphabetLessons: cachedCompleted
+                    },
+                    isLoading: false,
+                });
+                console.log('⚠️ 异常时使用本地缓存:', cachedCompleted);
+            } catch (cacheError) {
+                set({
+                    error: error.message || '获取进度失败',
+                    userProgress: defaultProgress,
+                    isLoading: false,
+                });
+            }
+        }
+    },
+
+    // ===== 清除缓存 =====
+    /**
+     * 清除访问权限缓存
+     * 用于：用户完成学习后需要重新检查权限
+     */
+    clearCache: (): void => {
+        set({ accessCache: new Map<ModuleType, boolean>() });
+        console.log('🗑️ 访问权限缓存已清除');
+    },
+
+    // ===== 设置错误 =====
+    setError: (error: string | null): void => {
+        set({ error });
+    },
+
+    // ===== 更新每日学习量（前端缓存）=====
+    setDailyLimit: async (moduleType: ModuleType, limit: number) => {
+        // 1. 先更新本地 UI（保证响应速度）
+        set((state) => ({
+            userProgress: {
+                ...(state.userProgress || { ...defaultProgress }),
+                dailyLimit: limit,
+            },
+        }));
+        // 2. 立即推送到后端持久化
+        const userId = useUserStore.getState().currentUser?.userId;
+        if (userId) {
+            try {
+                await callCloudFunction(
+                    'setDailyLimit',
+                    {
+                        userId,
+                        dailyLimit: limit
+                    },
+                    { endpoint: API_ENDPOINTS.MEMORY.SET_DAILY_LIMIT.cloudbase }
+                );
+                console.log(`✅ 已成功同步 ${moduleType} 限额 ${limit} 到云端`);
+            } catch (error) {
+                console.error('❌ 更新每日学习量失败:', error);
+            }
+        };
+
+        console.log(`📌 已更新 ${moduleType} dailyLimit 为 ${limit}`);
+    },
+
+    // ===== 标记字母课程完成（前端本地）=====
+    markAlphabetLessonCompleted: (lessonId: string) => {
+        const userId = useUserStore.getState().currentUser?.userId;
+        if (!userId) {
+            console.warn('⚠️ 用户未登录，无法标记课程完成');
+            return;
+        }
+
+        const totalLessons = Object.keys(LESSON_METADATA).length;
+        const coreLessons = 6; // 完成前 6 课视为“核心字母已学完”
+
+        set((state) => {
+            const prev = state.userProgress || { ...defaultProgress };
+
+            const prevCompleted = new Set(prev.completedAlphabetLessons ?? []);
+            prevCompleted.add(lessonId);
+            const completedAlphabetLessons = Array.from(prevCompleted);
+
+            const completedCount = completedAlphabetLessons.length;
+            const allLessonsDone = completedCount >= totalLessons;
+
+            // 进度：
+            // - 完成 lesson1-4 视为 0.8
+            // - 完成 lesson1-6 视为 0.9（核心字母全部完成）
+            // - 完成全部 7 课视为 1.0（含罕用/古体字母）
+            let nextLetterProgress = prev.letterProgress;
+            if (completedCount >= 4 && nextLetterProgress < 0.8) {
+                nextLetterProgress = 0.8;
+            }
+            if (completedCount >= coreLessons && nextLetterProgress < 0.9) {
+                nextLetterProgress = 0.9;
+            }
+            if (completedCount >= totalLessons && nextLetterProgress < 1) {
+                nextLetterProgress = 1;
+            }
+
+            // 完成前 6 课即视为核心字母学习完成，
+            // lesson7 作为补充课程不影响其他模块解锁
+            const coreLessonsDone = completedCount >= coreLessons;
+            const nextLetterCompleted =
+                prev.letterCompleted || coreLessonsDone;
+
+            const updated: UserProgress = {
+                ...prev,
+                completedAlphabetLessons,
+                letterCompleted: nextLetterCompleted,
+                letterProgress: nextLetterProgress,
+            };
+
+            // 🔥 Persist to AsyncStorage (Fire and forget)
+            const storageKey = getCompletedLessonsStorageKey(userId);
+            AsyncStorage.setItem(storageKey, JSON.stringify(completedAlphabetLessons)).catch(err => {
+                console.error('❌ Failed to persist completed alphabet lessons:', err);
+            });
+
+            return {
+                userProgress: updated,
+                accessCache: allLessonsDone
+                    ? new Map<ModuleType, boolean>()
+                    : state.accessCache,
+            };
+        });
+
+        console.log(`✅ 字母课程已完成: ${lessonId}`);
+    },
+}));
 ````
 
 ## File: src/stores/alphabetStore.ts
@@ -25466,20 +29640,7 @@ export default function CoursesScreen() {
   };
 
   const getCourseProgress = (course: CourseWithImage) => {
-    if (!userProgress) return undefined;
-    const moduleType = getModuleType(course);
-    if (moduleType === 'letter') {
-      return {
-        completed: userProgress.letterMasteredCount,
-        total: userProgress.letterTotalCount || course.lessons,
-      };
-    }
-    if (moduleType === 'word') {
-      return {
-        completed: userProgress.wordMasteredCount,
-        total: userProgress.wordTotalCount || course.lessons,
-      };
-    }
+    // 🔒 暂屏蔽：字母/单词进度条显示不正确，待后端数据修正后再启用
     return undefined;
   };
 
@@ -25773,927 +29934,948 @@ const styles = StyleSheet.create({
 });
 ````
 
-## File: src/i18n/locales/zh.ts
+## File: app/(tabs)/index.tsx
 ````typescript
-// src/i18n/locales/zh.ts
-export default {
-  common: {
-    confirm: '确认',
-    cancel: '取消',
-    save: '保存',
-    delete: '删除',
-    edit: '编辑',
-    loading: '加载中...',
-    error: '错误',
-    success: '成功',
-    all: '全部',
-  },
-  auth: {
-    title: '试试泰语',
-    login: '登录',
-    register: '注册',
-    registerSuccess: '注册成功',
-    logout: '退出登录',
-    email: '邮箱',
-    password: '密码',
-    emailPlaceholder: '请输入邮箱',
-    passwordPlaceholder: '请输入密码',
-    confirmPassword: '确认密码',
-    confirmPasswordPlaceholder: '请再次输入密码',
-    displayName: '昵称',
-    displayNamePlaceholder: '请输入昵称',
-    loginButton: '登录',
-    registerButton: '注册',
-    forgotPassword: '忘记密码？',
-    noAccount: '还没有账号？',
-    hasAccount: '已有账号？',
-    loginSuccess: '登录成功',
-    loginFailed: '登录失败',
-    alreadyHaveAccount: '已有账号？',
-    logining: '登录中'
-  },
-  tabs: {
-    home: '首页',
-    learn: '学习',
-    courses: '课程',
-    profile: '我的',
-  },
-  profile: {
-    title: '个人中心',
-    editProfile: '编辑资料',
-    achievements: '学习成就',
-    settings: '设置',
-    completedAlphabets: '已学字母',
-    completedVocabulary: '已学词汇',
-    completedSentences: '已学句子',
-    completedArticles: '已读文章',
-    totalScore: '总分',
-    studyTime: '学习时长',
-    streakDays: '连续天数',
-    hours: '小时',
-    days: '天',
-    selectLanguage: '选择语言',
-    chinese: '中文',
-    english: 'English',
-    dailyReminder: '每日提醒',
-    ttsEngine: '音频反馈引擎',
-    limit: '每次学习上限',
-    achievementBadges: {
-      streak7: '7天连胜',
-      master: '声调大师',
-      vocab100: '词汇100',
-    },
-  },
-  home: {
-    greeting: 'ສະບາຍດີ',
-    todayProgress: '今日学习目标已完成',
-    currentCourse: '当前课程',
-    recentMastered: '最近掌握',
-    mastered: '已掌握',
-    reviewDue: '待复习内容',
-    streak: '连续打卡',
-    hoursThisWeek: '本周小时数',
-  },
-  courses: {
-    title: '选择一本吧少年',
-    subtitle: '开启你的泰语学习之旅',
-    searchPlaceholder: '搜索课程...',
-    startBtnText: '开始学习',
-    continue: '继续学习',
-    locked: '未解锁',
-    levels: {
-      beginner: '入门',
-      elementary: '初级',
-      intermediate: '中级',
-      advanced: '高级',
-    },
-    list: {
-      alphabet: {
-        title: '泰语字母表',
-        description: '从44个辅音到元音与声调，逐步掌握泰语读写基础。',
-      },
-      thai_1: {
-        title: '基础泰语1',
-        description: '从零开始学习泰语，掌握初步词汇。',
-      },
-      thai_2: {
-        title: '基础泰语2',
-        description: '掌握更多词汇，开始简单对话。',
-      },
-      thai_3: {
-        title: '基础泰语3',
-        description: '掌握更多词汇，进行比较熟练的对话。',
-      },
-      thai_4: {
-        title: '基础泰语4',
-        description: '熟练掌握大部分泰语高频词汇。',
-      },
-    },
-  },
-  learning: {
-    basicDefinition: '基础释义',
-    exampleSentences: '例句示例',
-    usageDetails: '用法详解',
-    grammarExamples: '语法示例',
-    structure: '结构',
-    explain: '解释',
-    usageTip: '使用技巧',
-    diffWithChinese: '与中文差异',
-    commonMistakes: '常见错误',
-    similarWordsDiff: '相似词汇区别',
-    pronunciationPitfalls: '发音易错点',
-    usageScenarios: '使用场合',
-    dialogueExample: '对话示例',
-    individualSentences: '例句',
-    viewDefinition: '查看释义',
-    nextEnter: '下一个',
-    next: '下一个',
-    forgot: '忘记了',
-    unsure: '模糊',
-    know: '认识',
-    skipReview: '跳过复习',
-    sessionComplete: '学习完成！',
-    backToHome: '返回首页',
-    noNewWordsTitle: '没有新单词',
-    noNewWordsMessage: '你已经学完了所有新单词！',
-    endSessionTitle: '结束学习？',
-    endSessionMessage: '确定要退出吗？',
-    quit: '退出学习',
-    noExamples: '暂无例句',
-    noUsage: '暂无用法详解',
-    setupTitle: '今日学习计划',
-    setupSubtitle: '选择今天要学习/复习的字母数量',
-    setupSubtitleWords: '选择今天要学习/复习的单词数量',
-    start: '开始学习',
-    quizInstruction: '请选择正确的含义',
-    skip: '跳过',
-    dontKnow: '不认识',
-    nextStep: '下一步',
-    cognates: '同源词',
-    memoryTips: '记忆技巧',
-  },
-  modules: {
-    alphabet: '字母学习',
-    word: '单词学习',
-    sentence: '句子学习',
-    article: '文章阅读',
-  },
-  moduleAccess: {
-    locked: '模块已锁定',
-    lockedMessage: '{{module}}模块暂未解锁',
-    requirement: '解锁要求',
-    prerequisite: {
-      word: '完成字母学习并达到 95% 进度',
-      sentence: '完成单词学习并达到 80% 进度',
-      article: '完成句子学习并达到 80% 进度',
-    },
-    currentProgress: '当前进度',
-    remainingProgress: '还需完成 {{remaining}}%',
-    progressComplete: '进度已达标！',
-    goBack: '返回',
-    noProgress: '请先开始学习',
-    unknownModule: '未知模块',
-  },
-  alphabet: {
-    title: '泰语字母学习',
-    level: '基础',
-    description: '学习44个辅音和32个元音，掌握标准发音',
-    continue: '继续学习',
-    start: '开始学习',
-    phase: {
-      new: '新字母',
-      review: '快速复习',
-      final: '最终复习',
-      fix: '错题修正',
-      warmup: '热身环节',
-      completed: '本轮完成',
-      finished: '课程完成'
-    },
-    roundInfo: '第 {{current}} / {{total}} 轮',
-    skipBury: '跳过(不再复习)',
-    optionsLoadFailed: '题目选项加载失败',
-    regenerate: '重新生成题目',
-    checkAnswer: '检查答案',
-    nextQuestion: '下一题 →',
-    instructions: {
-      selectCorrect: '请选择正确的含义',
-      listenChoose: '听音选字',
-      matchPronunciation: '匹配发音',
-      consonantClass: '选择辅音类别',
-      initialSound: '识别声母',
-      finalSound: '识别韵母'
-    },
-  },
-  alphabetTest: {
-    title: '字母测试',
-    description: '测试你的字母掌握情况',
-    start: '开始测试',
-    submit: '提交',
-    score: '得分',
-    passed: '通过',
-    failed: '未通过',
-    retry: '重新测试',
-    backToHome: '返回首页',
-  },
-  components: {
-    phonics: {
-      title: '声调规则表',
-      interactive: '📌 交互示例',
-      understood: '明白了,继续学习 →'
-    },
-    completion: {
-      courseDone: '课程完成！',
-      roundDone: 'Round {{round}} 完成',
-      courseDoneMsg: '恭喜你完成了本节课程的所有学习内容！',
-      roundDoneMsg: '休息一下，准备进入下一轮学习\n每节课需完成3轮学习',
-      finishCourse: '完成课程',
-      backToCourses: '返回选课'
-    },
-    recovery: {
-      title: '继续上次学习？',
-      message: '检测到您在该课程存在未完成的轮次，是否继续之前的阶段？',
-      restart: '重新开始本轮',
-      continue: '继续学习'
-    },
-    miniReview: {
-      hint: '💡 提示:',
-      pitchCurve: '🎵 音高曲线',
-      playSound: '播放发音',
-      explanation: '💡 解释',
-      aspirated: '送气音 (aspirated)',
-      unaspirated: '不送气音 (unaspirated)',
-      voiceless: '清音 (voiceless)',
-      voiced: '浊音 (voiced)',
-      highClass: '高辅音',
-      midClass: '中辅音',
-      lowClass: '低辅音',
-      consonantClass: '辅音类'
-    },
-    aspirated: {
-      title: '送气音对比训练',
-      instruction: '🔊 先播放目标音频,然后从下方选项中选择对应的字母',
-      playTarget: '播放目标发音',
-      tipsTitle: '💡 区分技巧',
-      aspirated: '送气',
-      unaspirated: '不送气',
-      correctAns: '✅ 正确答案',
-      aspiratedDesc: '这是一个送气音,发音时有明显气流',
-      unaspiratedDesc: '这是一个不送气音,发音时气流较弱'
-    }
-  }
+// app/(tabs)/index.tsx
+import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
+import { ScrollView, View, Text, Pressable, StyleSheet } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
+import { Play, TrendingUp, Clock, Award, AlertCircle, Wrench, BookOpen } from 'lucide-react-native';
+import { BlurView } from 'expo-blur';
+import { ThaiPatternBackground } from '@/src/components/common/ThaiPatternBackground';
+// import { FloatingBubbles } from '@/src/components/common/FloatingBubbles';
+import { Colors } from '@/src/constants/colors';
+import { Typography } from '@/src/constants/typography';
+import { ReviewItem } from '@/src/entities/types/entities';
+import { useUserStore } from '@/src/stores/userStore';
+import { useModuleAccessStore } from '@/src/stores/moduleAccessStore';
+import { useVocabularyStore } from '@/src/stores/vocabularyStore';
+import { useLearningPreferenceStore } from '@/src/stores/learningPreferenceStore';
+import { useTodayStudyTime } from '@/src/hooks/useTodayStudyTime';
+import { CourseSelectionModal } from '@/src/components/courses/CourseSelectionModal';
+import coursesData from '@/assets/courses/courses.json';
+import alphabetCourses from '@/assets/courses/alphabetCourses.json';
+import type { ModuleType } from '@/src/stores/moduleAccessStore';
+import type { ImageSourcePropType } from 'react-native';
+// === AI Dictionary Imports ===
+import { TextInput, ActivityIndicator, Modal } from 'react-native';
+import { Search, X } from 'lucide-react-native';
+import { AiService } from '@/src/services/aiService';
+import { AiExplanationView } from '@/src/components/ai/AiExplanationView';
+import type { ExplainVocabularyResponse } from '@/src/entities/types/ai.types';
+import { Vocabulary } from '@/src/entities/types/vocabulary.types';
+import i18n from '@/src/i18n';
+
+const MOCK_REVIEWS: ReviewItem[] = [
+  { id: '1', char: 'ข', phonetic: 'Khor Khai', type: 'Review', dueIn: 'Today' },
+  { id: '2', char: 'ค', phonetic: 'Khor Khwai', type: 'Hard', dueIn: 'Today' },
+  { id: '3', char: 'ง', phonetic: 'Ngor Ngu', type: 'New', dueIn: 'Today' },
+  { id: '4', char: 'จ', phonetic: 'Jor Jan', type: 'Review', dueIn: 'Today' },
+];
+
+type CourseItem = {
+  id: string;
+  source: string;
+  title: string;
+  description: string;
+  level: string;
+  image: string;
+  category: string;
+  lessons: number;
 };
-````
 
-## File: src/i18n/locales/en.ts
-````typescript
-// src/i18n/locales/en.ts
-export default {
-  common: {
-    confirm: 'Confirm',
-    cancel: 'Cancel',
-    save: 'Save',
-    delete: 'Delete',
-    edit: 'Edit',
-    loading: 'Loading...',
-    error: 'Error',
-    success: 'Success',
-    all: 'All',
-  },
-  auth: {
-    title: 'TRY THAI',
-    login: 'Login',
-    register: 'Register',
-    registerSuccess: 'Register successful',
-    logout: 'Logout',
-    email: 'Email',
-    password: 'Password',
-    emailPlaceholder: 'Enter your email',
-    passwordPlaceholder: 'Enter your password',
-    confirmPassword: 'Confirm Password',
-    confirmPasswordPlaceholder: 'Re-enter your password',
-    displayName: 'Display Name',
-    displayNamePlaceholder: 'Enter your display name',
-    loginButton: 'Login',
-    registerButton: 'Register',
-    forgotPassword: 'Forgot password?',
-    noAccount: "Don't have an account?",
-    hasAccount: 'Already have an account?',
-    loginSuccess: 'Login successful',
-    loginFailed: 'Login failed',
-    alreadyHaveAccount: 'Already have an account?',
-    logining: 'logining'
-  },
-  tabs: {
-    home: 'Home',
-    learn: 'Learn',
-    courses: 'Courses',
-    profile: 'Profile',
-  },
-  profile: {
-    title: 'Profile',
-    editProfile: 'Edit Profile',
-    achievements: 'Achievements',
-    settings: 'Settings',
-    completedAlphabets: 'Alphabets Learned',
-    completedVocabulary: 'Vocabulary Learned',
-    completedSentences: 'Sentences Learned',
-    completedArticles: 'Articles Read',
-    totalScore: 'Total Score',
-    studyTime: 'Study Time',
-    streakDays: 'Streak Days',
-    hours: 'hrs',
-    days: 'days',
-    selectLanguage: 'Select Language',
-    chinese: '中文',
-    english: 'English',
-    dailyReminder: 'Daily Reminder',
-    ttsEngine: 'TTS Engine',
-    limit: 'Daily Limit',
-    achievementBadges: {
-      streak7: '7-Day Streak',
-      master: 'Tone Master',
-      vocab100: 'Vocab 100',
-    },
-  },
-  home: {
-    greeting: 'Hello',
-    todayProgress: "Today's learning goal completed",
-    currentCourse: 'Current Course',
-    recentMastered: 'Recently Mastered',
-    mastered: 'Mastered',
-    reviewDue: 'Reviews Due',
-    streak: 'Current Streak',
-    hoursThisWeek: 'Hours this week',
-  },
-  courses: {
-    title: 'Choose a course',
-    subtitle: 'Start your Thai language journey',
-    searchPlaceholder: 'Search courses...',
-    startBtnText: 'Start Learning',
-    continue: 'Continue',
-    locked: 'Locked',
-    levels: {
-      beginner: 'Beginner',
-      elementary: 'Elementary',
-      intermediate: 'Intermediate',
-      advanced: 'Advanced',
-    },
-    list: {
-      alphabet: {
-        title: 'Thai Alphabet',
-        description: 'From 44 consonants to vowels and tones, master Thai reading and writing.',
-      },
-      thai_1: {
-        title: 'Basic Thai 1',
-        description: 'Start learning Thai from scratch, master basic vocabulary.',
-      },
-      thai_2: {
-        title: 'Basic Thai 2',
-        description: 'Master more vocabulary and start simple conversations.',
-      },
-      thai_3: {
-        title: 'Basic Thai 3',
-        description: 'Master more vocabulary and engage in more fluent conversations.',
-      },
-      thai_4: {
-        title: 'Basic Thai 4',
-        description: 'Master most high-frequency Thai vocabulary.',
-      },
-    },
-  },
-  learning: {
-    basicDefinition: 'Basic Def',
-    exampleSentences: 'Examples',
-    usageDetails: 'Usage Details',
-    grammarExamples: 'Grammar Examples',
-    structure: 'Structure',
-    explain: 'Explain',
-    usageTip: 'Usage Tip',
-    diffWithChinese: 'Diff with Chinese',
-    commonMistakes: 'Common Mistakes',
-    similarWordsDiff: 'Similar Words',
-    pronunciationPitfalls: 'Pronunciation Pitfalls',
-    usageScenarios: 'Usage Scenarios',
-    dialogueExample: 'Dialogue Example',
-    individualSentences: 'Example Sentences',
-    viewDefinition: 'View Definition',
-    nextEnter: 'Next',
-    next: 'Next',
-    forgot: 'Forgot',
-    unsure: 'Unsure',
-    know: 'Know',
-    skipReview: 'Skip Review',
-    sessionComplete: 'Session Complete!',
-    backToHome: 'Back to Home',
-    noNewWordsTitle: 'No New Words',
-    noNewWordsMessage: 'You have finished all new words!',
-    endSessionTitle: 'End Session?',
-    endSessionMessage: 'Are you sure you want to quit?',
-    quit: 'Quit',
-    noExamples: 'No examples available',
-    noUsage: 'No usage details available',
-    setupTitle: 'Daily Plan',
-    setupSubtitle: 'Select number of letters to learn/review',
-    setupSubtitleWords: 'Select number of words to learn/review',
-    start: 'Start Learning',
-    quizInstruction: 'Select the correct meaning',
-    skip: 'Skip',
-    dontKnow: 'Unfamiliar',
-    nextStep: 'Next',
-    cognates: 'Cognates',
-    memoryTips: 'Memory Tips',
-  },
-  modules: {
-    alphabet: 'Alphabet',
-    word: 'Vocabulary',
-    sentence: 'Sentences',
-    article: 'Articles',
-  },
-  moduleAccess: {
-    locked: 'Module Locked',
-    lockedMessage: '{{module}} module is not yet unlocked',
-    requirement: 'Unlock Requirement',
-    prerequisite: {
-      word: 'Complete alphabet learning and reach 95% progress',
-      sentence: 'Complete vocabulary learning and reach 80% progress',
-      article: 'Complete sentence learning and reach 80% progress',
-    },
-    currentProgress: 'Current Progress',
-    remainingProgress: '{{remaining}}% remaining',
-    progressComplete: 'Progress complete!',
-    goBack: 'Go Back',
-    noProgress: 'Please start learning first',
-    unknownModule: 'Unknown module',
-  },
-  alphabet: {
-    title: 'Thai Alphabet Learning',
-    level: 'Basic',
-    description: 'Learn 44 consonants and 32 vowels, mastered standard pronunciation',
-    continue: 'Continue Learning',
-    start: 'Start Learning',
-    phase: {
-      new: 'New Letter',
-      review: 'Quick Review',
-      final: 'Final Review',
-      fix: 'Mistake Review',
-      warmup: 'Warm Up',
-      completed: 'Round Completed',
-      finished: 'Course Completed'
-    },
-    roundInfo: 'Round {{current}} / {{total}}',
-    skipBury: 'Skip (Bury)',
-    optionsLoadFailed: 'Failed to load options',
-    regenerate: 'Regenerate Question',
-    checkAnswer: 'Check Answer',
-    nextQuestion: 'Next Question →',
-    instructions: {
-      selectCorrect: 'Select the correct meaning',
-      listenChoose: 'Listen and choose the letter',
-      matchPronunciation: 'Match the pronunciation',
-      consonantClass: 'Select the consonant class',
-      initialSound: 'Identify the initial sound',
-      finalSound: 'Identify the final sound'
-    },
-  },
-  alphabetTest: {
-    title: 'Alphabet Test',
-    description: 'Test your alphabet knowledge',
-    start: 'Start Test',
-    submit: 'Submit',
-    score: 'Score',
-    passed: 'Pass',
-    failed: 'Fail',
-    retry: 'Retry',
-    backToHome: 'Back to Home',
-  },
-  components: {
-    phonics: {
-      title: 'Tone Rules',
-      interactive: '📌 Interactive Example',
-      understood: 'Understood, Continue →'
-    },
-    completion: {
-      courseDone: 'Course Completed!',
-      roundDone: 'Round {{round}} Completed',
-      courseDoneMsg: 'Congratulations! You have completed all content in this lesson!',
-      roundDoneMsg: 'Take a break and get ready for the next round\n3 rounds required per lesson',
-      finishCourse: 'Finish Course',
-      backToCourses: 'Back to Courses'
-    },
-    recovery: {
-      title: 'Resume Session?',
-      message: 'Unfinished round detected. Do you want to continue?',
-      restart: 'Restart Round',
-      continue: 'Continue Learning'
-    },
-    miniReview: {
-      hint: '💡 Hint:',
-      pitchCurve: '🎵 Pitch Curve',
-      playSound: 'Play Sound',
-      explanation: '💡 Explanation',
-      aspirated: 'Aspirated',
-      unaspirated: 'Unaspirated',
-      voiceless: 'Voiceless',
-      voiced: 'Voiced',
-      highClass: 'High Class',
-      midClass: 'Mid Class',
-      lowClass: 'Low Class',
-      consonantClass: 'Class'
-    },
-    aspirated: {
-      title: 'Aspirated Sound Training',
-      instruction: '🔊 Play the target sound first, then choose the matching letter',
-      playTarget: 'Play Target Sound',
-      tipsTitle: '💡 Tips',
-      aspirated: 'Aspirated',
-      unaspirated: 'Unaspirated',
-      correctAns: '✅ Correct Answer',
-      aspiratedDesc: 'This is an aspirated sound (strong airflow)',
-      unaspiratedDesc: 'This is an unaspirated sound (weak airflow)'
-    }
-  }
+type CourseWithImage = CourseItem & { imageSource: ImageSourcePropType };
+
+const COURSE_IMAGE_MAP: Record<string, ImageSourcePropType> = {
+  'ThaiBase_1.png': require('@/assets/images/courses/ThaiBase_1.png'),
+  'ThaiBase_2.png': require('@/assets/images/courses/ThaiBase_2.png'),
+  'ThaiBase_3.png': require('@/assets/images/courses/ThaiBase_3.png'),
+  'ThaiBase_4.png': require('@/assets/images/courses/ThaiBase_4.png'),
+  'thai_alphabet.png': require('@/assets/images/courses/thai_alphabet.png'),
+  default: require('@/assets/images/courses/ThaiBase_1.png'),
 };
-````
 
-## File: src/stores/vocabularyStore.ts
-````typescript
-// src/stores/vocabularyStore.ts
-import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { callCloudFunction } from '@/src/utils/apiClient';
-import { API_ENDPOINTS } from '@/src/config/api.endpoints';
-import { useUserStore } from './userStore';
-import {
-    SessionWord,
-    VocabSessionPhase,
-    VocabularyResponse,
-    VOCAB_SCORES,
-} from '@/src/entities/types/vocabulary.types';
-import { resolveVocabPath, getAllVocabAudioPaths } from '@/src/utils/vocab/vocabAudioHelper';
-import { downloadAudioBatch } from '@/src/utils/audioCache';
-import { buildVocabQueue } from '@/src/utils/vocab/buildVocabQueue';
-import { ModuleType } from './moduleAccessStore';
+const COURSES: CourseWithImage[] = [
+  ...(alphabetCourses as CourseItem[]),
+  ...(coursesData as CourseItem[]),
+].map((c) => ({ ...c, imageSource: COURSE_IMAGE_MAP[c.image] || COURSE_IMAGE_MAP.default }));
 
-
-
-interface VocabularyStore {
-    phase: VocabSessionPhase;
-    currentCourseSource: string | null;
-    queue: SessionWord[];
-    currentIndex: number;
-    totalSessionWords: number;
-    completedCount: number;
-    pendingResults: Array<{ userId: string, entityId: string, entityType: string, quality: number, vId?: number, source?: string }>;
-    skippedIds: string[]; // Track skipped word IDs
-    sessionPool: SessionWord[]; // 原始完整词列表快照，不受 skipWord 影响，用于干扰项生成
-    initSession: (userId: string, options?: { limit?: number, source?: string }) => Promise<void>;
-    startCourse: (source: string, limit?: number, moduleType?: ModuleType) => Promise<void>;
-    submitResult: (isCorrect: boolean, score?: number) => Promise<void>;
-    markSelfRating: (rating: number) => void;
-    skipWord: (id: string) => void;
-    submitSkippedWords: () => Promise<void>;
-    next: () => void;
-    finishSession: () => void;
-    resetSession: () => void;
-    flushResults: () => Promise<void>;
-    clearForLogout: () => void; // 登出时完整清除所有状态（含持久化字段）
+function getModuleType(course: CourseWithImage): ModuleType {
+  switch (course.category) {
+    case 'letter': return 'letter';
+    case 'sentence': return 'sentence';
+    case 'article': return 'article';
+    default: return 'word';
+  }
 }
 
-/**
- * 单词学习 Store
- * 
- * 功能：
- * 1. 从后端获取今日单词学习任务
- * 2. 管理单词学习会话流程
- * 3. 提交学习结果到后端
- * 4. 本地进度追踪
- * 
- */
-export const useVocabularyStore = create<VocabularyStore>()(
-    persist(
-        (set, get) => ({
-            phase: VocabSessionPhase.IDLE,
-            currentCourseSource: null,
-            queue: [],
-            currentIndex: 0,
-            totalSessionWords: 0,
-            completedCount: 0,
-            pendingResults: [],
-            skippedIds: [],
-            sessionPool: [], // 原始词列表快照
-            //Above are the variables that are used to store the state of the vocabulary store
+export default function HomeScreen({ vocabulary }: { vocabulary: Vocabulary }) {
+  const { t } = useTranslation();
+  const [reviews, setReviews] = useState<ReviewItem[]>([]);
+  const router = useRouter();
 
-            //================= 下面是函数=================
-            initSession: async (userId: string, options: { limit?: number, source?: string } = {}) => {
-                try {
-                    set({ phase: VocabSessionPhase.LOADING, pendingResults: [], skippedIds: [] }); // Clear pending & skipped
-                    const { limit, source } = options;
-                    // 确保 limit 是合法整数且不是 NaN
-                    const finalLimit = typeof limit === 'string' ? parseInt(limit, 10) : limit;
-                    const safeLimit = (typeof finalLimit === 'number' && isFinite(finalLimit)) ? finalLimit : 5;
-                    console.log(`🚀 开始获取单词学习任务，限制为${safeLimit}`);
-                    console.log(`🚀 initSession params: source=${source}, limit=${limit}`);
-                    const result: any = await callCloudFunction<VocabularyResponse>(
-                        "getTodayMemories",
-                        { userId, limit: safeLimit, entityType: 'word', source: source || get().currentCourseSource },
-                        { endpoint: API_ENDPOINTS.MEMORY.GET_TODAY_MEMORIES.cloudbase }
-                    );
-                    if (result.success && result.data?.items?.length > 0) {
-                        const queue = buildVocabQueue(result.data);
+  // Stores
+  const { currentUser } = useUserStore();
+  const { currentCourseSource, startCourse } = useVocabularyStore();
+  const recentWrongWords = useVocabularyStore(s => s.recentWrongWords);
+  const { streakDays, checkIn, hasCheckedInToday } = useLearningPreferenceStore();
+  const { value: studyTimeValue, unit: studyTimeUnit } = useTodayStudyTime();
 
-                        // DEBUG: Inspect data structure
-                        console.log('🔍 [Debug] First item fields:', Object.keys(result.data.items[0]));
-                        if (result.data.items[0].audioPath) {
-                            console.log('🔍 [Debug] audioPath found:', result.data.items[0].audioPath);
-                        }
+  // 英雄卡：切换课程确认弹窗
+  const [modalVisible, setModalVisible] = useState(false);
+  const [pendingCourse, setPendingCourse] = useState<CourseWithImage | null>(null);
+  
+  //=========================================================================
+  // === AI Dictionary State ===
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [aiResult, setAiResult] = useState<ExplainVocabularyResponse | null>(null);
+  const [showAiModal, setShowAiModal] = useState(false);
 
-                        // Extract ALL associated audio (main, example, dialogue, cognates)
-                        const audioUrls = (result.data.items || []).flatMap((item: any) =>
-                            getAllVocabAudioPaths(item)
-                                .map((path: string) => resolveVocabPath(path, item.source))
-                                .filter(Boolean)
-                        );
+  // === AI Dictionary Action ===
+  const handleAiSearch = async () => {
+    if (!searchQuery.trim()) return;
+    
+    setIsSearching(true);
+    setSearchError(null);
+    setShowAiModal(true); // Open modal early to show loading state
+    
+    // 将当前 UI 语言一并传给 AI，让它用对应语言回应
+    const response = await AiService.explainVocabulary(searchQuery.trim(), currentUser?.userId || 'guest', i18n.language);
+    
+    setIsSearching(false);
 
-                        console.log(`📦 [Audio] Found ${audioUrls.length} total URLs to check`);
-                        if (audioUrls.length > 0) {
-                            downloadAudioBatch(audioUrls).catch(console.error);
-                        }
+    if (!response.success || !response.data) {
+      setSearchError(response.error || t('home.aiError'));
+      return;
+    }
 
-                        set({
-                            queue,
-                            sessionPool: queue, // 保存原始快照，skipWord 不修改此字段
-                            currentIndex: 0,
-                            totalSessionWords: result.data.summary?.total || result.data.items.length,
-                            completedCount: 0,
-                            phase: VocabSessionPhase.LEARNING,
-                            pendingResults: [] // Reset buffer
-                        });
-                    } else {
-                        set({ phase: VocabSessionPhase.COMPLETED });
-                    }
-                } catch (error) {
-                    console.error('❌ initSession failed:', error);
-                    set({ phase: VocabSessionPhase.IDLE });
+    // Now we can set the much cleaner response directly!
+    setAiResult(response.data);
+  };
+
+  const closeAiModal = () => {
+    setShowAiModal(false);
+    setAiResult(null);
+    setSearchError(null);
+    setSearchQuery('');
+  };
+  //=========================================================================
+
+  useEffect(() => {
+    setTimeout(() => setReviews(MOCK_REVIEWS), 800);
+  }, []);
+
+  const handleBubbleClick = () => {
+    router.push('/review-modal');
+    setTimeout(() => setReviews([]), 500);
+  };
+
+  // 英雄卡：根据 currentCourseSource 获取当前课程，无则默认第一个（字母课）
+  const heroCourse = COURSES.find((c) => c.source === currentCourseSource) ?? COURSES[0];
+  const isHeroCurrent = currentCourseSource === heroCourse.source;
+
+  // 英雄卡：与 courses 页一致的 Start/Continue 逻辑
+  const handleHeroStartLearning = (course: CourseWithImage) => {
+    const moduleType = getModuleType(course);
+    const { checkAccessLocally, accessCache: cachedAccess } = useModuleAccessStore.getState();
+    const devOverrideUnlocked = __DEV__ && cachedAccess.get(moduleType) === true;
+    const isLocked = moduleType !== 'letter' && !devOverrideUnlocked && !checkAccessLocally(moduleType);
+    if (isLocked) return;
+
+    // 当前课或尚未选课：直接跳转
+    if (!currentCourseSource || currentCourseSource === course.source) {
+      if (moduleType === 'letter') {
+        router.push('/alphabet');
+      } else {
+        router.push({
+          pathname: '/learning',
+          params: { module: moduleType, source: course.source },
+        });
+      }
+      return;
+    }
+
+    // 切换课程：弹确认框
+    setPendingCourse(course);
+    setModalVisible(true);
+  };
+
+  const confirmSwitchCourse = async () => {
+    if (!pendingCourse) return;
+    const moduleType = getModuleType(pendingCourse);
+    setModalVisible(false);
+    setPendingCourse(null);
+    if (moduleType === 'letter') {
+      router.push('/alphabet');
+      startCourse(pendingCourse.source, 200, 'letter');
+    } else {
+      router.push({
+        pathname: '/learning',
+        params: { module: moduleType, source: pendingCourse.source },
+      });
+    }
+  };
+
+  const displayName = currentUser?.displayName || 'Student';
+
+  return (
+    <SafeAreaView edges={['top']} style={styles.safeArea}>
+      <ThaiPatternBackground opacity={0.15} />
+
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Header */}
+        <View style={styles.header}>
+          <BlurView intensity={80} tint="light" style={StyleSheet.absoluteFill} />
+
+          <View style={styles.headerContent}>
+            <View>
+              <View style={styles.greetingContainer}>
+                <Text style={styles.greetingText}>ສະບາຍດີ, {displayName}</Text>
+                <Text style={styles.greetingDot}>.</Text>
+              </View>
+            </View>
+
+            <View style={styles.awardBadge}>
+              {/* 右上角荣誉图标 */}
+              <Award size={18} color={Colors.ink} />
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.contentContainer}>
+          
+          {/* AI Dictionary Search Bar */}
+          <View style={styles.searchContainer}>
+            <View style={styles.searchInputWrapper}>
+              <Search size={20} color={Colors.taupe} style={styles.searchIcon} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder={t('home.typeThaiOrChinese') || "搜你遇见的纯正泰语..."}
+                placeholderTextColor={Colors.taupe}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                onSubmitEditing={handleAiSearch}
+                returnKeyType="search"
+                editable={!isSearching}
+              />
+              {searchQuery.length > 0 && !isSearching && (
+                <Pressable onPress={() => setSearchQuery('')} style={styles.clearSearchButton}>
+                  <X size={16} color={Colors.taupe} />
+                </Pressable>
+              )}
+            </View>
+          </View>
+          {/* ========================================= */}
+
+          {/* Floating Bubbles */}
+          {/* <FloatingBubbles reviews={reviews} onOpenReview={handleBubbleClick} /> */}
+
+          {/* Hero Progress Card：根据 currentCourseSource 显示课程，与 courses 页一致的 Start/Continue 逻辑 */}
+          <View>
+            {(() => {
+              const moduleType = getModuleType(heroCourse);
+              const { checkAccessLocally } = useModuleAccessStore.getState();
+              const isHeroLocked = moduleType !== 'letter' && !checkAccessLocally(moduleType);
+
+              return (
+                <Pressable
+                  style={[styles.heroCard, isHeroLocked && { opacity: 0.8, backgroundColor: '#333' }]}
+                  disabled={isHeroLocked}
+                  onPress={() => handleHeroStartLearning(heroCourse)}
+                >
+                  <View style={styles.heroContent}>
+                    <View style={styles.heroTopRow}>
+                      <View>
+                        <Text style={styles.courseLabel}>{t('home.currentCourse')}</Text>
+                        <Text style={styles.courseName}>
+                          {t(heroCourse.title)} {isHeroLocked ? '(Locked)' : ''}
+                        </Text>
+                      </View>
+                      <View style={styles.levelBadge}>
+                        <Text style={styles.levelText}>{t(heroCourse.level)}</Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.heroBottomRow}>
+                      <View style={styles.heroTextContainer}>
+                        {heroCourse.category !== 'letter' && (
+                          <Text style={styles.heroProgressText}>
+                            {heroCourse.lessons} {t('courses.lessons')}
+                          </Text>
+                        )}
+                        <Text style={styles.translationText} numberOfLines={2}>
+                          {t(heroCourse.description)}
+                        </Text>
+                      </View>
+
+                      <View style={[styles.playButtonLarge, isHeroLocked && { backgroundColor: '#666' }]}>
+                        <Play size={20} fill={isHeroLocked ? '#999' : Colors.ink} color={isHeroLocked ? '#999' : Colors.ink} />
+                      </View>
+                    </View>
+                  </View>
+
+                  <View style={styles.heroGradient1} />
+                  <View style={styles.heroGradient2} />
+                </Pressable>
+              );
+            })()}
+          </View>
+
+          <CourseSelectionModal
+            visible={modalVisible}
+            courseTitle={pendingCourse ? t(pendingCourse.title) : ''}
+            onConfirm={confirmSwitchCourse}
+            onCancel={() => {
+              setModalVisible(false);
+              setPendingCourse(null);
+            }}
+          />
+
+          {/* Reading Practice Entry */}
+          <Pressable
+            style={styles.readingPracticeButton}
+            onPress={() => router.push('/learning/article-practice-list')}
+          >
+            <View style={styles.readingPracticeLeft}>
+              <View style={styles.readingPracticeIcon}>
+                <BookOpen size={18} color={Colors.thaiGold} />
+              </View>
+              <View>
+                <Text style={styles.readingPracticeTitle}>{t('articlePractice.listTitle')}</Text>
+                <Text style={styles.readingPracticeHint}>{t('articlePractice.tapWordHint')}</Text>
+              </View>
+            </View>
+            <Play size={16} fill={Colors.taupe} color={Colors.taupe} />
+          </Pressable>
+
+          {/* Stats Grid */}
+          <View style={styles.statsGrid}>
+            <Pressable
+              style={[styles.statCard, !hasCheckedInToday() && styles.statCardCheckedIn]}
+              onPress={() => {
+                if (hasCheckedInToday()) return;
+                const success = checkIn();
+                if (success) {
+                  // 可选：轻触反馈
                 }
-            },
-            markSelfRating: (rating: number) => {
-                const { queue, currentIndex } = get();
-                const currentItem = queue[currentIndex];
-                if (!currentItem) return;
+              }}
+              disabled={hasCheckedInToday()}
+            >
+              <View style={styles.statTopRow}>
+                <View style={styles.statIconContainer}>
+                  <TrendingUp size={20} color={!hasCheckedInToday() ? Colors.taupe : Colors.ink} />
+                </View>
+                <Text style={styles.statLabel}>
+                  {hasCheckedInToday() ? t('home.checkInToday') : t('profile.streakDays')}
+                </Text>
+              </View>
+              <Text style={styles.statValue}>{streakDays ?? 0}</Text>
+              <Text style={styles.statUnit}>{t('home.streak')}</Text>
+            </Pressable>
 
-                // 1. Update current item's rating
-                const updatedQueue = [...queue];
-                updatedQueue[currentIndex] = { ...currentItem, selfRating: rating };
+            <View style={styles.statCard}>
+              <View style={styles.statTopRow}>
+                <View style={styles.statIconContainer}>
+                  <Clock size={20} color={Colors.ink} />
+                </View>
+                <Text style={styles.statLabel}>{t('profile.studyTime')}</Text>
+              </View>
+              <Text style={styles.statValue}>{studyTimeValue}</Text>
+              <Text style={styles.statUnit}>{studyTimeUnit === 'hrs' ? t('home.hoursToday') : t('home.minutesToday')}</Text>
+            </View>
+          </View>
 
-                // 2. State Sync: Find the corresponding Quiz item and sync the rating
-                // Search forward from current index
-                for (let i = currentIndex + 1; i < updatedQueue.length; i++) {
-                    const nextItem = updatedQueue[i];
-                    // Correct Sync Logic: Same ID, and is a Quiz Phase
-                    if (nextItem.id === currentItem.id &&
-                        (nextItem.source === 'vocab-rev-quiz' || nextItem.source === 'vocab-new-quiz')) {
-                        updatedQueue[i] = { ...nextItem, selfRating: rating };
-                        break; // Found the match, stop sync
-                    }
-                }
+          {/* Recent Wrong Words */}
+          <View style={styles.achievementsSection}>
+            <View style={styles.achievementsHeader}>
+              <AlertCircle size={16} color={Colors.thaiGold} />
+              <Text style={styles.achievementsTitle}>{t('home.recentWrong')}</Text>
+            </View>
 
-                set({ queue: updatedQueue });
-                // Do NOT call next() here. We wait for manual "Next" button in UI.
-            },
-            submitResult: async (isCorrect: boolean, score?: number) => {
-                const { queue, currentIndex, completedCount, pendingResults } = get();
-                const currentItem = queue[currentIndex];
-                if (!currentItem) return;
+            <View style={styles.achievementsList}>
+              {recentWrongWords.length === 0 ? (
+                <Text style={styles.emptyHint}>{t('home.noWrongWords')}</Text>
+              ) : (
+                recentWrongWords.map((w, i) => (
+                  <View key={w.id}>
+                    {i > 0 && <View style={styles.divider} />}
+                    <AchievementItem
+                      char={w.entity.thaiWord}
+                      meaning={w.entity.meaning}
+                      category={`×${w.mistakeCount}`}
+                    />
+                  </View>
+                ))
+              )}
+            </View>
+          </View>
+          {/* Dev Playground Entry - Only visible in DEV */}
+          {__DEV__ && (
+            <Pressable
+              style={{
+                marginTop: 20,
+                padding: 12,
+                backgroundColor: Colors.ink,
+                borderRadius: 16,
+                alignItems: 'center',
+                flexDirection: 'row',
+                justifyContent: 'center',
+                gap: 8,
+              }}
+              onPress={() => router.push('/(dev)/playground')}
+            >
+              <Wrench size={16} color={Colors.thaiGold} />
+              <Text style={{ color: Colors.white, fontFamily: Typography.notoSerifBold, fontSize: 12 }}>
+                Open Dev Playground
+              </Text>
+            </Pressable>
+          )}
+        </View>
+      </ScrollView>
 
-                const userId = useUserStore.getState().currentUser?.userId;
+      {/* AI Search Result Modal */}
+      <Modal
+        visible={showAiModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={closeAiModal}
+      >
+        <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+                <View style={styles.modalHeader}>
+                   <Text style={styles.modalTitle}>{t('ai.title')}</Text>
+                   <Pressable onPress={closeAiModal} style={styles.closeModalBtn}>
+                       <X size={24} color={Colors.ink} />
+                   </Pressable>
+                </View>
 
-                // === Case 1: Wrong Answer ===
-                // Immediate Retry (Stay on card) + Increment Mistake Count
-                if (!isCorrect) {
-                    // Counter Logic: Increment mistakeCount ONLY IF NOT in retry phase
-                    const shouldIncrement = currentItem.source !== 'vocab-error-retry';
-                    const newMistakeCount = shouldIncrement ? currentItem.mistakeCount + 1 : currentItem.mistakeCount;
+                {isSearching ? (
+                   <View style={styles.modalLoadingState}>
+                      <ActivityIndicator size="large" color={Colors.thaiGold} />
+                      <Text style={styles.modalLoadingText}>{t('common.loading')}</Text>
+                   </View>
+                ) : searchError ? (
+                   <View style={styles.modalErrorState}>
+                      <Text style={styles.modalErrorText}>{searchError}</Text>
+                      <Pressable style={styles.retryBtn} onPress={handleAiSearch}>
+                         <Text style={styles.retryBtnText}>{t('common.confirm')}</Text>
+                      </Pressable>
+                   </View>
+                ) : aiResult ? (
+                   <View style={styles.aiResultWrapper}>
+                       <AiExplanationView data={aiResult} />
+                   </View>
+                ) : null}
+            </View>
+        </View>
+      </Modal>
 
-                    const updatedQueue = [...queue];
-                    updatedQueue[currentIndex] = { ...currentItem, mistakeCount: newMistakeCount };
+    </SafeAreaView>
+  );
+}
 
-                    set({ queue: updatedQueue });
-                    // DO NOT call next(). Wait for user to retry.
-                    return;
-                }
+interface AchievementItemProps {
+  char: string;
+  meaning: string;
+  category: string;
+}
 
-                // === Case 2: Correct Answer ===
-                // Determine if we are finishing the interaction with this word
-                const isFinalStep = currentItem.source === 'vocab-rev-quiz' ||
-                    currentItem.source === 'vocab-new-quiz' ||
-                    currentItem.source === 'vocab-error-retry';
-
-                if (isCorrect && isFinalStep) {
-                    set({ completedCount: completedCount + 1 });
-
-                    // --- Scoring Matrix Calculation ---
-                    const R = currentItem.selfRating || 3; // Default to 3 (Pass) if missing
-                    const M = currentItem.mistakeCount;
-                    let finalQuality = R;
-
-                    if (R === 5) { // Remembered / Know
-                        if (M === 0) finalQuality = 5;       // Perfect
-                        else if (M === 1) finalQuality = 4;  // Good (Remembered + 1 Slip)
-                        else finalQuality = 3;               // Pass (Remembered + Many Errors)
-                    } else if (R === 3) { // Fuzzy / Don't Know
-                        if (M === 0) finalQuality = 3;       // Pass
-                        else finalQuality = 2;               // Weak
-                    } else if (R === 1) { // Forgot
-                        finalQuality = 1;                    // Fail
-                    } else {
-                        // Default fallback (e.g. R=2/4 if ever supported)
-                        finalQuality = Math.max(1, R - (M > 0 ? 1 : 0));
-                    }
-
-                    // --- Deferred Submission (Buffer) ---
-                    // Refinement: vocab-error-retry does NOT re-submit scores.
-                    const shouldSubmitScore = currentItem.source !== 'vocab-error-retry';
-
-                    if (userId && shouldSubmitScore) {
-                        const payload = {
-                            userId,
-                            entityId: currentItem.id,
-                            entityType: 'word',
-                            quality: finalQuality,
-                            vId: currentItem.entity.vId,
-                            source: currentItem.entity.source
-                        };
-                        set({ pendingResults: [...pendingResults, payload] });
-                    }
-
-                    // --- Retry Queue Logic ---
-                    // If word had mistakes, it needs a dedicated Retry Phase later
-                    if (M > 0) {
-                        // Check if this item is already a retry item logic? 
-                        // "into the queue end"
-                        // We always push a new Retry Item if M > 0, UNLESS it's already a retry item?
-                        // Plan: "如果是第一次在测验中做错...进入后续的 Retry Phase"
-                        // Actually, if I am in vocab-error-retry and I initially got it wrong (Stay) and then right,
-                        // do I need to push it AGAIN?
-                        // User said: "Retry Phase: Wrong answers do NOT increment mistakeCount".
-                        // Usually Retry Phase assumes "Iterate until correct". Once correct, it's done. 
-                        // We don't loop retry-items forever unless they fail *again*?
-                        // But here we implement "Immediate Retry" (Stay). So once they pass, they pass.
-                        // So we ONLY push to retry queue if `source !== 'vocab-error-retry'`.
-                        if (currentItem.source !== 'vocab-error-retry') {
-                            const retryItem: SessionWord = {
-                                ...currentItem,
-                                source: 'vocab-error-retry',
-                                // Keep mistake count for history, or reset?
-                                // Actually, keep it so we know it was a problem.
-                                // But for the NEW retry item, should we reset mistakeCount?
-                                // No, keep it.
-                            };
-                            set({ queue: [...queue, retryItem] });
-                        }
-                    }
-                }
-
-                // Proceed to next
-                get().next();
-            },
-            skipWord: (id: string) => {
-                const { queue, skippedIds, currentIndex } = get();
-                // 1. Add to skippedIds
-                if (!skippedIds.includes(id)) {
-                    set({ skippedIds: [...skippedIds, id] });
-                }
-
-                // 2. Remove from queue (all instances of this word)
-                const newQueue = queue.filter(w => w.id !== id);
-
-                set({ queue: newQueue });
-
-                // Check bounds
-                if (currentIndex >= newQueue.length) {
-                    if (newQueue.length === 0) {
-                        // 先跳转完成页，网络请求后台静默执行，不阻塞 UI
-                        get().finishSession();
-                        get().submitSkippedWords().catch(e => console.error('\u274c submitSkippedWords failed:', e));
-                        get().flushResults().catch(e => console.error('\u274c flushResults failed:', e));
-                    }
-                }
-            },
-
-            submitSkippedWords: async () => {
-                const { skippedIds } = get();
-                const userId = useUserStore.getState().currentUser?.userId;
-
-                if (!userId || skippedIds.length === 0) return;
-
-                console.log(`🚀 Submitting ${skippedIds.length} skipped words...`);
-                try {
-                    const results = skippedIds.map(id => ({
-                        entityType: 'word',
-                        entityId: id,
-                        quality: 0, // Ignored by backend when isSkipped is true
-                        isSkipped: true
-                    }));
-
-                    // Use batch submission
-                    await callCloudFunction(
-                        "submitMemoryResult",
-                        { userId, results },
-                        { endpoint: API_ENDPOINTS.MEMORY.SUBMIT_MEMORY_RESULT.cloudbase }
-                    );
-
-                    console.log("✅ Skipped words submitted.");
-                    set({ skippedIds: [] });
-                } catch (e) {
-                    console.error("❌ Failed to submit skipped words:", e);
-                }
-            },
-            next: async () => {
-                const { currentIndex, queue } = get();
-                if (currentIndex + 1 < queue.length) {
-                    set({ currentIndex: currentIndex + 1 });
-                } else {
-                    // 先跳转完成页，网络请求后台静默执行，不阻塞 UI
-                    get().finishSession();
-                    get().submitSkippedWords().catch(e => console.error('\u274c submitSkippedWords failed:', e));
-                    get().flushResults().catch(e => console.error('\u274c flushResults failed:', e));
-                }
-            },
-            flushResults: async () => {
-                const { pendingResults } = get();
-                if (pendingResults.length === 0) return;
-
-                console.log(`🚀 Flushing ${pendingResults.length} vocabulary results...`);
-
-                // Batch/Parallel processing could be implemented here if API supports batch
-                // For now, parallel clean requests
-                try {
-                    await Promise.all(pendingResults.map(p =>
-                        callCloudFunction("submitMemoryResult", p, { endpoint: API_ENDPOINTS.MEMORY.SUBMIT_MEMORY_RESULT.cloudbase })
-                    ));
-                    console.log("✅ Results flushed successfully.");
-                    set({ pendingResults: [] });
-                } catch (e) {
-                    console.error("❌ Failed to flush results:", e);
-                    // Strategy: Keep them in pending? Or fail silent? 
-                    // For now, log error. SM2 is resilient to missed updates (just reviewing again sooner/later).
-                    // But ideally we might want to retry? keeping it simple for now.
-                }
-            },
-            startCourse: async (source: string, limit?: number, moduleType: ModuleType = 'word') => {
-                console.log(`🚀 开始课程：${source}，限制为${limit}`);
-                const userId = useUserStore.getState().currentUser?.userId;
-                if (!userId) return;
-                set(
-                    {
-                        currentCourseSource: source,
-                        currentIndex: 0,
-                        queue: [],
-                        pendingResults: [],
-                        phase: VocabSessionPhase.IDLE
-                    }
-                );//Reset state of vocabulary session
-
-                if (moduleType === 'letter') {
-                    set({ phase: VocabSessionPhase.IDLE });
-                    return;
-                }
-
-                await get().initSession(userId, { source, limit });
-            },
-
-            finishSession: () => {
-                set({ phase: VocabSessionPhase.COMPLETED });
-            },
-            resetSession: () => {
-                set({ phase: VocabSessionPhase.IDLE });
-            },
-            // 登出时调用：完整清除所有状态，包含持久化字段 currentCourseSource
-            // 防止不同用户在同一设备上共享学习进度
-            clearForLogout: () => {
-                set({
-                    phase: VocabSessionPhase.IDLE,
-                    currentCourseSource: null,
-                    queue: [],
-                    sessionPool: [],
-                    currentIndex: 0,
-                    totalSessionWords: 0,
-                    completedCount: 0,
-                    pendingResults: [],
-                    skippedIds: [],
-                });
-            }
-        }),
-        {
-            name: 'vocabulary-learning-storage',
-            storage: createJSONStorage(() => AsyncStorage),
-            partialize: (state) => ({
-                currentCourseSource: state.currentCourseSource
-            }),
-        }
-    )
+const AchievementItem: React.FC<AchievementItemProps> = ({ char, meaning, category }) => (
+  <Pressable style={styles.achievementItem}>
+    <View style={styles.achievementLeft}>
+      <View style={styles.achievementIconBox}>
+        <Text style={styles.achievementChar}>{char}</Text>
+      </View>
+      <View>
+        <Text style={styles.achievementName}>{meaning}</Text>
+      </View>
+    </View>
+    <View style={styles.masteredBadge}>
+      <Text style={styles.masteredText}>{category}</Text>
+    </View>
+  </Pressable>
 );
+
+const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: Colors.paper,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 120,
+  },
+  header: {
+    paddingHorizontal: 24,
+    paddingBottom: 24,
+    paddingTop: 48,
+    borderBottomWidth: 1,
+    borderBottomColor: 'transparent',
+  },
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    zIndex: 10,
+  },
+  greetingContainer: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    position: 'relative',
+  },
+  greetingText: {
+    fontFamily: Typography.playfairRegular,
+    fontSize: 30,
+    letterSpacing: -0.5,
+    color: Colors.ink,
+  },
+  greetingDot: {
+    fontFamily: Typography.playfairRegular,
+    position: 'absolute',
+    right: -12,
+    top: -4,
+    fontSize: 20,
+    color: Colors.thaiGold,
+  },
+  subtitleText: {
+    fontFamily: Typography.notoSerifRegular,
+    marginTop: 4,
+    fontSize: 14,
+    letterSpacing: 0.5,
+    color: Colors.taupe,
+  },
+  awardBadge: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(212, 175, 55, 0.2)',
+    backgroundColor: 'rgba(212, 175, 55, 0.1)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  contentContainer: {
+    paddingHorizontal: 24,
+    width: '100%',
+    maxWidth: 672,
+    alignSelf: 'center',
+  },
+  heroCard: {
+    backgroundColor: Colors.ink,
+    padding: 32,
+    borderRadius: 32,
+    marginBottom: 32,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  heroContent: {
+    zIndex: 10,
+  },
+  heroTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 48,
+  },
+  courseLabel: {
+    fontFamily: Typography.notoSerifBold,
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+    color: Colors.thaiGold,
+    marginBottom: 4,
+    textTransform: 'uppercase',
+  },
+  courseName: {
+    fontFamily: Typography.notoSerifRegular,
+    fontSize: 20,
+    color: Colors.white,
+  },
+  levelBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  levelText: {
+    fontFamily: Typography.notoSerifRegular,
+    fontSize: 10,
+    color: Colors.sand,
+  },
+  heroBottomRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+  },
+  heroTextContainer: {
+    flex: 1,
+  },
+  heroProgressText: {
+    fontFamily: Typography.notoSerifBold,
+    fontSize: 18,
+    color: Colors.white,
+    marginBottom: 6,
+  },
+  thaiText: {
+    fontFamily: Typography.sarabunRegular,
+    fontSize: 48,
+    letterSpacing: 1,
+    color: Colors.white,
+    marginBottom: 8,
+  },
+  translationText: {
+    fontFamily: Typography.notoSerifRegular,
+    fontSize: 14,
+    fontWeight: '300',
+    color: Colors.sand,
+    opacity: 0.6,
+  },
+  playButtonLarge: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: Colors.thaiGold,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: 'rgba(212, 175, 55, 0.4)',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 1,
+    shadowRadius: 15,
+    elevation: 8,
+  },
+  heroGradient1: {
+    position: 'absolute',
+    right: -48,
+    top: -48,
+    width: 192,
+    height: 192,
+    borderRadius: 96,
+    backgroundColor: 'rgba(212, 175, 55, 0.2)',
+    opacity: 0.5,
+  },
+  heroGradient2: {
+    position: 'absolute',
+    left: -40,
+    bottom: -40,
+    width: 160,
+    height: 160,
+    borderRadius: 80,
+    backgroundColor: 'rgba(184, 149, 106, 0.2)',
+  },
+  readingPracticeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: Colors.sand,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  readingPracticeLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  readingPracticeIcon: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+    backgroundColor: 'rgba(212, 175, 55, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(212, 175, 55, 0.2)',
+  },
+  readingPracticeTitle: {
+    fontFamily: Typography.notoSerifBold,
+    fontSize: 14,
+    color: Colors.ink,
+  },
+  readingPracticeHint: {
+    fontFamily: Typography.notoSerifRegular,
+    fontSize: 11,
+    color: Colors.taupe,
+    marginTop: 2,
+  },
+  statsGrid: {
+    flexDirection: 'row',
+    gap: 16,
+    marginBottom: 32,
+  },
+  statCard: {
+    flex: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    padding: 24,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: Colors.sand,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  statCardCheckedIn: {
+    opacity: 0.85,
+    borderColor: 'rgba(212, 175, 55, 0.3)',
+    backgroundColor: 'rgba(212, 175, 55, 0.06)',
+  },
+  statTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 16,
+  },
+  statIconContainer: {
+    padding: 8,
+    backgroundColor: Colors.paper,
+    borderRadius: 12,
+  },
+  statLabel: {
+    fontFamily: Typography.notoSerifRegular,
+    fontSize: 10,
+    letterSpacing: 1.5,
+    color: Colors.taupe,
+    textTransform: 'uppercase',
+  },
+  statValue: {
+    fontFamily: Typography.playfairRegular,
+    fontSize: 36,
+    color: Colors.ink,
+  },
+  statUnit: {
+    fontFamily: Typography.notoSerifRegular,
+    marginTop: 4,
+    fontSize: 12,
+    color: Colors.taupe,
+  },
+  achievementsSection: {
+    paddingBottom: 24,
+  },
+  achievementsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 16,
+  },
+  achievementsTitle: {
+    fontFamily: Typography.notoSerifBold,
+    fontSize: 18,
+    fontWeight: '700',
+    color: Colors.ink,
+  },
+  achievementsList: {
+    backgroundColor: 'rgba(255, 255, 255, 0.6)',
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: Colors.sand,
+    padding: 8,
+  },
+  emptyHint: {
+    fontFamily: Typography.notoSerifRegular,
+    fontSize: 13,
+    color: Colors.ink,
+    opacity: 0.5,
+    textAlign: 'center',
+    paddingVertical: 16,
+  },
+  achievementItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    borderRadius: 16,
+  },
+  achievementLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  achievementIconBox: {
+    width: 48,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Colors.sand,
+    backgroundColor: Colors.paper,
+  },
+  achievementChar: {
+    fontFamily: Typography.sarabunRegular,
+    fontSize: 20,
+    color: Colors.ink,
+  },
+  achievementName: {
+    fontFamily: Typography.playfairRegular,
+    fontSize: 16,
+    fontWeight: '500',
+    color: Colors.ink,
+  },
+  achievementCategory: {
+    fontFamily: Typography.notoSerifRegular,
+    fontSize: 10,
+    letterSpacing: 1,
+    color: Colors.taupe,
+    textTransform: 'uppercase',
+  },
+  masteredBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Colors.sand,
+    backgroundColor: Colors.paper,
+  },
+  masteredText: {
+    fontFamily: Typography.notoSerifRegular,
+    fontSize: 12,
+    color: 'rgba(26, 26, 26, 0.6)',
+  },
+  divider: {
+    width: '90%',
+    height: 1,
+    backgroundColor: 'rgba(229, 226, 219, 0.5)',
+    alignSelf: 'center',
+    marginVertical: 4,
+  },
+  // AI Dictionary Styles
+  searchContainer: {
+    marginBottom: 24,
+    marginTop: -8, // Pull slightly up towards header
+  },
+  searchInputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.white,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: Colors.sand,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+    height: 56,
+  },
+  searchIcon: {
+    marginRight: 12,
+  },
+  searchInput: {
+    flex: 1,
+    fontFamily: Typography.notoSerifRegular,
+    fontSize: 16,
+    color: Colors.ink,
+    height: '100%',
+  },
+  clearSearchButton: {
+    padding: 8,
+    backgroundColor: 'rgba(0,0,0,0.03)',
+    borderRadius: 12,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: Colors.paper,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    height: '85%',
+    width: '100%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 10,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.sand,
+  },
+  modalTitle: {
+    fontFamily: Typography.notoSerifBold,
+    fontSize: 18,
+    color: Colors.ink,
+  },
+  closeModalBtn: {
+    padding: 4,
+  },
+  modalLoadingState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 16,
+  },
+  modalLoadingText: {
+    fontFamily: Typography.notoSerifRegular,
+    fontSize: 14,
+    color: Colors.taupe,
+  },
+  modalErrorState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+    gap: 16,
+  },
+  modalErrorText: {
+    fontFamily: Typography.notoSerifRegular,
+    fontSize: 16,
+    color: '#D32F2F',
+    textAlign: 'center',
+  },
+  retryBtn: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    backgroundColor: Colors.ink,
+    borderRadius: 12,
+  },
+  retryBtnText: {
+    color: Colors.white,
+    fontFamily: Typography.notoSerifBold,
+    fontSize: 16,
+  },
+  aiResultWrapper: {
+    flex: 1,
+    paddingTop: 16,
+  }
+});
 ````
 
 ## File: cloudbase/functions/memory-engine/utils/memoryEngine.js
@@ -27230,10 +31412,415 @@ module.exports = {
 };
 ````
 
+## File: src/stores/vocabularyStore.ts
+````typescript
+// src/stores/vocabularyStore.ts
+import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { callCloudFunction } from '@/src/utils/apiClient';
+import { API_ENDPOINTS } from '@/src/config/api.endpoints';
+import { useUserStore } from './userStore';
+import {
+    SessionWord,
+    VocabSessionPhase,
+    VocabularyResponse,
+    VOCAB_SCORES,
+} from '@/src/entities/types/vocabulary.types';
+import { resolveVocabPath, getAllVocabAudioPaths } from '@/src/utils/vocab/vocabAudioHelper';
+import { downloadAudioBatch } from '@/src/utils/audioCache';
+import { buildVocabQueue } from '@/src/utils/vocab/buildVocabQueue';
+import { ModuleType } from './moduleAccessStore';
+
+
+
+interface VocabularyStore {
+    phase: VocabSessionPhase;
+    currentCourseSource: string | null;
+    queue: SessionWord[];
+    currentIndex: number;
+    totalSessionWords: number;
+    completedCount: number;
+    pendingResults: Array<{ userId: string, entityId: string, entityType: string, quality: number, vId?: number, source?: string }>;
+    skippedIds: string[]; // Track skipped word IDs
+    sessionPool: SessionWord[]; // 原始完整词列表快照，不受 skipWord 影响，用于干扰项生成
+    recentWrongWords: SessionWord[]; // 本轮 mistakeCount > 2 的词，会话结束时填充，下次开始时清空
+    initSession: (userId: string, options?: { limit?: number, source?: string }) => Promise<void>;
+    startCourse: (source: string, limit?: number, moduleType?: ModuleType) => Promise<void>;
+    submitResult: (isCorrect: boolean, score?: number) => Promise<void>;
+    markSelfRating: (rating: number) => void;
+    skipWord: (id: string) => void;
+    submitSkippedWords: () => Promise<void>;
+    next: () => void;
+    finishSession: () => void;
+    resetSession: () => void;
+    flushResults: () => Promise<void>;
+    clearForLogout: () => void; // 登出时完整清除所有状态（含持久化字段）
+}
+
+/**
+ * 单词学习 Store
+ * 
+ * 功能：
+ * 1. 从后端获取今日单词学习任务
+ * 2. 管理单词学习会话流程
+ * 3. 提交学习结果到后端
+ * 4. 本地进度追踪
+ * 
+ */
+export const useVocabularyStore = create<VocabularyStore>()(
+    persist(
+        (set, get) => ({
+            phase: VocabSessionPhase.IDLE,
+            currentCourseSource: null,
+            queue: [],
+            currentIndex: 0,
+            totalSessionWords: 0,
+            completedCount: 0,
+            pendingResults: [],
+            skippedIds: [],
+            sessionPool: [], // 原始词列表快照
+            recentWrongWords: [], // 本轮错词（完成后填充）
+            //Above are the variables that are used to store the state of the vocabulary store
+
+            //================= 下面是函数=================
+            initSession: async (userId: string, options: { limit?: number, source?: string } = {}) => {
+                try {
+                    set({ 
+                        phase: VocabSessionPhase.LOADING, 
+                        pendingResults: [], 
+                        skippedIds: [] ,
+                    }); // Clear pending, skipped & wrong words
+                    
+                    const { limit, source } = options;
+                    // 确保 limit 是合法整数且不是 NaN
+                    const finalLimit = typeof limit === 'string' ? parseInt(limit, 10) : limit;
+                    const safeLimit = (typeof finalLimit === 'number' && isFinite(finalLimit)) ? finalLimit : 5;
+                    console.log(`🚀 开始获取单词学习任务，限制为${safeLimit}`);
+                    console.log(`🚀 initSession params: source=${source}, limit=${limit}`);
+                    const result: any = await callCloudFunction<VocabularyResponse>(
+                        "getTodayMemories",
+                        { userId, limit: safeLimit, entityType: 'word', source: source || get().currentCourseSource },
+                        { endpoint: API_ENDPOINTS.MEMORY.GET_TODAY_MEMORIES.cloudbase }
+                    );
+                    if (result.success && result.data?.items?.length > 0) {
+                        const queue = buildVocabQueue(result.data);
+
+                        // DEBUG: Inspect data structure
+                        console.log('🔍 [Debug] First item fields:', Object.keys(result.data.items[0]));
+                        if (result.data.items[0].audioPath) {
+                            console.log('🔍 [Debug] audioPath found:', result.data.items[0].audioPath);
+                        }
+
+                        // Extract ALL associated audio (main, example, dialogue, cognates)
+                        const audioUrls = (result.data.items || []).flatMap((item: any) =>
+                            getAllVocabAudioPaths(item)
+                                .map((path: string) => resolveVocabPath(path, item.source))
+                                .filter(Boolean)
+                        );
+
+                        console.log(`📦 [Audio] Found ${audioUrls.length} total URLs to check`);
+                        if (audioUrls.length > 0) {
+                            downloadAudioBatch(audioUrls).catch(console.error);
+                        }
+
+                        set({
+                            queue,
+                            sessionPool: queue, // 保存原始快照，skipWord 不修改此字段
+                            currentIndex: 0,
+                            totalSessionWords: result.data.summary?.total || result.data.items.length,
+                            completedCount: 0,
+                            phase: VocabSessionPhase.LEARNING,
+                            pendingResults: [] // Reset buffer
+                        });
+                    } else {
+                        set({ phase: VocabSessionPhase.COMPLETED });
+                    }
+                } catch (error) {
+                    console.error('❌ initSession failed:', error);
+                    set({ phase: VocabSessionPhase.IDLE });
+                }
+            },
+            markSelfRating: (rating: number) => {
+                const { queue, currentIndex } = get();
+                const currentItem = queue[currentIndex];
+                if (!currentItem) return;
+
+                // 1. Update current item's rating
+                const updatedQueue = [...queue];
+                updatedQueue[currentIndex] = { ...currentItem, selfRating: rating };
+
+                // 2. State Sync: Find the corresponding Quiz item and sync the rating
+                // Search forward from current index
+                for (let i = currentIndex + 1; i < updatedQueue.length; i++) {
+                    const nextItem = updatedQueue[i];
+                    // Correct Sync Logic: Same ID, and is a Quiz Phase
+                    if (nextItem.id === currentItem.id &&
+                        (nextItem.source === 'vocab-rev-quiz' || nextItem.source === 'vocab-new-quiz')) {
+                        updatedQueue[i] = { ...nextItem, selfRating: rating };
+                        break; // Found the match, stop sync
+                    }
+                }
+
+                set({ queue: updatedQueue });
+                // Do NOT call next() here. We wait for manual "Next" button in UI.
+            },
+            submitResult: async (isCorrect: boolean, score?: number) => {
+                const { queue, currentIndex, completedCount, pendingResults } = get();
+                const currentItem = queue[currentIndex];
+                if (!currentItem) return;
+
+                const userId = useUserStore.getState().currentUser?.userId;
+
+                // === Case 1: Wrong Answer ===
+                // Immediate Retry (Stay on card) + Increment Mistake Count
+                if (!isCorrect) {
+                    // Counter Logic: Increment mistakeCount ONLY IF NOT in retry phase
+                    const shouldIncrement = currentItem.source !== 'vocab-error-retry';
+                    const newMistakeCount = shouldIncrement ? currentItem.mistakeCount + 1 : currentItem.mistakeCount;
+
+                    const updatedQueue = [...queue];
+                    updatedQueue[currentIndex] = { ...currentItem, mistakeCount: newMistakeCount };
+
+                    set({ queue: updatedQueue });
+                    // DO NOT call next(). Wait for user to retry.
+                    return;
+                }
+
+                // === Case 2: Correct Answer ===
+                // Determine if we are finishing the interaction with this word
+                const isFinalStep = currentItem.source === 'vocab-rev-quiz' ||
+                    currentItem.source === 'vocab-new-quiz' ||
+                    currentItem.source === 'vocab-error-retry';
+
+                if (isCorrect && isFinalStep) {
+                    set({ completedCount: completedCount + 1 });
+
+                    // --- Scoring Matrix Calculation ---
+                    const R = currentItem.selfRating || 3; // Default to 3 (Pass) if missing
+                    const M = currentItem.mistakeCount;
+                    let finalQuality = R;
+
+                    if (R === 5) { // Remembered / Know
+                        if (M === 0) finalQuality = 5;       // Perfect
+                        else if (M === 1) finalQuality = 4;  // Good (Remembered + 1 Slip)
+                        else finalQuality = 3;               // Pass (Remembered + Many Errors)
+                    } else if (R === 3) { // Fuzzy / Don't Know
+                        if (M === 0) finalQuality = 3;       // Pass
+                        else finalQuality = 2;               // Weak
+                    } else if (R === 1) { // Forgot
+                        finalQuality = 1;                    // Fail
+                    } else {
+                        // Default fallback (e.g. R=2/4 if ever supported)
+                        finalQuality = Math.max(1, R - (M > 0 ? 1 : 0));
+                    }
+
+                    // --- Deferred Submission (Buffer) ---
+                    // Refinement: vocab-error-retry does NOT re-submit scores.
+                    const shouldSubmitScore = currentItem.source !== 'vocab-error-retry';
+
+                    if (userId && shouldSubmitScore) {
+                        const payload = {
+                            userId,
+                            entityId: currentItem.id,
+                            entityType: 'word',
+                            quality: finalQuality,
+                            vId: currentItem.entity.vId,
+                            source: currentItem.entity.source
+                        };
+                        set({ pendingResults: [...pendingResults, payload] });
+                    }
+
+                    // --- Retry Queue Logic ---
+                    // If word had mistakes, it needs a dedicated Retry Phase later
+                    if (M > 0) {
+                        // Check if this item is already a retry item logic? 
+                        // "into the queue end"
+                        // We always push a new Retry Item if M > 0, UNLESS it's already a retry item?
+                        // Plan: "如果是第一次在测验中做错...进入后续的 Retry Phase"
+                        // Actually, if I am in vocab-error-retry and I initially got it wrong (Stay) and then right,
+                        // do I need to push it AGAIN?
+                        // User said: "Retry Phase: Wrong answers do NOT increment mistakeCount".
+                        // Usually Retry Phase assumes "Iterate until correct". Once correct, it's done. 
+                        // We don't loop retry-items forever unless they fail *again*?
+                        // But here we implement "Immediate Retry" (Stay). So once they pass, they pass.
+                        // So we ONLY push to retry queue if `source !== 'vocab-error-retry'`.
+                        if (currentItem.source !== 'vocab-error-retry') {
+                            const retryItem: SessionWord = {
+                                ...currentItem,
+                                source: 'vocab-error-retry',
+                                // Keep mistake count for history, or reset?
+                                // Actually, keep it so we know it was a problem.
+                                // But for the NEW retry item, should we reset mistakeCount?
+                                // No, keep it.
+                            };
+                            set({ queue: [...queue, retryItem] });
+                        }
+                    }
+                }
+
+                // Proceed to next
+                get().next();
+            },
+            skipWord: (id: string) => {
+                const { queue, skippedIds, currentIndex } = get();
+                // 1. Add to skippedIds
+                if (!skippedIds.includes(id)) {
+                    set({ skippedIds: [...skippedIds, id] });
+                }
+
+                // 2. Remove from queue (all instances of this word)
+                const newQueue = queue.filter(w => w.id !== id);
+
+                set({ queue: newQueue });
+
+                // Check bounds
+                if (currentIndex >= newQueue.length) {
+                    if (newQueue.length === 0) {
+                        // 先跳转完成页，网络请求后台静默执行，不阻塞 UI
+                        get().finishSession();
+                        get().submitSkippedWords().catch(e => console.error('\u274c submitSkippedWords failed:', e));
+                        get().flushResults().catch(e => console.error('\u274c flushResults failed:', e));
+                    }
+                }
+            },
+
+            submitSkippedWords: async () => {
+                const { skippedIds } = get();
+                const userId = useUserStore.getState().currentUser?.userId;
+
+                if (!userId || skippedIds.length === 0) return;
+
+                console.log(`🚀 Submitting ${skippedIds.length} skipped words...`);
+                try {
+                    const results = skippedIds.map(id => ({
+                        entityType: 'word',
+                        entityId: id,
+                        quality: 0, // Ignored by backend when isSkipped is true
+                        isSkipped: true
+                    }));
+
+                    // Use batch submission
+                    await callCloudFunction(
+                        "submitMemoryResult",
+                        { userId, results },
+                        { endpoint: API_ENDPOINTS.MEMORY.SUBMIT_MEMORY_RESULT.cloudbase }
+                    );
+
+                    console.log("✅ Skipped words submitted.");
+                    // 不在这里清空 skippedIds，避免用户进入 session-summary 时丢失“跳过词”展示。
+                    // skippedIds 会在下一次 initSession/startCourse 时被重置。
+                } catch (e) {
+                    console.error("❌ Failed to submit skipped words:", e);
+                }
+            },
+            next: async () => {
+                const { currentIndex, queue } = get();
+                if (currentIndex + 1 < queue.length) {
+                    set({ currentIndex: currentIndex + 1 });
+                } else {
+                    // 先跳转完成页，网络请求后台静默执行，不阻塞 UI
+                    get().finishSession();
+                    get().submitSkippedWords().catch(e => console.error('\u274c submitSkippedWords failed:', e));
+                    get().flushResults().catch(e => console.error('\u274c flushResults failed:', e));
+                }
+            },
+            flushResults: async () => {
+                const { pendingResults } = get();
+                if (pendingResults.length === 0) return;
+
+                console.log(`🚀 Flushing ${pendingResults.length} vocabulary results...`);
+
+                // Batch/Parallel processing could be implemented here if API supports batch
+                // For now, parallel clean requests
+                try {
+                    await Promise.all(pendingResults.map(p =>
+                        callCloudFunction("submitMemoryResult", p, { endpoint: API_ENDPOINTS.MEMORY.SUBMIT_MEMORY_RESULT.cloudbase })
+                    ));
+                    console.log("✅ Results flushed successfully.");
+                    set({ pendingResults: [] });
+                } catch (e) {
+                    console.error("❌ Failed to flush results:", e);
+                    // Strategy: Keep them in pending? Or fail silent? 
+                    // For now, log error. SM2 is resilient to missed updates (just reviewing again sooner/later).
+                    // But ideally we might want to retry? keeping it simple for now.
+                }
+            },
+            startCourse: async (source: string, limit?: number, moduleType: ModuleType = 'word') => {
+                console.log(`🚀 开始课程：${source}，限制为${limit}`);
+                const userId = useUserStore.getState().currentUser?.userId;
+                if (!userId) return;
+                set(
+                    {
+                        currentCourseSource: source,
+                        currentIndex: 0,
+                        queue: [],
+                        pendingResults: [],
+                        phase: VocabSessionPhase.IDLE
+                    }
+                );//Reset state of vocabulary session
+
+                if (moduleType === 'letter') {
+                    set({ phase: VocabSessionPhase.IDLE });
+                    return;
+                }
+
+                await get().initSession(userId, { source, limit });
+            },
+
+            finishSession: () => {
+                const { queue } = get();
+                // 去重：同一个词可以在 queue 里出现多次（原始项 + retry 副本）
+                // mistakeCount 只在非 retry 项上自增，所以只取 source !== 'vocab-error-retry' 的项
+                const seen = new Set<string>();
+                const wrongWords = queue
+                    .filter(w => w.source !== 'vocab-error-retry' && w.mistakeCount > 1)
+                    .filter(w => { const ok = !seen.has(w.id); seen.add(w.id); return ok; });
+
+                // 只有本轮有错词时才覆盖，否则保留上次的错词列表
+                if (wrongWords.length > 0) {
+                    set({ phase: VocabSessionPhase.COMPLETED, recentWrongWords: wrongWords });
+                } else {
+                    set({ phase: VocabSessionPhase.COMPLETED });
+                }
+            },
+            resetSession: () => {
+                set({ phase: VocabSessionPhase.IDLE });
+            },
+            // 登出时调用：完整清除所有状态，包含持久化字段 currentCourseSource
+            // 防止不同用户在同一设备上共享学习进度
+            clearForLogout: () => {
+                set({
+                    phase: VocabSessionPhase.IDLE,
+                    currentCourseSource: null,
+                    queue: [],
+                    sessionPool: [],
+                    currentIndex: 0,
+                    totalSessionWords: 0,
+                    completedCount: 0,
+                    pendingResults: [],
+                    skippedIds: [],
+                    recentWrongWords: [],
+                });
+            }
+        }),
+        {
+            name: 'vocabulary-learning-storage',
+            storage: createJSONStorage(() => AsyncStorage),
+            partialize: (state) => ({
+                currentCourseSource: state.currentCourseSource,
+                recentWrongWords: state.recentWrongWords,
+            }),
+        }
+    )
+);
+````
+
 ## File: app/learning/index.tsx
 ````typescript
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useFocusEffect } from '@react-navigation/native';
 import { View, Text, StyleSheet, Pressable, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -27255,6 +31842,7 @@ import { useUserStore } from '@/src/stores/userStore';
 import { useVocabularyLearningEngine } from '@/src/hooks/useVocabularyLearningEngine';
 import { VocabSessionPhase } from '@/src/entities/types/vocabulary.types';
 
+
 type SessionMode = 'REVIEW' | 'LEARN_NEW';
 type ModuleVariant = 'letter' | 'word';
 
@@ -27271,6 +31859,9 @@ export default function LearningSession() {
     const { currentUser } = useUserStore();
     const { dailyLimits } = useLearningPreferenceStore();
     const { userProgress } = useModuleAccessStore();
+    // 用于判断是否是本次 mount 后的第一次初始化
+    // 每次组件重新挂载（新实例），useRef(true) 会重置为 true
+    const isFirstMountRef = useRef(true);
 
     useEffect(() => {
         // 确保有课程来源且用户信息已加载（startCourse 内部依赖 userId）
@@ -27283,14 +31874,15 @@ export default function LearningSession() {
 
         // ⭐ 2. 核心初始化逻辑（单一数据源）
         // 触发条件：
-        // A. 课程来源不一致（切换课程）
-        // B. 当前处于 IDLE 初始状态
-        // C. 虽然显示处于 LEARNING 状态但内存中无数据（处理异常重启/热重载后的状态不一致）
+        // A. 本次 mount 后首次运行（替代原来的 isIdle，避免依赖 phase 引发竞态）
+        // B. 课程来源不一致（切换课程）
+        // C. 虽然处于 LEARNING 状态但内存中无数据（处理异常重启/热重载后的状态不一致）
+        const isFirstMount = isFirstMountRef.current;
         const isDifferentSource = !currentCourseSource || currentCourseSource !== courseSource;
-        const isIdle = phase === VocabSessionPhase.IDLE;
         const isDataMissing = phase === VocabSessionPhase.LEARNING && (!queue || queue.length === 0);
 
-        if (isDifferentSource || isIdle || isDataMissing) {
+        if (isFirstMount || isDifferentSource || isDataMissing) {
+            isFirstMountRef.current = false;
             console.log(`🔄 Init Session: Phase[${phase}] Queue[${queue.length}] Source[${currentCourseSource} -> ${courseSource}]`);
 
             // 🔥 CRITICAL: Trust store only. Do not use URL params for limit.
@@ -27303,13 +31895,23 @@ export default function LearningSession() {
         moduleType,
         courseSource,
         currentCourseSource,
-        phase,
+        // phase 不放入依赖数组：WordSession.cleanup 调 resetSession() 会改变 phase，
+        // 若 phase 在依赖里，卸载过程中会意外触发 startCourse → getTodayMemories
         queue.length,
         currentUser?.userId,
         startCourse,
         dailyLimits.word,
         userProgress?.dailyLimit
     ]);
+
+    // 学习时长追踪：进入页面开始计时，离开时累加到当日
+    const { startStudySession, stopStudySession } = useLearningPreferenceStore();
+    useFocusEffect(
+        React.useCallback(() => {
+            startStudySession();
+            return () => stopStudySession();
+        }, [startStudySession, stopStudySession])
+    );
 
     if (moduleType === 'letter') {
         return <AlphabetSession />;
@@ -27327,6 +31929,10 @@ function WordSession() {
         progress,
         handleAnswer
     } = useVocabularyLearningEngine();
+
+    const handleBackToCourses = () => {
+        router.replace('/(tabs)/courses');
+    };
 
     useEffect(() => {
         return () => {
@@ -27358,8 +31964,11 @@ function WordSession() {
                 return (
                     <View style={styles.completeContainer}>
                         <Text style={styles.completeTitle}>{t('learning.sessionComplete')}</Text>
-                        <Pressable style={styles.completeButton} onPress={() => router.back()}>
-                            <Text style={styles.completeButtonText}>{t('learning.backToHome')}</Text>
+                        <Pressable style={styles.completeButton} onPress={() => router.push('/learning/session-summary')}>
+                            <Text style={styles.completeButtonText}>{t('microReading.title', '微阅读')}</Text>
+                        </Pressable>
+                        <Pressable style={styles.completeButton} onPress={handleBackToCourses}>
+                            <Text style={styles.completeButtonText}>{t('learning.backToHome', '返回首页')}</Text>
                         </Pressable>
                     </View>
                 );
@@ -27478,7 +32087,10 @@ function AlphabetSession() {
             <SafeAreaView style={styles.container}>
                 <View style={styles.centerContent}>
                     <Text style={styles.completeTitle}>{t('learning.sessionComplete', '今日学习完成!')}</Text>
-                    <Pressable style={styles.completeButton} onPress={() => router.back()}>
+                    <Pressable style={styles.microReadingButton} onPress={() => router.push('/learning/session-summary')}>
+                        <Text style={styles.completeButtonText}>{t('microReading.title', '微阅读')}</Text>
+                    </Pressable>
+                    <Pressable style={styles.completeButton} onPress={() => router.push('/courses')}>
                         <Text style={styles.completeButtonText}>{t('learning.backToHome', '返回首页')}</Text>
                     </Pressable>
                 </View>
@@ -27610,11 +32222,19 @@ const styles = StyleSheet.create({
         color: Colors.ink,
         marginBottom: 24,
     },
+    microReadingButton: {
+        backgroundColor: Colors.ink,
+        paddingHorizontal: 32,
+        paddingVertical: 16,
+        borderRadius: 12,
+        marginBottom: 12,
+    },
     completeButton: {
         backgroundColor: Colors.ink,
         paddingHorizontal: 32,
         paddingVertical: 16,
         borderRadius: 12,
+        marginTop: 12,
     },
     completeButtonText: {
         color: Colors.white,
@@ -27631,68 +32251,6 @@ const styles = StyleSheet.create({
         color: Colors.taupe,
     },
 });
-````
-
-## File: package.json
-````json
-{
-  "name": "thailearningapp",
-  "version": "1.0.0",
-  "main": "index.ts",
-  "scripts": {
-    "start": "expo start",
-    "android": "expo run:android",
-    "ios": "expo run:ios",
-    "web": "expo start --web"
-  },
-  "dependencies": {
-    "@expo-google-fonts/noto-serif-sc": "^0.4.2",
-    "@expo-google-fonts/playfair-display": "^0.4.2",
-    "@expo-google-fonts/sarabun": "^0.4.1",
-    "@expo/cli": "^54.0.18",
-    "@expo/vector-icons": "15.0.3",
-    "@react-native-async-storage/async-storage": "2.2.0",
-    "@react-native-community/slider": "5.0.1",
-    "axios": "^1.13.2",
-    "expo": "54.0.27",
-    "expo-asset": "12.0.11",
-    "expo-audio": "^1.1.1",
-    "expo-av": "16.0.8",
-    "expo-blur": "15.0.8",
-    "expo-constants": "18.0.11",
-    "expo-file-system": "19.0.20",
-    "expo-font": "14.0.10",
-    "expo-linear-gradient": "15.0.8",
-    "expo-linking": "8.0.10",
-    "expo-localization": "17.0.8",
-    "expo-router": "6.0.17",
-    "expo-splash-screen": "31.0.12",
-    "expo-status-bar": "3.0.9",
-    "i18next": "^25.6.3",
-    "lucide-react-native": "^0.554.0",
-    "react": "19.1.0",
-    "react-i18next": "^16.3.4",
-    "react-native": "0.81.5",
-    "react-native-gesture-handler": "~2.28.0",
-    "react-native-linear-gradient": "^2.8.3",
-    "react-native-reanimated": "~4.1.1",
-    "react-native-safe-area-context": "5.6.2",
-    "react-native-screens": "~4.16.0",
-    "react-native-svg": "15.12.1",
-    "react-native-worklets": "0.5.1",
-    "zustand": "^5.0.8"
-  },
-  "devDependencies": {
-    "@babel/core": "^7.20.0",
-    "@testing-library/react-native": "^13.0.0",
-    "@types/react": "~19.1.10",
-    "@types/react-native": "^0.72.8",
-    "babel-plugin-module-resolver": "^5.0.2",
-    "react-test-renderer": "^19.2.1",
-    "typescript": "^5.1.3"
-  },
-  "private": true
-}
 ````
 
 ## File: cloudbase/functions/memory-engine/handlers/getTodayMemories.js
@@ -28248,4 +32806,897 @@ async function getTodayMemories(db, params) {
 }
 
 module.exports = getTodayMemories;
+````
+
+## File: src/i18n/locales/zh.ts
+````typescript
+// src/i18n/locales/zh.ts
+export default {
+  common: {
+    confirm: '确认',
+    cancel: '取消',
+    save: '保存',
+    delete: '删除',
+    edit: '编辑',
+    loading: '加载中...',
+    error: '错误',
+    success: '成功',
+    all: '全部',
+  },
+  auth: {
+    title: '试试泰语',
+    login: '登录',
+    register: '注册',
+    registerSuccess: '注册成功',
+    logout: '退出登录',
+    email: '邮箱',
+    password: '密码',
+    emailPlaceholder: '请输入邮箱',
+    passwordPlaceholder: '请输入密码',
+    confirmPassword: '确认密码',
+    confirmPasswordPlaceholder: '请再次输入密码',
+    displayName: '昵称',
+    displayNamePlaceholder: '请输入昵称',
+    loginButton: '登录',
+    registerButton: '注册',
+    forgotPassword: '忘记密码？',
+    noAccount: '还没有账号？',
+    hasAccount: '已有账号？',
+    loginSuccess: '登录成功',
+    loginFailed: '登录失败',
+    alreadyHaveAccount: '已有账号？',
+    logining: '登录中'
+  },
+  tabs: {
+    home: '首页',
+    learn: '学习',
+    courses: '课程',
+    profile: '我的',
+  },
+  profile: {
+    title: '个人中心',
+    editProfile: '编辑资料',
+    achievements: '学习成就',
+    settings: '设置',
+    completedAlphabets: '已学字母',
+    completedVocabulary: '已学词汇',
+    completedSentences: '已学句子',
+    completedArticles: '已读文章',
+    totalScore: '总分',
+    studyTime: '学习时长',
+    streakDays: '连续天数',
+    hours: '小时',
+    days: '天',
+    selectLanguage: '选择语言',
+    chinese: '中文',
+    english: 'English',
+    dailyReminder: '每日提醒',
+    reminder: {
+      title: '定时提醒',
+      subtitle: '设置每天的学习提醒时间，到点会收到通知',
+      timeLabel: '提醒时间',
+      off: '未开启',
+      permissionTitle: '需要通知权限',
+      permissionMessage: '请在系统设置中允许通知，以便接收学习提醒',
+      unsupportedEnv: '当前环境不支持定时提醒，请使用 Development Build 运行应用',
+      notificationTitle: '泰语学习提醒',
+      notificationBody: '该学习啦！坚持每天练习，进步更快哦～',
+    },
+    ttsEngine: '音频反馈引擎',
+    limit: '每次学习上限',
+    achievementBadges: {
+      streak7: '7天连胜',
+      master: '声调大师',
+      vocab100: '词汇100',
+    },
+  },
+  home: {
+    greeting: 'ສະບາຍດີ',
+    todayProgress: '今日学习目标已完成',
+    currentCourse: '当前课程',
+    recentWrong: '最近马虎的词',
+    noWrongWords: '本轮没有错词 🎉',
+    mastered: '已掌握',
+    reviewDue: '待复习内容',
+    streak: '连续打卡',
+    checkIn: '打卡',
+    checkInToday: '今日已打卡',
+    checkInSuccess: '打卡成功',
+    hoursThisWeek: '本周小时数',
+    minutesToday: '分钟',
+    hoursToday: '小时',
+    aiError: 'AI 查询失败，请稍后再试',
+    typeThaiOrChinese: '搜你遇见的纯正泰语...',
+  },
+  ai: {
+    title: 'AI 智能解析',
+    analysis: '✨ AI 深度剖析',
+    examples: '📖 沉浸例句',
+  },
+  courses: {
+    title: '选择一本吧少年',
+    subtitle: '开启你的泰语学习之旅',
+    searchPlaceholder: '搜索课程...',
+    startBtnText: '开始学习',
+    continue: '继续学习',
+    locked: '未解锁',
+    lessons: '课时',
+    levels: {
+      beginner: '入门',
+      elementary: '初级',
+      intermediate: '中级',
+      advanced: '高级',
+    },
+    list: {
+      alphabet: {
+        title: '泰语字母表',
+        description: '从44个辅音到元音与声调，逐步掌握泰语读写基础。',
+      },
+      thai_1: {
+        title: '基础泰语1',
+        description: '从零开始学习泰语，掌握初步词汇。',
+      },
+      thai_2: {
+        title: '基础泰语2',
+        description: '掌握更多词汇，开始简单对话。',
+      },
+      thai_3: {
+        title: '基础泰语3',
+        description: '掌握更多词汇，进行比较熟练的对话。',
+      },
+      thai_4: {
+        title: '基础泰语4',
+        description: '熟练掌握大部分泰语高频词汇。',
+      },
+    },
+  },
+  learning: {
+    basicDefinition: '基础释义',
+    exampleSentences: '例句示例',
+    usageDetails: '用法详解',
+    grammarExamples: '语法示例',
+    structure: '结构',
+    explain: '解释',
+    usageTip: '使用技巧',
+    diffWithChinese: '与中文差异',
+    commonMistakes: '常见错误',
+    similarWordsDiff: '相似词汇区别',
+    pronunciationPitfalls: '发音易错点',
+    usageScenarios: '使用场合',
+    dialogueExample: '对话示例',
+    individualSentences: '例句',
+    viewDefinition: '查看释义',
+    nextEnter: '下一个',
+    next: '下一个',
+    forgot: '忘记了',
+    unsure: '模糊',
+    know: '认识',
+    skipReview: '跳过复习',
+    sessionComplete: '学习完成！',
+    backToHome: '返回首页',
+    noNewWordsTitle: '没有新单词',
+    noNewWordsMessage: '你已经学完了所有新单词！',
+    endSessionTitle: '结束学习？',
+    endSessionMessage: '确定要退出吗？',
+    quit: '退出学习',
+    noExamples: '暂无例句',
+    noUsage: '暂无用法详解',
+    setupTitle: '今日学习计划',
+    setupSubtitle: '选择今天要学习/复习的字母数量',
+    setupSubtitleWords: '选择今天要学习/复习的单词数量',
+    start: '开始学习',
+    quizInstruction: '请选择正确的含义',
+    skip: '跳过',
+    dontKnow: '不认识',
+    nextStep: '下一步',
+    cognates: '同源词',
+    memoryTips: '记忆技巧',
+    split: '拆分',
+    memoryPhrase: '记忆短语',
+  },
+  modules: {
+    alphabet: '字母学习',
+    word: '单词学习',
+    sentence: '句子学习',
+    article: '文章阅读',
+  },
+  moduleAccess: {
+    locked: '模块已锁定',
+    lockedMessage: '{{module}}模块暂未解锁',
+    requirement: '解锁要求',
+    prerequisite: {
+      word: '完成字母学习并达到 95% 进度',
+      sentence: '完成单词学习并达到 80% 进度',
+      article: '完成句子学习并达到 80% 进度',
+    },
+    currentProgress: '当前进度',
+    remainingProgress: '还需完成 {{remaining}}%',
+    progressComplete: '进度已达标！',
+    goBack: '返回',
+    noProgress: '请先开始学习',
+    unknownModule: '未知模块',
+  },
+  alphabet: {
+    title: '泰语字母学习',
+    level: '基础',
+    description: '学习44个辅音和32个元音，掌握标准发音',
+    continue: '继续学习',
+    start: '开始学习',
+    phase: {
+      new: '新字母',
+      review: '快速复习',
+      final: '最终复习',
+      fix: '错题修正',
+      warmup: '热身环节',
+      completed: '本轮完成',
+      finished: '课程完成'
+    },
+    roundInfo: '第 {{current}} / {{total}} 轮',
+    skipBury: '跳过(不再复习)',
+    optionsLoadFailed: '题目选项加载失败',
+    regenerate: '重新生成题目',
+    checkAnswer: '检查答案',
+    nextQuestion: '下一题 →',
+    instructions: {
+      selectCorrect: '请选择正确的含义',
+      listenChoose: '听音选字',
+      matchPronunciation: '匹配发音',
+      consonantClass: '选择辅音类别',
+      initialSound: '识别声母',
+      finalSound: '识别韵母'
+    },
+  },
+  alphabetTest: {
+    title: '字母测试',
+    description: '测试你的字母掌握情况',
+    start: '开始测试',
+    submit: '提交',
+    score: '得分',
+    passed: '通过',
+    failed: '未通过',
+    retry: '重新测试',
+    backToHome: '返回首页',
+  },
+  components: {
+    phonics: {
+      title: '声调规则表',
+      interactive: '📌 交互示例',
+      understood: '明白了,继续学习 →'
+    },
+    completion: {
+      courseDone: '课程完成！',
+      roundDone: 'Round {{round}} 完成',
+      courseDoneMsg: '恭喜你完成了本节课程的所有学习内容！',
+      roundDoneMsg: '休息一下，准备进入下一轮学习\n每节课需完成3轮学习',
+      finishCourse: '完成课程',
+      backToCourses: '返回选课'
+    },
+    recovery: {
+      title: '继续上次学习？',
+      message: '检测到您在该课程存在未完成的轮次，是否继续之前的阶段？',
+      restart: '重新开始本轮',
+      continue: '继续学习'
+    },
+    miniReview: {
+      hint: '💡 提示:',
+      pitchCurve: '🎵 音高曲线',
+      playSound: '播放发音',
+      explanation: '💡 解释',
+      aspirated: '送气音 (aspirated)',
+      unaspirated: '不送气音 (unaspirated)',
+      voiceless: '清音 (voiceless)',
+      voiced: '浊音 (voiced)',
+      highClass: '高辅音',
+      midClass: '中辅音',
+      lowClass: '低辅音',
+      consonantClass: '辅音类'
+    },
+    aspirated: {
+      title: '送气音对比训练',
+      instruction: '🔊 先播放目标音频,然后从下方选项中选择对应的字母',
+      playTarget: '播放目标发音',
+      tipsTitle: '💡 区分技巧',
+      aspirated: '送气',
+      unaspirated: '不送气',
+      correctAns: '✅ 正确答案',
+      aspiratedDesc: '这是一个送气音,发音时有明显气流',
+      unaspiratedDesc: '这是一个不送气音,发音时气流较弱'
+    }
+  },
+  alphabetCourse: {
+    title: '字母课程',
+    back: '返回',
+    headerSubtitle: '共 {{count}} 课 · 已完成 {{percent}}%',
+    currentBadge: '当前',
+    letterCount: '{{count}} 个字母',
+    start: '开始',
+    takeTest: '参加测试以解锁全部课程',
+    drawer: {
+      expectedTime: '预计用时：15 分钟',
+      description: '简介',
+      contentPreview: '内容预览（{{count}} 个字母）',
+    },
+    lessons: {
+      lesson1: {
+        title: '第一课：基础拼读能力',
+        description: '掌握最基础的中辅音和常见长元音，建立 CV 拼读概念',
+      },
+      lesson2: {
+        title: '第二课：前置元音系统',
+        description: '学习前置元音（เ แ โ）和更多高频辅音',
+      },
+      lesson3: {
+        title: '第三课：声调入门',
+        description: '掌握送气/不送气对比，引入基础声调系统',
+      },
+      lesson4: {
+        title: '第四课：辅音类与声调',
+        description: '理解高/中/低辅音对声调的影响，掌握完整声调系统',
+      },
+      lesson5: {
+        title: '第五课：复合元音系统',
+        description: '掌握三合元音（เอีย เอือ อัว）等复杂元音组合',
+      },
+      lesson6: {
+        title: '第六课：完整覆盖（常用进阶）',
+        description: '补充常用进阶辅音与复合元音，掌握特殊规则（如 ห นำ 等）',
+      },
+      lesson7: {
+        title: '第七课：罕用字母与特殊元音',
+        description: '集中学习现代泰语中较少使用的辅音与复杂元音，用于阅读古文与特殊专有名词',
+      },
+    },
+  },
+  questionType: {
+    soundToLetter: '听音选字母',
+    letterToSound: '看字母选发音',
+    syllable: '拼读组合',
+    reverseSyllable: '音素分离',
+    missingLetter: '缺字填空',
+    aspiratedContrast: '送气音对比',
+    vowelLengthContrast: '元音长短对比',
+    finalConsonant: '尾音规则',
+    tonePerception: '声调听辨',
+    classChoice: '辅音分类',
+    letterName: '字母名称',
+    initialSound: '首音判断',
+  },
+  sessionSummary: {
+    title: '本次学习总结',
+    wrongWords: '本轮错词',
+    newWords: '新学单词',
+    skippedWords: '跳过的单词',
+    cancelSkip: '取消跳过',
+    generateBtn: '生成微阅读（{{count}} 词已选）',
+    noWords: '本轮无词可选',
+    generating: 'AI 生成中...',
+    errorTitle: '生成失败',
+    errorMessage: 'AI 生成遇到问题，请重试',
+    retry: '重试',
+  },
+  microReading: {
+    title: 'AI 微阅读',
+    voicePlaceholder: '朗读练习 - 即将上线',
+    translationLabel: '中文辅助',
+    backToHome: '返回上一级',
+    wordsUsed: '本文涉及词汇',
+    saveArticle: '保存到练习库',
+    saving: '保存中...',
+    saveSuccess: '已保存到阅读练习库',
+    saveError: '保存失败，请重试',
+    alreadySaved: '该文章已保存',
+  },
+  articlePractice: {
+    listTitle: '阅读练习库',
+    emptyTitle: '暂无文章',
+    emptyMessage: '完成单词学习后，在微阅读页面保存文章到这里',
+    wordCount: '{{count}} 词',
+    deleteConfirmTitle: '删除文章',
+    deleteConfirmMessage: '确定要删除这篇文章吗？',
+    practiceTitle: '阅读练习',
+    blindMode: '盲听模式',
+    revealMode: '显示原文',
+    clozeMode: '挖空背诵',
+    clozeFull: '全显示',
+    clozePartial: '半挖空',
+    clozeBlind: '全挖空',
+    tapWordHint: '点击单词查看释义',
+    shadowingTitle: '跟读练习',
+    startRecording: '开始录音',
+    stopRecording: '停止录音',
+    playback: '回放',
+    getAiFeedback: '获取 AI 发音建议',
+    feedbackTitle: '发音建议',
+    playOriginal: '播放原文',
+    stopPlaying: '停止播放',
+    ttsLoading: '语音加载中...',
+    ttsError: '语音合成失败，请重试',
+    analyzing: '正在分析发音...',
+    overallScore: '综合评分',
+    pronunciationSuggestions: '改进建议',
+    analyzeError: '发音分析失败，请重试',
+    noRecording: '请先录音',
+  },
+};
+````
+
+## File: src/i18n/locales/en.ts
+````typescript
+import { Split } from "lucide-react-native";
+
+// src/i18n/locales/en.ts
+export default {
+  common: {
+    confirm: 'Confirm',
+    cancel: 'Cancel',
+    save: 'Save',
+    delete: 'Delete',
+    edit: 'Edit',
+    loading: 'Loading...',
+    error: 'Error',
+    success: 'Success',
+    all: 'All',
+  },
+  auth: {
+    title: 'TRY THAI',
+    login: 'Login',
+    register: 'Register',
+    registerSuccess: 'Register successful',
+    logout: 'Logout',
+    email: 'Email',
+    password: 'Password',
+    emailPlaceholder: 'Enter your email',
+    passwordPlaceholder: 'Enter your password',
+    confirmPassword: 'Confirm Password',
+    confirmPasswordPlaceholder: 'Re-enter your password',
+    displayName: 'Display Name',
+    displayNamePlaceholder: 'Enter your display name',
+    loginButton: 'Login',
+    registerButton: 'Register',
+    forgotPassword: 'Forgot password?',
+    noAccount: "Don't have an account?",
+    hasAccount: 'Already have an account?',
+    loginSuccess: 'Login successful',
+    loginFailed: 'Login failed',
+    alreadyHaveAccount: 'Already have an account?',
+    logining: 'logining'
+  },
+  tabs: {
+    home: 'Home',
+    learn: 'Learn',
+    courses: 'Courses',
+    profile: 'Profile',
+  },
+  profile: {
+    title: 'Profile',
+    editProfile: 'Edit Profile',
+    achievements: 'Achievements',
+    settings: 'Settings',
+    completedAlphabets: 'Alphabets Learned',
+    completedVocabulary: 'Vocabulary Learned',
+    completedSentences: 'Sentences Learned',
+    completedArticles: 'Articles Read',
+    totalScore: 'Total Score',
+    studyTime: 'Study Time',
+    streakDays: 'Streak Days',
+    hours: 'hrs',
+    days: 'days',
+    selectLanguage: 'Select Language',
+    chinese: '中文',
+    english: 'English',
+    dailyReminder: 'Daily Reminder',
+    reminder: {
+      title: 'Daily Reminder',
+      subtitle: 'Set a time to receive learning reminders each day',
+      timeLabel: 'Reminder Time',
+      off: 'Off',
+      permissionTitle: 'Notification Permission Required',
+      permissionMessage: 'Please enable notifications in system settings to receive learning reminders',
+      unsupportedEnv: 'Reminders require a Development Build. Expo Go does not support this feature.',
+      notificationTitle: 'Thai Learning Reminder',
+      notificationBody: "Time to study! Keep practicing every day for faster progress.",
+    },
+    ttsEngine: 'TTS Engine',
+    limit: 'Daily Limit',
+    achievementBadges: {
+      streak7: '7-Day Streak',
+      master: 'Tone Master',
+      vocab100: 'Vocab 100',
+    },
+  },
+  home: {
+    greeting: 'Hello',
+    todayProgress: "Today's learning goal completed",
+    currentCourse: 'Current Course',
+    recentWrong: 'Recent Wrong Words',
+    noWrongWords: 'No mistakes this session 🎉',
+    mastered: 'Mastered',
+    reviewDue: 'Reviews Due',
+    streak: 'Current Streak',
+    checkIn: 'Check In',
+    checkInToday: 'Checked In Today',
+    checkInSuccess: 'Check-in successful',
+    hoursThisWeek: 'Hours this week',
+    minutesToday: 'min today',
+    hoursToday: 'hrs today',
+    aiError: 'AI query failed',
+    typeThaiOrChinese: 'Search genuine Thai...',
+  },
+  ai: {
+    title: 'AI In-depth Analysis',
+    analysis: '✨ AI Breakdown',
+    examples: '📖 Immersive Examples',
+  },
+  courses: {
+    title: 'Choose a course',
+    subtitle: 'Start your Thai language journey',
+    searchPlaceholder: 'Search courses...',
+    startBtnText: 'Start Learning',
+    continue: 'Continue',
+    locked: 'Locked',
+    lessons: 'lessons',
+    levels: {
+      beginner: 'Beginner',
+      elementary: 'Elementary',
+      intermediate: 'Intermediate',
+      advanced: 'Advanced',
+    },
+    list: {
+      alphabet: {
+        title: 'Thai Alphabet',
+        description: 'From 44 consonants to vowels and tones, master Thai reading and writing.',
+      },
+      thai_1: {
+        title: 'Basic Thai 1',
+        description: 'Start learning Thai from scratch, master basic vocabulary.',
+      },
+      thai_2: {
+        title: 'Basic Thai 2',
+        description: 'Master more vocabulary and start simple conversations.',
+      },
+      thai_3: {
+        title: 'Basic Thai 3',
+        description: 'Master more vocabulary and engage in more fluent conversations.',
+      },
+      thai_4: {
+        title: 'Basic Thai 4',
+        description: 'Master most high-frequency Thai vocabulary.',
+      },
+    },
+  },
+  learning: {
+    basicDefinition: 'Basic Def',
+    exampleSentences: 'Examples',
+    usageDetails: 'Usage Details',
+    grammarExamples: 'Grammar Examples',
+    structure: 'Structure',
+    explain: 'Explain',
+    usageTip: 'Usage Tip',
+    diffWithChinese: 'Diff with Chinese',
+    commonMistakes: 'Common Mistakes',
+    similarWordsDiff: 'Similar Words',
+    pronunciationPitfalls: 'Pronunciation Pitfalls',
+    usageScenarios: 'Usage Scenarios',
+    dialogueExample: 'Dialogue Example',
+    individualSentences: 'Example Sentences',
+    viewDefinition: 'View Definition',
+    nextEnter: 'Next',
+    next: 'Next',
+    forgot: 'Forgot',
+    unsure: 'Unsure',
+    know: 'Know',
+    skipReview: 'Skip Review',
+    sessionComplete: 'Session Complete!',
+    backToHome: 'Back to Home',
+    noNewWordsTitle: 'No New Words',
+    noNewWordsMessage: 'You have finished all new words!',
+    endSessionTitle: 'End Session?',
+    endSessionMessage: 'Are you sure you want to quit?',
+    quit: 'Quit',
+    noExamples: 'No examples available',
+    noUsage: 'No usage details available',
+    setupTitle: 'Daily Plan',
+    setupSubtitle: 'Select number of letters to learn/review',
+    setupSubtitleWords: 'Select number of words to learn/review',
+    start: 'Start Learning',
+    quizInstruction: 'Select the correct meaning',
+    skip: 'Skip',
+    dontKnow: 'Unfamiliar',
+    nextStep: 'Next',
+    cognates: 'Cognates',
+    memoryTips: 'Memory Tips',
+    split: 'Split',
+    memoryPhrase: 'Memory Phrase',
+  },
+  modules: {
+    alphabet: 'Alphabet',
+    word: 'Vocabulary',
+    sentence: 'Sentences',
+    article: 'Articles',
+  },
+  moduleAccess: {
+    locked: 'Module Locked',
+    lockedMessage: '{{module}} module is not yet unlocked',
+    requirement: 'Unlock Requirement',
+    prerequisite: {
+      word: 'Complete alphabet learning and reach 95% progress',
+      sentence: 'Complete vocabulary learning and reach 80% progress',
+      article: 'Complete sentence learning and reach 80% progress',
+    },
+    currentProgress: 'Current Progress',
+    remainingProgress: '{{remaining}}% remaining',
+    progressComplete: 'Progress complete!',
+    goBack: 'Go Back',
+    noProgress: 'Please start learning first',
+    unknownModule: 'Unknown module',
+  },
+  alphabet: {
+    title: 'Thai Alphabet Learning',
+    level: 'Basic',
+    description: 'Learn 44 consonants and 32 vowels, mastered standard pronunciation',
+    continue: 'Continue Learning',
+    start: 'Start Learning',
+    phase: {
+      new: 'New Letter',
+      review: 'Quick Review',
+      final: 'Final Review',
+      fix: 'Mistake Review',
+      warmup: 'Warm Up',
+      completed: 'Round Completed',
+      finished: 'Course Completed'
+    },
+    roundInfo: 'Round {{current}} / {{total}}',
+    skipBury: 'Skip (Bury)',
+    optionsLoadFailed: 'Failed to load options',
+    regenerate: 'Regenerate Question',
+    checkAnswer: 'Check Answer',
+    nextQuestion: 'Next Question →',
+    instructions: {
+      selectCorrect: 'Select the correct meaning',
+      listenChoose: 'Listen and choose the letter',
+      matchPronunciation: 'Match the pronunciation',
+      consonantClass: 'Select the consonant class',
+      initialSound: 'Identify the initial sound',
+      finalSound: 'Identify the final sound'
+    },
+  },
+  alphabetTest: {
+    title: 'Alphabet Test',
+    description: 'Test your alphabet knowledge',
+    start: 'Start Test',
+    submit: 'Submit',
+    score: 'Score',
+    passed: 'Pass',
+    failed: 'Fail',
+    retry: 'Retry',
+    backToHome: 'Back to Home',
+  },
+  components: {
+    phonics: {
+      title: 'Tone Rules',
+      interactive: '📌 Interactive Example',
+      understood: 'Understood, Continue →'
+    },
+    completion: {
+      courseDone: 'Course Completed!',
+      roundDone: 'Round {{round}} Completed',
+      courseDoneMsg: 'Congratulations! You have completed all content in this lesson!',
+      roundDoneMsg: 'Take a break and get ready for the next round\n3 rounds required per lesson',
+      finishCourse: 'Finish Course',
+      backToCourses: 'Back to Courses'
+    },
+    recovery: {
+      title: 'Resume Session?',
+      message: 'Unfinished round detected. Do you want to continue?',
+      restart: 'Restart Round',
+      continue: 'Continue Learning'
+    },
+    miniReview: {
+      hint: '💡 Hint:',
+      pitchCurve: '🎵 Pitch Curve',
+      playSound: 'Play Sound',
+      explanation: '💡 Explanation',
+      aspirated: 'Aspirated',
+      unaspirated: 'Unaspirated',
+      voiceless: 'Voiceless',
+      voiced: 'Voiced',
+      highClass: 'High',
+      midClass: 'Mid',
+      lowClass: 'Low',
+      consonantClass: 'Class'
+    },
+    aspirated: {
+      title: 'Aspirated Sound Training',
+      instruction: '🔊 Play the target sound first, then choose the matching letter',
+      playTarget: 'Play Target Sound',
+      tipsTitle: '💡 Tips',
+      aspirated: 'Aspirated',
+      unaspirated: 'Unaspirated',
+      correctAns: '✅ Correct Answer',
+      aspiratedDesc: 'This is an aspirated sound (strong airflow)',
+      unaspiratedDesc: 'This is an unaspirated sound (weak airflow)'
+    }
+  },
+  alphabetCourse: {
+    title: 'Alphabet Course',
+    back: 'Back',
+    headerSubtitle: '{{count}} Lessons · {{percent}}% Completed',
+    currentBadge: 'Current',
+    letterCount: '{{count}} letters',
+    start: 'Start',
+    takeTest: 'Take Test to Unlock All',
+    drawer: {
+      expectedTime: 'Expected time: 15 mins',
+      description: 'Description',
+      contentPreview: 'Content Preview ({{count}} items)',
+    },
+    lessons: {
+      lesson1: {
+        title: 'Lesson 1: CV Reading Basics',
+        description: 'Master the core mid-class consonants and common long vowels. Build your first CV syllable-reading ability.',
+      },
+      lesson2: {
+        title: 'Lesson 2: Leading Vowel System',
+        description: 'Learn leading vowels (เ แ โ) and more high-frequency consonants.',
+      },
+      lesson3: {
+        title: 'Lesson 3: Tone Fundamentals',
+        description: 'Understand aspirated vs. unaspirated sounds and introduce the basic Thai tone system.',
+      },
+      lesson4: {
+        title: 'Lesson 4: Consonant Classes & Tones',
+        description: 'Understand how high, mid, and low consonant classes affect tone. Master the full tone system.',
+      },
+      lesson5: {
+        title: 'Lesson 5: Compound Vowels',
+        description: 'Master complex vowel clusters such as เอีย, เอือ, and อัว.',
+      },
+      lesson6: {
+        title: 'Lesson 6: Full Coverage (Advanced)',
+        description: 'Supplement advanced consonants and compound vowels. Grasp special rules like ห นำ.',
+      },
+      lesson7: {
+        title: 'Lesson 7: Rare Letters & Special Vowels',
+        description: 'Study rarely-used consonants and special vowels found in classical texts and proper nouns.',
+      },
+    },
+  },
+  questionType: {
+    soundToLetter: 'Sound to Letter',
+    letterToSound: 'Letter to Sound',
+    syllable: 'Syllables',
+    reverseSyllable: 'Reverse Syllable',
+    missingLetter: 'Missing Letter',
+    aspiratedContrast: 'Aspirated Contrast',
+    vowelLengthContrast: 'Vowel Length Contrast',
+    finalConsonant: 'Final Consonant Rule',
+    tonePerception: 'Tone Perception',
+    classChoice: 'Consonant Class',
+    letterName: 'Letter Name',
+    initialSound: 'Initial Sound',
+  },
+  sessionSummary: {
+    title: 'Session Summary',
+    wrongWords: 'Difficult Words',
+    newWords: 'New Words',
+    skippedWords: 'Skipped Words',
+    cancelSkip: 'Un-skip',
+    generateBtn: 'Generate Reading ({{count}} selected)',
+    noWords: 'No words to select this round',
+    generating: 'AI Generating...',
+    errorTitle: 'Generation Failed',
+    errorMessage: 'AI generation encountered an issue. Please try again.',
+    retry: 'Retry',
+  },
+  microReading: {
+    title: 'AI Micro-Reading',
+    voicePlaceholder: 'Reading Practice - Coming Soon',
+    translationLabel: 'Translation',
+    backToHome: 'Back to Previous Page',
+    wordsUsed: 'Words in this passage',
+    saveArticle: 'Save to Practice',
+    saving: 'Saving...',
+    saveSuccess: 'Saved to reading practice',
+    saveError: 'Save failed, please retry',
+    alreadySaved: 'Article already saved',
+  },
+  articlePractice: {
+    listTitle: 'Reading Practice',
+    emptyTitle: 'No Articles Yet',
+    emptyMessage: 'Save articles from the micro-reading page after your study session',
+    wordCount: '{{count}} words',
+    deleteConfirmTitle: 'Delete Article',
+    deleteConfirmMessage: 'Are you sure you want to delete this article?',
+    practiceTitle: 'Reading Practice',
+    blindMode: 'Blind Listening',
+    revealMode: 'Show Text',
+    clozeMode: 'Cloze Practice',
+    clozeFull: 'Full Text',
+    clozePartial: 'Partial Cloze',
+    clozeBlind: 'Full Cloze',
+    tapWordHint: 'Tap any word for definition',
+    shadowingTitle: 'Shadowing Practice',
+    startRecording: 'Start Recording',
+    stopRecording: 'Stop Recording',
+    playback: 'Playback',
+    getAiFeedback: 'Get AI Pronunciation Feedback',
+    feedbackTitle: 'Pronunciation Feedback',
+    playOriginal: 'Play Original',
+    stopPlaying: 'Stop Playing',
+    ttsLoading: 'Loading audio...',
+    ttsError: 'Speech synthesis failed, please retry',
+    analyzing: 'Analyzing pronunciation...',
+    overallScore: 'Overall Score',
+    pronunciationSuggestions: 'Suggestions',
+    analyzeError: 'Pronunciation analysis failed, please retry',
+    noRecording: 'Please record first',
+  },
+};
+````
+
+## File: package.json
+````json
+{
+  "name": "thailearningapp",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "scripts": {
+    "export-logo": "node scripts/export-logo-png.js",
+    "start": "expo start",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "web": "expo start --web"
+  },
+  "dependencies": {
+    "@expo-google-fonts/noto-serif-sc": "^0.4.2",
+    "@expo-google-fonts/playfair-display": "^0.4.2",
+    "@expo-google-fonts/sarabun": "^0.4.1",
+    "@expo/cli": "^54.0.18",
+    "@expo/vector-icons": "15.0.3",
+    "@notifee/react-native": "^9.1.8",
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "@react-native-community/datetimepicker": "^8.6.0",
+    "@react-native-community/slider": "5.0.1",
+    "axios": "^1.13.2",
+    "expo": "54.0.27",
+    "expo-asset": "12.0.11",
+    "expo-audio": "^1.1.1",
+    "expo-av": "16.0.8",
+    "expo-blur": "15.0.8",
+    "expo-constants": "18.0.11",
+    "expo-file-system": "^19.0.20",
+    "expo-font": "14.0.10",
+    "expo-linear-gradient": "15.0.8",
+    "expo-linking": "8.0.10",
+    "expo-localization": "17.0.8",
+    "expo-router": "6.0.17",
+    "expo-speech": "~14.0.8",
+    "expo-splash-screen": "31.0.12",
+    "expo-status-bar": "3.0.9",
+    "i18next": "^25.6.3",
+    "lucide-react-native": "^0.554.0",
+    "react": "19.1.0",
+    "react-i18next": "^16.3.4",
+    "react-native": "0.81.5",
+    "react-native-gesture-handler": "~2.28.0",
+    "react-native-linear-gradient": "^2.8.3",
+    "react-native-reanimated": "~4.1.1",
+    "react-native-safe-area-context": "5.6.2",
+    "react-native-screens": "~4.16.0",
+    "react-native-svg": "15.12.1",
+    "react-native-worklets": "0.5.1",
+    "zustand": "^5.0.8"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.20.0",
+    "@resvg/resvg-js": "^2.6.2",
+    "@testing-library/react-native": "^13.0.0",
+    "@types/react": "~19.1.10",
+    "@types/react-native": "^0.72.8",
+    "babel-plugin-module-resolver": "^5.0.2",
+    "react-test-renderer": "^19.2.1",
+    "typescript": "^5.1.3"
+  },
+  "private": true
+}
 ````
