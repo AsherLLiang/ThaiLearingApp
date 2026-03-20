@@ -75,7 +75,12 @@ export const useLearningPreferenceStore = create<LearningPreferenceStore>()(
                 const yesterday = getYesterdayLocal();
                 const { lastCheckInDate, streakDays } = get();
                 if (lastCheckInDate === today) return false;
-                const newStreak = lastCheckInDate === yesterday ? streakDays + 1 : 0;
+                // 昨日已打卡 → 连续+1；首次打卡 → 1；中断后 → 0
+                const newStreak = lastCheckInDate === yesterday
+                    ? streakDays + 1
+                    : lastCheckInDate == null
+                        ? 1
+                        : 0;
                 set({ lastCheckInDate: today, streakDays: newStreak });
                 return true;
             },

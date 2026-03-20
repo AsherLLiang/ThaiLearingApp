@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "main": "index.ts",
   "scripts": {
+    "export-logo": "node scripts/export-logo-png.js",
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
@@ -50,6 +51,7 @@
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",
+    "@resvg/resvg-js": "^2.6.2",
     "@testing-library/react-native": "^13.0.0",
     "@types/react": "~19.1.10",
     "@types/react-native": "^0.72.8",
