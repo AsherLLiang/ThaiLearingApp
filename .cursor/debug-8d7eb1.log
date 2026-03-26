@@ -1,2 +1,0 @@
-{"sessionId":"8d7eb1","location":"apiClient.ts:catch","message":"Request catch block","data":{"errorName":"TypeError","errorMessage":"Network request failed","navigatorExists":true,"wouldTakeNavBranch":true},"timestamp":1773564261962,"hypothesisId":"H1-H5"}
-{"sessionId":"8d7eb1","location":"apiClient.ts:catch","message":"Request catch block","data":{"errorName":"TypeError","errorMessage":"Network request failed","navigatorExists":true,"wouldTakeNavBranch":true},"timestamp":1773564330915,"hypothesisId":"H1-H5"}
