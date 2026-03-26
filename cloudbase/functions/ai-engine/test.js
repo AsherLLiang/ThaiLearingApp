@@ -5,9 +5,11 @@
  * 目的：在不部署云端的情况下，直接验证大模型返回的数据结构是否符合我们的 JSON 规范。
  */
 
-// 1. 挂载真实环境变量（⚠️ 注意：不要把写了真实 Key 的此文件提交到 Git）
-// 你需要把下面这行的 sk-xxxx 替换为你真实的 DeepSeek API Key
-process.env.DEEPSEEK_API_KEY = "REDACTED_PURGED_FROM_GIT_HISTORY"; 
+// 1. 从环境变量读取 Key（⚠️ 禁止在此文件写入真实 Key 并提交）
+if (!process.env.DEEPSEEK_API_KEY) {
+  console.error('请先在 shell 中设置 DEEPSEEK_API_KEY 再运行本脚本，例如：export DEEPSEEK_API_KEY=sk-xxxx');
+  process.exit(1);
+}
 
 // 2. 将云函数的主入口引进来
 const { main } = require('./index.js');

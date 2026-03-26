@@ -3838,7 +3838,7 @@ module.exports = {
 
 // 1. 挂载真实环境变量（⚠️ 注意：不要把写了真实 Key 的此文件提交到 Git）
 // 你需要把下面这行的 sk-xxxx 替换为你真实的 DeepSeek API Key
-process.env.DEEPSEEK_API_KEY = "REDACTED_PURGED_FROM_GIT_HISTORY"; 
+process.env.DEEPSEEK_API_KEY = "<REDACTED — set in environment>"; 
 
 // 2. 将云函数的主入口引进来
 const { main } = require('./index.js');
